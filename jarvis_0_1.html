@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#080e1d" />
+  <meta name="description" content="Джарвіс 0.1 — простий голосовий помічник українською для телефона й комп'ютера." />
+  <title>Джарвіс 0.1 — голосовий помічник</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #080e1d;
+      --panel: #111b30;
+      --panel2: #0c1528;
+      --border: #263957;
+      --text: #edf6ff;
+      --muted: #a1b3d0;
+      --cyan: #50dffb;
+      --green: #6be8bf;
+      --red: #ff7c91;
+      --max: 1000px;
+    }
+    * {box-sizing: border-box;}
+    html {scroll-behavior: smooth;}
+    body {margin: 0; min-height: 100vh; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: radial-gradient(ellipse at 50% 4%, #12315c 0, #080e1d 46%, #060a13 100%); color: var(--text);}
+    body::before {content: ""; position: fixed; inset: 0; opacity: .14; pointer-events: none; background-image: linear-gradient(#4785bd 1px, transparent 1px), linear-gradient(90deg, #4785bd 1px, transparent 1px); background-size: 54px 54px; mask-image: linear-gradient(to bottom, #000 0, transparent 80%);}
+    button,input {font: inherit;}
+    button:focus-visible, a:focus-visible, input:focus-visible {outline: 3px solid var(--cyan); outline-offset: 3px;}
+    .wrap {width: min(calc(100% - 32px), var(--max)); margin: 0 auto; padding: 24px 0 45px; position: relative;}
+    .topbar {display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 24px;}
+    .brand {display: flex; align-items: center; gap: 12px;}
+    .brandmark {width: 38px; height: 38px; border: 1px solid #4cdbff; border-radius: 11px; display: grid; place-items: center; font-size: 22px; font-weight: 900; color: var(--cyan); box-shadow: inset 0 0 15px #1dc9ff32;}
+    .brand b {display:block;letter-spacing:.19em;font-size:15px;}
+    .brand small {display: block; color: var(--muted); letter-spacing: .12em; font-size: 10px; margin-top: 4px;}
+    .version {font-size: 12px; color:var(--green); border: 1px solid #2b836c; border-radius: 99px; padding: 7px 11px; white-space: nowrap;}
+    .version:before {content:"● "; font-size: 10px;}
+    .hero {text-align: center; padding: 4px 0 22px;}
+    .orb-shell {width: 210px; height: 210px; margin: 0 auto 14px; display: grid; place-items: center; position: relative;}
+    .outer-ring {position:absolute; width: 190px; height: 190px; border-radius: 50%; border: 1px dashed #4cc5ec99; animation: spin 22s linear infinite;}
+    .outer-ring::after {content:"";display:block;position:absolute;inset:14px;border:1px solid #2478a799;border-radius:50%;}
+    .orb {width: 148px; height: 148px; border-radius: 50%; display: grid; place-items:center; font-size: 74px; font-weight: 250; color: #defbff; text-shadow: 0 0 20px #50dffb; background: radial-gradient(circle at 32% 22%, #84efff65, #1d8bb1 26%, #0b2e54 55%, #040b1b 80%); border: 3px solid #72ebffb5; box-shadow: 0 0 18px #28bcff66, 0 0 55px #138bc453, inset 0 0 45px #66d9ff3e; transition: transform .25s;}
+    .listening .orb {animation: pulse 1s ease-in-out infinite alternate; box-shadow: 0 0 22px #4efad9aa, 0 0 75px #46f2cb7b, inset 0 0 55px #85ffe24f; border-color:#71fbdc;}
+    .listening .outer-ring {border-color:#6be8bf; animation-duration: 8s;}
+    @keyframes spin {to {transform:rotate(360deg);}}
+    @keyframes pulse {to {transform:scale(1.095);}}
+    .hero h1 {font-size: clamp(29px, 6vw, 40px); margin: 4px 0 8px; font-weight: 720; letter-spacing: -.025em;}
+    .hero h1 span {color:var(--cyan)}
+    .subtitle {color:var(--muted); font-size:14px;margin: 0 auto;max-width:560px;line-height:1.55;}
+    .status {display:inline-flex;align-items:center;gap:8px;color:#b5ddf8;border:1px solid var(--border);background:#101d33b8; padding: 9px 14px;border-radius:999px;margin-top:16px;font-size:13px;}
+    .status i {width:7px;height:7px;border-radius:100%;background:var(--green);}
+    .listen-button {border: 1px solid #7ce8ff; border-radius: 16px; padding: 15px 24px; display: flex; align-items: center; justify-content:center; gap: 12px; min-height: 54px; cursor: pointer; color: #031725; background: linear-gradient(135deg,#91f6ff,#31c7ed); font-weight: 800; box-shadow: 0 10px 34px #0d8db248; margin: 18px auto 0; min-width: 225px;}
+    .listen-button:hover {filter:brightness(1.08);}
+    .listen-button:disabled {opacity:.55;cursor:not-allowed;}
+    .listen-button[aria-pressed="true"] {background:linear-gradient(135deg,#8affe1,#4ddbad);border-color:#89ffdc;}
+    .hint {font-size:12px;line-height:1.5;color:var(--muted);margin: 10px auto 0;max-width:520px;}
+    .content {display:grid; grid-template-columns: 1.18fr .82fr; gap: 18px; align-items:start;}
+    .panel {background: linear-gradient(140deg,#13233ccc,#0b1428ed);border:1px solid var(--border);border-radius:18px;padding:19px;box-shadow:0 12px 40px #00000035;}
+    .panel h2 {font-size:14px;letter-spacing:.12em;text-transform:uppercase;margin:0 0 14px;color:#b9d6f0;}
+    .feed {display:flex;flex-direction:column;gap:11px;min-height:210px;max-height:305px;overflow:auto;padding:4px 4px 4px 0;}
+    .message {border:1px solid var(--border);border-radius:12px;padding:11px 13px;line-height:1.48;font-size:14px;overflow-wrap:anywhere;}
+    .message.user {background:#11354a4a;margin-left:32px;border-color:#24617a;}
+    .message.assistant {background:#172139e5;margin-right:20px;}
+    .message .who {color:var(--cyan);font-size:11px;font-weight:750;letter-spacing:.09em;display:block;margin-bottom:5px;}
+    .message.user .who {color:#a4e8d2;}
+    .message a {display:inline-block;color:#75e6ff;margin-top:8px;font-weight:700;}
+    form {display:flex;gap:8px;margin-top:16px;}
+    .command {width:100%;min-width:0;color:var(--text);background:#091528;border:1px solid #34496c;outline:none;border-radius:12px;padding:12px 13px;}
+    .submit {background:#1a6280;border:1px solid #268dae;color:#eafbff;border-radius:12px;cursor:pointer;padding:0 15px;font-weight:700;}
+    .examples {display:flex;flex-wrap:wrap;gap:8px;}
+    .chip {border:1px solid #314c6f;background:#132e49;color:#d5ecff;border-radius:10px;padding:10px 12px;cursor:pointer;text-align:left;}
+    .chip:hover {background:#1c4260;}
+    .notes {display:flex;flex-direction:column;gap:8px;max-height:180px;overflow:auto;}
+    .note {display:flex;gap:8px;align-items:flex-start;justify-content:space-between;background:#0d1b30;padding:9px 11px;border:1px solid #263957;border-radius:10px;font-size:13px;line-height:1.5;overflow-wrap:anywhere;}
+    .note-text {min-width:0;flex:1;}
+    .del {background:transparent;color:var(--red);border:0;cursor:pointer;font-size:18px;padding:0 4px;flex-shrink:0;}
+    .empty {color:var(--muted);font-size:13px;line-height:1.5;}
+    .rowheading {display:flex;justify-content:space-between;align-items:center;gap:8px;}
+    .switch {display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;cursor:pointer;}
+    .switch input {width:15px;height:15px;accent-color:var(--cyan);}
+    .minor {font-size:12px;line-height:1.65;color:var(--muted);}
+    .footer {margin-top:18px;color:#7f9ab8;text-align:center;font-size:12px;line-height:1.6;}
+    @media(max-width:720px) {.content {grid-template-columns:1fr}.hero {padding-bottom:24px}.orb-shell {width:180px;height:180px}.outer-ring {width:170px;height:170px}.orb {width:133px;height:133px}.panel{padding:16px}}
+    @media(prefers-reduced-motion:reduce) {.outer-ring,.listening .orb{animation:none}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="topbar">
+      <div class="brand"><div class="brandmark" aria-hidden="true">J</div><div><b>J.A.R.V.I.S.</b><small>PERSONAL VOICE ASSISTANT</small></div></div>
+      <div class="version">V 0.1</div>
+    </header>
+    <main>
+      <section class="hero" aria-labelledby="title">
+        <div id="orb-shell" class="orb-shell" aria-hidden="true"><div class="outer-ring"></div><div class="orb">J</div></div>
+        <h1 id="title">Вітаю, <span>я Джарвіс</span></h1>
+        <p class="subtitle">Голосовий помічник українською. Натисни мікрофон або введи команду нижче.</p>
+        <div class="status" role="status" aria-live="polite"><i></i><span id="status">Система готова до команд</span></div>
+        <button id="listen" class="listen-button" type="button" aria-pressed="false">🎙️ Говорити з Джарвісом</button>
+        <p id="mic-hint" class="hint">Скажи: «Джарвіс, котра година?» або «Джарвіс, запиши купити хліб».</p>
+      </section>
+      <div class="content">
+        <section class="panel" aria-label="Розмова">
+          <div class="rowheading"><h2>Діалог</h2><label class="switch"><input type="checkbox" id="voice" checked /> Голосові відповіді</label></div>
+          <div id="feed" class="feed" role="log" aria-live="polite" aria-relevant="additions">
+            <div class="message assistant"><span class="who">ДЖАРВІС</span>Система запущена. Я готовий до перших команд. Спробуй запитати, що я вмію.</div>
+          </div>
+          <form id="command-form">
+            <input id="command" class="command" type="text" maxlength="500" aria-label="Текстова команда" placeholder="Напиши команду Джарвісу..." autocomplete="off" />
+            <button class="submit" type="submit">Надіслати</button>
+          </form>
+        </section>
+        <div style="display:flex;flex-direction:column;gap:18px;">
+          <section class="panel" aria-label="Приклади команд">
+            <h2>Спробуй команди</h2>
+            <div class="examples">
+              <button type="button" class="chip" data-command="Котра година">🕒 Котра година?</button>
+              <button type="button" class="chip" data-command="Відкрий YouTube">▶ Відкрий YouTube</button>
+              <button type="button" class="chip" data-command="Відкрий ChatGPT">✦ Відкрий ChatGPT</button>
+              <button type="button" class="chip" data-command="Запиши купити молоко">✎ Запиши купити молоко</button>
+              <button type="button" class="chip" data-command="Покажи нотатки">☷ Покажи нотатки</button>
+              <button type="button" class="chip" data-command="Що ти вмієш">? Що ти вмієш?</button>
+            </div>
+          </section>
+          <section class="panel" aria-label="Нотатки">
+            <h2>Мої нотатки <span id="note-count" style="color:var(--cyan)">(0)</span></h2>
+            <div id="notes" class="notes"><div class="empty">Тут з'являться твої нотатки.</div></div>
+            <p class="minor" style="margin:12px 0 0">Зберігаються тільки в цьому браузері, без синхронізації з іншим пристроєм.</p>
+          </section>
+        </div>
+      </div>
+    </main>
+    <footer class="footer">JARVIS 0.1 • Демоверсія без GPT, акаунтів і керування системними програмами. Для голосового розпізнавання потрібна підтримка браузера та зазвичай інтернет.</footer>
+  </div>
+  <script>
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const feed = $("feed");
+    const status = $("status");
+    const notesBox = $("notes");
+    const storageKey = "jarvis-v01-notes";
+    const voiceKey = "jarvis-v01-voice";
+    const sites = [
+      { keywords: ["ютуб", "youtube"], name: "YouTube", url: "https://www.youtube.com/" },
+      { keywords: ["гугл карти", "google maps", "карти"], name: "Google Maps", url: "https://maps.google.com/" },
+      { keywords: ["гугл пошта", "gmail", "джімейл"], name: "Gmail", url: "https://mail.google.com/" },
+      { keywords: ["chatgpt", "чат джипіті", "чатгпт", "чат гпт"], name: "ChatGPT", url: "https://chatgpt.com/" },
+      { keywords: ["телеграм", "telegram"], name: "Telegram Web", url: "https://web.telegram.org/" },
+      { keywords: ["гугл", "google"], name: "Google", url: "https://www.google.com/" },
+    ];
+    let notes = [];
+    let recognition = null;
+    let isListening = false;
+
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || "[]");
+      notes = Array.isArray(saved) ? saved.filter((item) => typeof item === "string") : [];
+      $("voice").checked = localStorage.getItem(voiceKey) !== "false";
+    } catch (_) { notes = []; }
+
+    function setStatus(message) { status.textContent = message; }
+    function addMessage(from, message, link) {
+      const outer = document.createElement("div");
+      outer.className = "message " + (from === "user" ? "user" : "assistant");
+      const who = document.createElement("span");
+      who.className = "who";
+      who.textContent = from === "user" ? "ТИ" : "ДЖАРВІС";
+      outer.appendChild(who);
+      outer.appendChild(document.createTextNode(message));
+      if (link) {
+        const a = document.createElement("a");
+        a.href = link.url;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = "↗ Відкрити " + link.name;
+        outer.appendChild(document.createElement("br"));
+        outer.appendChild(a);
+      }
+      feed.appendChild(outer);
+      feed.scrollTop = feed.scrollHeight;
+    }
+    function speak(message) {
+      if (!$("voice").checked || !("speechSynthesis" in window)) return;
+      window.speechSynthesis.cancel();
+      const say = new SpeechSynthesisUtterance(message);
+      say.lang = "uk-UA";
+      say.rate = 0.97;
+      const voices = window.speechSynthesis.getVoices();
+      const ua = voices.find((v) => v.lang.toLowerCase().startsWith("uk"));
+      if (ua) say.voice = ua;
+      window.speechSynthesis.speak(say);
+    }
+    function persistNotes() {
+      try { localStorage.setItem(storageKey, JSON.stringify(notes)); }
+      catch (_) { addMessage("assistant", "Не можу зберегти нотатки: перевір доступ до сховища браузера."); }
+    }
+    function renderNotes() {
+      notesBox.replaceChildren();
+      $("note-count").textContent = "(" + notes.length + ")";
+      if (!notes.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "Тут з'являться твої нотатки.";
+        notesBox.appendChild(empty);
+        return;
+      }
+      notes.forEach((note, idx) => {
+        const row = document.createElement("div");
+        row.className = "note";
+        const body = document.createElement("div");
+        body.className = "note-text";
+        body.textContent = note;
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "del";
+        del.title = "Видалити нотатку";
+        del.setAttribute("aria-label", "Видалити нотатку " + note);
+        del.textContent = "×";
+        del.addEventListener("click", () => {notes.splice(idx, 1); persistNotes(); renderNotes();});
+        row.append(body, del);
+        notesBox.appendChild(row);
+      });
+    }
+    function cleanCommand(command) {
+      return command.trim().toLocaleLowerCase("uk-UA").replace(/[.!?]+$/g, "").replace(/^(джарвіс|джарвис|jarvis)[,\s:—-]*/iu, "").trim();
+    }
+    function respond(input, opts = {}) {
+      const raw = String(input || "").trim().slice(0, 500);
+      if (!raw) return;
+      addMessage("user", raw);
+      const cmd = cleanCommand(raw);
+      let reply;
+      let link = null;
+      if (/^(привіт|доброго ранку|добрий день|добрий вечір)/u.test(cmd)) {
+        reply = "Привіт! Я Джарвіс. Готовий допомагати.";
+      } else if (/^(що ти вмієш|допомога|команди|що вмієш)/u.test(cmd)) {
+        reply = "Я можу назвати час і дату, відкрити YouTube, Google, ChatGPT, Gmail, Telegram або карти, а також записати і показати нотатки. Спробуй сказати: запиши купити хліб.";
+      } else if (/(котра година|яка година|скільки часу|зараз час)/u.test(cmd)) {
+        reply = "Зараз " + new Date().toLocaleTimeString("uk-UA", {hour:"2-digit",minute:"2-digit"}) + ".";
+      } else if (/(яка сьогодні дата|яке сьогодні число|сьогоднішня дата|який сьогодні день)/u.test(cmd)) {
+        reply = "Сьогодні " + new Date().toLocaleDateString("uk-UA", {weekday:"long",day:"numeric",month:"long",year:"numeric"}) + ".";
+      } else if (/^(запиши|занотуй|створи нотатку|нотатка)(?:\s+|$)/u.test(cmd)) {
+        const value = raw.replace(/^(джарвіс|джарвис|jarvis)[,\s:—-]*/iu, "").replace(/^(запиши|занотуй|створи нотатку|нотатка)(?:\s+|$)/iu, "").trim();
+        if (value) {
+          notes.push(value);
+          persistNotes();
+          renderNotes();
+          reply = "Записав нотатку: " + value + ".";
+        } else reply = "Скажи, що записати. Наприклад: запиши купити молоко.";
+      } else if (/(покажи нотатки|прочитай нотатки|мої нотатки|список нотаток)/u.test(cmd)) {
+        reply = notes.length ? "Твої нотатки: " + notes.map((n, i) => (i + 1) + ". " + n).join("; ") : "Поки немає нотаток. Скажи: запиши купити хліб.";
+      } else if (/^(відкрий|запусти|перейди на)\s+/u.test(cmd)) {
+        const match = sites.find((site) => site.keywords.some((word) => cmd.includes(word)));
+        if (match) {
+          link = {url:match.url, name:match.name};
+          reply = "Відкриваю " + match.name + ". Якщо нова вкладка не з'явилася, скористайся посиланням нижче.";
+          if (opts.clicked) {
+            // Direct click on a quick command or submission normally allows a popup.
+            // Spoken commands might not, so the reliable hyperlink remains visible.
+            try { window.open(match.url, "_blank", "noopener,noreferrer"); } catch (_) {}
+          }
+        } else {
+          reply = "Поки я вмію відкривати YouTube, Google, ChatGPT, Gmail, Telegram і карти. Для запуску програм Windows згодом підключимо окремий модуль.";
+        }
+      } else if (/(дякую|спасибі)/u.test(cmd)) {
+        reply = "Завжди радий допомогти.";
+      } else {
+        reply = "Поки не знаю такої команди. Запитай «Що ти вмієш?». У наступній версії підключимо штучний інтелект для вільного спілкування.";
+      }
+      addMessage("assistant", reply, link);
+      speak(reply);
+      return {reply, link, notes:notes.slice()};
+    }
+    $("command-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const value = $("command").value;
+      $("command").value = "";
+      respond(value, {clicked:true});
+    });
+    document.querySelectorAll("[data-command]").forEach((btn) => {
+      btn.addEventListener("click", () => respond(btn.dataset.command, {clicked:true}));
+    });
+    $("voice").addEventListener("change", (e) => {
+      try {localStorage.setItem(voiceKey, String(e.target.checked));}catch(_){}
+      if (!e.target.checked && "speechSynthesis" in window) window.speechSynthesis.cancel();
+    });
+
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (Recognition) {
+      recognition = new Recognition();
+      recognition.lang = "uk-UA";
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+      recognition.onstart = () => {
+        isListening = true;
+        $("orb-shell").classList.add("listening");
+        $("listen").setAttribute("aria-pressed", "true");
+        $("listen").textContent = "■ Зупинити прослуховування";
+        setStatus("Слухаю тебе...");
+      };
+      recognition.onend = () => {
+        isListening = false;
+        $("orb-shell").classList.remove("listening");
+        $("listen").setAttribute("aria-pressed", "false");
+        $("listen").textContent = "🎙️ Говорити з Джарвісом";
+        if (["Слухаю тебе...", "Команду розпізнано"].includes(status.textContent)) setStatus("Система готова до команд");
+      };
+      recognition.onresult = (e) => {
+        const transcript = Array.from(e.results).map((r) => r[0].transcript).join(" ");
+        setStatus("Команду розпізнано");
+        respond(transcript, {clicked:false});
+      };
+      recognition.onerror = (e) => {
+        const messages = {
+          "not-allowed":"Доступ до мікрофона заборонено. Дозволь його в налаштуваннях сайту.",
+          "service-not-allowed":"Сервіс розпізнавання недоступний у цьому браузері.",
+          "no-speech":"Не почув мовлення. Натисни кнопку і спробуй ще раз.",
+          "audio-capture":"Мікрофон не знайдено або він зайнятий.",
+          "network":"Помилка мережі під час розпізнавання. Перевір інтернет.",
+          "language-not-supported":"Українську мову не підтримує цей сервіс розпізнавання."
+        };
+        const message = messages[e.error] || "Не вдалося розпізнати мовлення. Спробуй ще раз або введи команду текстом.";
+        setStatus(message);
+        addMessage("assistant", message);
+      };
+    } else {
+      $("listen").disabled = true;
+      $("listen").textContent = "🎙️ Мікрофон недоступний";
+      $("mic-hint").textContent = "Цей браузер не підтримує голосове розпізнавання. Спробуй Chrome або Edge через HTTPS чи використовуй текстові команди.";
+      setStatus("Текстові команди доступні");
+    }
+    $("listen").addEventListener("click", () => {
+      if (!recognition) return;
+      if (isListening) { recognition.stop(); return; }
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      try {recognition.start();}
+      catch (_) { setStatus("Мікрофон ще працює або недоступний. Спробуй повторити."); }
+    });
+    renderNotes();
+  </script>
+</body>
+</html>
