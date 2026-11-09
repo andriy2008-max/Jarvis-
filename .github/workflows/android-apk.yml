@@ -1,14 +1,7 @@
 name: Android APK (Jarvis)
 
+# APK builds must be started manually from GitHub Actions, not on push or PR.
 on:
-  push:
-    paths:
-      - 'android/**'
-      - '.github/workflows/android-apk.yml'
-  pull_request:
-    paths:
-      - 'android/**'
-      - '.github/workflows/android-apk.yml'
   workflow_dispatch:
 
 permissions:
