@@ -84,6 +84,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private boolean foreground;
     private int visibleDialogs;
     private boolean manualCapture;
+    private boolean manualStopRequested;
+    private boolean recognizerSessionActive;
+    private int manualCycleFailures;
+    private final StringBuilder manualTranscript = new StringBuilder();
+    private Runnable manualRestart;
     private boolean autoWakeListening;
     private boolean autoWakePausedForErrors;
     private int autoWakeErrors;
@@ -136,6 +141,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                             if (autoWakeListening && recognizer != null) {
                                 recognizer.cancel();
                                 listening = false;
+                                recognizerSessionActive = false;
                                 autoWakeListening = false;
                             }
                             face.setState("speaking");
@@ -181,11 +187,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
     protected void onPause() {
         foreground = false;
         cancelAutoWakeSchedule();
-        if (recognizer != null && listening) recognizer.cancel();
+        cancelManualRestart();
+        if (recognizer != null && recognizerSessionActive) recognizer.cancel();
+        recognizerSessionActive = false;
         listening = false;
         processing = false;
         autoWakeListening = false;
         manualCapture = false;
+        manualStopRequested = false;
+        manualTranscript.setLength(0);
         if (microphone != null)
             microphone.setText(isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Джарвісом");
         super.onPause();
@@ -782,6 +792,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (autoWakeListening && recognizer != null) {
             recognizer.cancel();
             autoWakeListening = false;
+            recognizerSessionActive = false;
             listening = false;
         }
         dialog.setOnDismissListener(d -> {
@@ -808,6 +819,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 if (autoWakeListening && recognizer != null) {
                     recognizer.cancel();
                     autoWakeListening = false;
+                    recognizerSessionActive = false;
                     listening = false;
                     processing = false;
                 }
@@ -822,35 +834,53 @@ public final class MainActivity extends Activity implements RecognitionListener 
         return toggle;
     }
 
+
+    /** Manual press-to-talk stays armed until the SECOND press. Android recognition
+     * may end each low-level segment on silence: we restart those segments instead of
+     * treating the service callback as the end of the user's requested recording. */
     private void toggleListening() {
-        if (processing && !listening) {
-            setStatus("Обробляю команду...");
-            return;
-        }
-        if (listening && autoWakeListening && !manualCapture) {
-            // Press one captures the on-device listener, press two submits.
-            manualCapture = true;
-            autoWakeListening = false;
-            microphone.setText("■ Завершити та надіслати");
-            face.setState("listening");
-            setStatus("Говори. Натисни повторно для надсилання.");
-            return;
-        }
-        if (listening) {
-            listening = false;
-            processing = true;
+        if (manualCapture) {
+            manualStopRequested = true;
+            cancelManualRestart();
             microphone.setText("Обробляю...");
-            face.setState("thinking");
-            setStatus("Розпізнаю запис...");
-            if (recognizer != null) recognizer.stopListening();
+            setStatus("Завершую запис, розпізнаю останні слова...");
+            if (recognizerSessionActive) {
+                if (listening && recognizer != null) {
+                    listening = false;
+                    recognizer.stopListening();
+                }
+                // If Android already ended speech, wait for its onResults/onError.
+            } else {
+                finishManualCapture();
+            }
             return;
         }
         if (recognizer == null) {
             setStatus("Сервіс розпізнавання відсутній. Спробуй текстову команду.");
             return;
         }
+        if (processing || aiBusy) {
+            // A foreground wake-word segment may be waiting for its results.
+            if (!(autoWakeListening && recognizerSessionActive)) {
+                setStatus("Обробляю попередню команду...");
+                return;
+            }
+        }
         manualCapture = true;
+        manualStopRequested = false;
+        manualCycleFailures = 0;
+        manualTranscript.setLength(0);
+        cancelManualRestart();
         cancelAutoWakeSchedule();
+        // Reuse an already-started wake session, then restart in manual mode.
+        if (autoWakeListening && recognizerSessionActive) {
+            autoWakeListening = false;
+            processing = false;
+            microphone.setText("■ Завершити та надіслати");
+            face.setState("listening");
+            setStatus("Запис триває. Натисни ще раз, щоб надіслати.");
+            return;
+        }
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQUEST_MICROPHONE);
             return;
@@ -858,8 +888,59 @@ public final class MainActivity extends Activity implements RecognitionListener 
         beginListening();
     }
 
+    private void cancelManualRestart() {
+        if (manualRestart != null) {
+            wakeHandler.removeCallbacks(manualRestart);
+            manualRestart = null;
+        }
+    }
+
+    private void scheduleManualRestart(long delayMs) {
+        cancelManualRestart();
+        manualRestart = () -> {
+            manualRestart = null;
+            if (foreground && manualCapture && !manualStopRequested &&
+                !recognizerSessionActive && !aiBusy && visibleDialogs == 0) {
+                beginListening();
+            }
+        };
+        wakeHandler.postDelayed(manualRestart, delayMs);
+    }
+
+    private void finishManualCapture() {
+        cancelManualRestart();
+        final String transcript = manualTranscript.toString().trim();
+        manualTranscript.setLength(0);
+        manualCapture = false;
+        manualStopRequested = false;
+        manualCycleFailures = 0;
+        listening = false;
+        recognizerSessionActive = false;
+        processing = false;
+        microphone.setText(isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Джарвісом");
+        if (transcript.isEmpty()) {
+            face.setState("idle");
+            setStatus("Запис порожній. Спробуй говорити після натискання.");
+            scheduleAutoWake(550L);
+            return;
+        }
+        WakeConversation.Decision decision = wakeConversation.accept(
+            transcript, SystemClock.elapsedRealtime(), true);
+        if (decision.kind == WakeConversation.Kind.COMMAND) {
+            face.setState("thinking");
+            processCommand(decision.command);
+        } else if (decision.kind == WakeConversation.Kind.ARMED) {
+            face.setState("listening");
+            setStatus("Слухаю. Можеш продовжувати розмову.");
+        } else if (decision.kind == WakeConversation.Kind.FINISHED) {
+            face.setState("idle");
+            setStatus("Розмову завершено.");
+        }
+        scheduleAutoWake(550L);
+    }
+
     private void beginListening() {
-        if (recognizer == null || processing || listening) return;
+        if (recognizer == null || processing || recognizerSessionActive) return;
         if (tts != null && tts.isSpeaking()) tts.stop();
         speaking = false;
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
@@ -868,22 +949,36 @@ public final class MainActivity extends Activity implements RecognitionListener 
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "uk-UA");
         intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false);
         intent.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, supportsOnDeviceRecognizer);
+        if (manualCapture) {
+            // Hints only; engines may still end a segment early. Cycling handles that.
+            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L);
+            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 5000L);
+            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 5000L);
+        }
         autoWakeListening = !manualCapture;
+        recognizerSessionActive = true;
         listening = true;
         microphone.setText(manualCapture ? "■ Завершити та надіслати" :
             isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Джарвісом");
         face.setState(manualCapture || wakeConversation.isActive(SystemClock.elapsedRealtime())
             ? "listening" : "idle");
-        setStatus(manualCapture ? "Слухаю команду..." :
+        setStatus(manualCapture ? "Запис триває. Натисни ще раз, щоб надіслати." :
             wakeConversation.isActive(SystemClock.elapsedRealtime()) ? "Продовжуй розмову..." :
                 "Очікую «Джарвіс»");
         try {
             recognizer.startListening(intent);
         } catch (Exception error) {
-            resetListening("Не вдалося запустити запис. Спробуй ще раз.");
-            manualCapture = false;
+            recognizerSessionActive = false;
+            listening = false;
             autoWakeListening = false;
-            autoWakePausedForErrors = true;
+            if (manualCapture && manualCycleFailures++ < 3) {
+                setStatus("Перезапускаю мікрофон...");
+                scheduleManualRestart(900L);
+            } else {
+                manualCapture = false;
+                resetListening("Не вдалося запустити розпізнавання. Перевір мікрофон Android.");
+                autoWakePausedForErrors = true;
+            }
         }
     }
 
@@ -930,63 +1025,126 @@ public final class MainActivity extends Activity implements RecognitionListener 
     @Override public void onRmsChanged(float rmsdB) { }
     @Override public void onBufferReceived(byte[] buffer) { }
 
-    @Override    public void onEndOfSpeech() {
-        if (listening) {
-            listening = false;
-            processing = true;
-            microphone.setText("Обробляю...");
-            face.setState("thinking");
-            setStatus("Обробляю команду...");
+
+    @Override
+    public void onEndOfSpeech() {
+        listening = false;
+        if (manualCapture) {
+            // SpeechRecognizer stops automatically on pauses. Keep the *user's*
+            // manual recording active and restart once results arrive.
+            setStatus(manualStopRequested ? "Завершую запис..." :
+                "Запис активний: продовжуй говорити або натисни для надсилання.");
+            return;
         }
+        processing = true;
+        microphone.setText("Обробляю...");
+        face.setState("thinking");
+        setStatus("Обробляю команду...");
     }
 
     @Override
     public void onError(int error) {
+        recognizerSessionActive = false;
+        listening = false;
         boolean wasManual = manualCapture;
-        manualCapture = false;
         autoWakeListening = false;
         if (!foreground) {
+            manualCapture = false;
+            manualStopRequested = false;
             resetListening("Режим очікування");
             return;
         }
         if (wasManual) {
-            String message = error == SpeechRecognizer.ERROR_NO_MATCH ||
-                error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
-                ? "Не вдалося розпізнати. Спробуй ще раз."
-                : "Помилка голосу (" + error + "). Перевір розпізнавання в Android.";
-            resetListening(message);
-        } else {
-            resetListening("Очікую «Джарвіс»");
-            if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
-                autoWakeErrors = 0;
-            } else {
-                autoWakeErrors++;
-                if (autoWakeErrors >= 4) {
-                    autoWakePausedForErrors = true;
-                    setStatus("Голосову активацію призупинено. Використай кнопку мікрофона.");
+            processing = false;
+            if (manualStopRequested) {
+                finishManualCapture();
+                return;
+            }
+            if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                manualCapture = false;
+                resetListening("Надай дозвіл на мікрофон у налаштуваннях Android.");
+                return;
+            }
+            boolean noSpeech = error == SpeechRecognizer.ERROR_NO_MATCH ||
+                error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT;
+            if (noSpeech) manualCycleFailures = 0;
+            else manualCycleFailures++;
+            if (manualCycleFailures > 5) {
+                manualCapture = false;
+                resetListening("Розпізнавання зупинилося через повторні помилки (" + error + ").");
+                if (manualTranscript.length() > 0) {
+                    // Never silently lose a successfully transcribed earlier segment.
+                    final String partial = manualTranscript.toString();
+                    manualTranscript.setLength(0);
+                    processCommand(partial);
                 }
+                return;
+            }
+            microphone.setText("■ Завершити та надіслати");
+            face.setState("listening");
+            setStatus("Запис триває. Натисни ще раз, щоб надіслати.");
+            scheduleManualRestart(noSpeech ? 450L : 1100L);
+            return;
+        }
+        resetListening("Очікую «Джарвіс»");
+        if (error == SpeechRecognizer.ERROR_NO_MATCH ||
+            error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+            autoWakeErrors = 0;
+        } else {
+            autoWakeErrors++;
+            if (autoWakeErrors >= 4) {
+                autoWakePausedForErrors = true;
+                setStatus("Голосову активацію призупинено. Використай кнопку мікрофона.");
             }
         }
-        if (!autoWakePausedForErrors) scheduleAutoWake(wasManual ? 400L :
-            (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) ? 650L : 1800L);
+        if (!autoWakePausedForErrors) scheduleAutoWake(
+            error == SpeechRecognizer.ERROR_NO_MATCH ||
+            error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ? 650L : 1800L);
     }
 
     @Override
     public void onResults(Bundle results) {
-        ArrayList<String> matches = results == null ? null : results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+        ArrayList<String> matches = results == null ? null :
+            results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+        recognizerSessionActive = false;
+        listening = false;
         boolean wasManual = manualCapture;
-        manualCapture = false;
         autoWakeListening = false;
+        if (!foreground) {
+            manualCapture = false;
+            manualStopRequested = false;
+            resetListening("Режим очікування");
+            return;
+        }
+        if (wasManual) {
+            processing = false;
+            manualCycleFailures = 0;
+            if (matches != null && !matches.isEmpty() && matches.get(0) != null) {
+                String segment = matches.get(0).trim();
+                if (!segment.isEmpty()) {
+                    if (manualTranscript.length() > 0) manualTranscript.append(' ');
+                    manualTranscript.append(segment);
+                }
+            }
+            if (manualStopRequested) {
+                finishManualCapture();
+            } else {
+                microphone.setText("■ Завершити та надіслати");
+                face.setState("listening");
+                setStatus("Запис триває. Натисни ще раз, щоб надіслати.");
+                scheduleManualRestart(350L);
+            }
+            return;
+        }
         resetListening("Команду розпізнано");
-        if (!foreground) return;
         autoWakeErrors = 0;
         if (matches == null || matches.isEmpty()) {
             setStatus("Не вдалося розпізнати фразу.");
-            scheduleAutoWake(400L);
+            scheduleAutoWake(450L);
             return;
         }
         WakeConversation.Decision decision = wakeConversation.accept(
-            matches.get(0), SystemClock.elapsedRealtime(), wasManual);
+            matches.get(0), SystemClock.elapsedRealtime(), false);
         if (decision.kind == WakeConversation.Kind.ARMED) {
             setStatus("Активовано — говори, Джарвіс слухає мовчки.");
             face.setState("listening");
