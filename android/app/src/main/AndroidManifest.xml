@@ -18,7 +18,7 @@
         <intent><action android:name="android.intent.action.SHOW_ALARMS" /></intent>
     </queries>
     <application
-        android:label="Джарвіс"
+        android:label="${appLabel}"
         android:icon="@drawable/ic_launcher"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:usesCleartextTraffic="false"

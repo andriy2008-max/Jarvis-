@@ -248,7 +248,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
         topbar.addView(brand);
 
-        TextView version = makeText("● V 0.1.2", isCompact ? 11 : 12, GREEN, Gravity.CENTER, false);
+        TextView version = makeText("● V 0.1.4", isCompact ? 11 : 12, GREEN, Gravity.CENTER, false);
         version.setBackground(roundedFill(Color.TRANSPARENT, Color.rgb(43, 131, 108), 99));
         version.setPadding(dp(10), dp(6), dp(10), dp(6));
         if (!isWatchDevice) topbar.addView(version);
@@ -444,7 +444,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         noteHintParams.topMargin = dp(12);
         notesPanel.addView(noteHint, noteHintParams);
 
-        TextView footer = makeText("JARVIS 0.1.2 • Тестовий Android-застосунок. Без GPT і акаунтів; для голосу потрібен сервіс розпізнавання Android.",
+        TextView footer = makeText("JARVIS 0.1.4 • Тестовий Android-застосунок. Без GPT і акаунтів; для голосу потрібен сервіс розпізнавання Android.",
             isCompact ? 11 : 12, Color.rgb(127, 154, 184), Gravity.CENTER, false);
         footer.setLineSpacing(0f, 1.25f);
         LinearLayout.LayoutParams footerParams = new LinearLayout.LayoutParams(-1, -2);

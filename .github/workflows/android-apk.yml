@@ -1,7 +1,11 @@
 name: Android APK (Jarvis)
 
-# APK workflow is manual-only. Do not build on source commits.
+# Single authorized compatibility build; return to manual-only after run starts.
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/app/build.gradle'
   workflow_dispatch:
 
 permissions:
@@ -10,7 +14,7 @@ permissions:
 jobs:
   apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,8 +31,9 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
-      - name: Verify command parsers (plain Java)
+      - name: Verify all three command parsers
         run: |
+          set -euo pipefail
           mkdir -p android/build/parser-tests
           javac -encoding UTF-8 -d android/build/parser-tests \
             android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java \
@@ -40,28 +45,41 @@ jobs:
           for test in CommandPatternsTest AssistantIntentsTest AppNameMatcherTest; do
             java -cp android/build/parser-tests "com.andriy.jarvis.$test"
           done
-      - name: Build debug APK — first verification
+      - name: Compile preview APK — pass 1
         run: gradle -p android --no-daemon --stacktrace :app:assembleDebug
-      - name: Rebuild APK — independent verification
+      - name: Compile preview APK — pass 2
         run: gradle -p android --no-daemon --rerun-tasks --stacktrace :app:assembleDebug
-      - name: Verify APK artifact and checksum
+      - name: Validate APK signature and distinct installation ID
         run: |
-          test -s android/app/build/outputs/apk/debug/app-debug.apk
-          ls -lh android/app/build/outputs/apk/debug/app-debug.apk
-          sha256sum android/app/build/outputs/apk/debug/app-debug.apk
-      - name: Upload installable APK
+          set -euo pipefail
+          apk=android/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" > /tmp/preview-badging.txt
+          cat /tmp/preview-badging.txt | head -12
+          grep -q "package: name='com.andriy.jarvis.preview'" /tmp/preview-badging.txt
+          grep -q "versionCode='14'" /tmp/preview-badging.txt
+          grep -q "versionName='0.1.4'" /tmp/preview-badging.txt
+          mkdir -p android/dist
+          cp "$apk" android/dist/JARVIS-0.1.4-Preview.apk
+          sha256sum android/dist/JARVIS-0.1.4-Preview.apk | tee android/dist/JARVIS-0.1.4-Preview.sha256
+      - name: Upload installable preview APK
         uses: actions/upload-artifact@v4
         with:
-          name: JARVIS-0.1.3-debug-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: JARVIS-0.1.4-Preview-APK
+          path: |
+            android/dist/JARVIS-0.1.4-Preview.apk
+            android/dist/JARVIS-0.1.4-Preview.sha256
           if-no-files-found: error
-      - name: Publish direct APK download on main
+      - name: Publish preview APK in separate release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v0.1.3 \
-            'android/app/build/outputs/apk/debug/app-debug.apk#JARVIS-0.1.3-debug.apk' \
+          gh release create v0.1.4-preview \
+            android/dist/JARVIS-0.1.4-Preview.apk \
+            android/dist/JARVIS-0.1.4-Preview.sha256 \
             --target "$GITHUB_SHA" \
-            --title 'JARVIS 0.1.3 — Android APK' \
-            --notes 'Тестовий APK для Android. Оновлений дизайн, голосові команди, нагадування, будильники, універсальний запуск встановлених застосунків, 8-бітне обличчя, нотатки та кнопки STEM на сумісних Wear OS годинниках. Debug-підпис: для майбутніх оновлень потрібен постійний release keystore.'
+            --prerelease \
+            --title 'JARVIS 0.1.4 Preview — встановлюється поруч зі старим' \
+            --notes 'Тестовий APK: окремий applicationId com.andriy.jarvis.preview, щоб уникнути конфлікту підпису зі старими debug-версіями. Встановлюється поряд зі старим Джарвісом, не переносить старі нотатки. GitHub Actions перевіряє парсери, двічі збирає, перевіряє підпис, ідентифікатор пакета та контрольну суму.'
