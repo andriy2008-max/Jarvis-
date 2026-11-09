@@ -82,6 +82,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private boolean autoWakeEnabled;
     private boolean supportsOnDeviceRecognizer;
     private boolean foreground;
+    private int visibleDialogs;
     private boolean manualCapture;
     private boolean autoWakeListening;
     private boolean autoWakePausedForErrors;
@@ -636,12 +637,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
         editor.setSingleLine(false);
         editor.setMinLines(2);
         editor.setHint("Команда або запитання");
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("Написати Джарвісу")
             .setView(editor)
             .setNegativeButton("Скасувати", null)
-            .setPositiveButton("Надіслати", (dialog, which) -> processCommand(editor.getText().toString()))
-            .show();
+            .setPositiveButton("Надіслати", (d, which) -> processCommand(editor.getText().toString()))
+            .create();
+        showDialogWithoutWake(dialog);
     }
 
     private void showWatchActions() {
@@ -649,8 +651,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "Підключення до ШІ", "Новий діалог", "Показати нотатки",
             "Що ти вмієш?", "Введення текстом", "Голосова активація"
         };
-        new AlertDialog.Builder(this).setTitle("Джарвіс — дії")
-            .setItems(actions, (dialog, which) -> {
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Джарвіс — дії")
+            .setItems(actions, (d, which) -> {
                 switch (which) {
                     case 0: showAiSettings(); break;
                     case 1: clearAiConversation(); break;
@@ -666,7 +668,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         break;
                     default: break;
                 }
-            }).show();
+            }).create();
+        showDialogWithoutWake(dialog);
     }
     private TextView panelHeading(String title) {
         TextView view = makeText(title, isCompact ? 13 : 14,
@@ -760,7 +763,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private boolean canAutoWake() {
-        return foreground && autoWakeEnabled && supportsOnDeviceRecognizer &&
+        return foreground && visibleDialogs == 0 &&
+            autoWakeEnabled && supportsOnDeviceRecognizer &&
             !autoWakePausedForErrors && recognizer != null &&
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED &&
             !manualCapture && !listening && !processing && !aiBusy && !speaking &&
@@ -770,6 +774,21 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private void resumeAfterReply() {
         wakeConversation.assistantFinished(SystemClock.elapsedRealtime());
         scheduleAutoWake(450L);
+    }
+
+    private void showDialogWithoutWake(AlertDialog dialog) {
+        visibleDialogs++;
+        cancelAutoWakeSchedule();
+        if (autoWakeListening && recognizer != null) {
+            recognizer.cancel();
+            autoWakeListening = false;
+            listening = false;
+        }
+        dialog.setOnDismissListener(d -> {
+            visibleDialogs = Math.max(0, visibleDialogs - 1);
+            scheduleAutoWake(550L);
+        });
+        dialog.show();
     }
 
     private CheckBox makeWakeToggle() {
@@ -790,6 +809,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     recognizer.cancel();
                     autoWakeListening = false;
                     listening = false;
+                    processing = false;
                 }
                 setStatus("Режим активації голосом вимкнено");
             } else {
@@ -1314,7 +1334,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 urlInput.setError(error.getMessage() == null ? "Перевір адресу й код." : error.getMessage());
             }
         }));
-        dialog.show();
+        showDialogWithoutWake(dialog);
     }
 
     private void processCommand(String raw) {
@@ -1336,6 +1356,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
         if (deviceCommand != null) {
             reply = deviceActions == null ? "Керування пристроєм ще не готове." : deviceActions.perform(deviceCommand);
+        } else if (command.equals("досить") || command.equals("закінчи розмову") ||
+            command.equals("заверши розмову") || command.equals("кінець розмови")) {
+            wakeConversation.end();
+            setStatus("Розмову завершено. Очікую «Джарвіс».");
+            face.setState("idle");
+            scheduleAutoWake(400L);
+            return;
         } else if (command.equals("новий діалог") || command.equals("очисти діалог") ||
             command.equals("забудь розмову") || command.equals("почни новий діалог")) {
             clearAiConversation();
