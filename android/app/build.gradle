@@ -15,6 +15,7 @@ android {
     }
 
     // Preview APK can coexist with previous JARVIS installs without signature conflict.
+    // Dedicated preview package prevents INSTALL_FAILED_UPDATE_INCOMPATIBLE with existing debug APKs.
     buildTypes {
         debug {
             applicationIdSuffix '.preview'
