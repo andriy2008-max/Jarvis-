@@ -379,18 +379,19 @@
         addMessage("assistant", message);
       };
     } else {
-      $("listen").disabled = true;
-      $("listen").textContent = "🎙️ Мікрофон недоступний";
-      $("mic-hint").textContent = "Цей браузер не підтримує голосове розпізнавання. Спробуй Chrome або Edge через HTTPS чи використовуй текстові команди.";
-      setStatus("Текстові команди доступні");
+      // Opera may allow microphone capture without implementing SpeechRecognition.
+      // Keep a permission-test button usable instead of disabling it.
+      $("listen").textContent = "🎙️ Перевірити доступ до мікрофона";
+      $("mic-hint").textContent = "Opera може дозволити мікрофон, але голосові команди тут можуть не підтримуватися. Натисни кнопку, щоб перевірити дозвіл.";
+      setStatus("Голосове розпізнавання недоступне. Перевір доступ до мікрофона.");
     }
     async function startListeningWithPermission() {
-      if (!recognition || micPermissionPending) return;
-      if (isListening) { recognition.stop(); return; }
+      if (micPermissionPending) return;
+      if (isListening && recognition) { recognition.stop(); return; }
 
       // Browser permission dialogs require a secure context and a user gesture.
       if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-        const message = "Для доступу до мікрофона відкрий Джарвіса через HTTPS у Chrome або Edge.";
+        const message = "Для мікрофона потрібен HTTPS і відкриття сторінки безпосередньо в браузері. Скопіюй HTTPS-посилання й відкрий його в Opera або Chrome.";
         setStatus(message);
         $("mic-hint").textContent = message;
         return;
@@ -405,6 +406,13 @@
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         // SpeechRecognition accesses the mic separately, so immediately release this test stream.
         stream.getTracks().forEach((track) => track.stop());
+        if (!recognition) {
+          const message = "Доступ до мікрофона надано! Але цей браузер не підтримує розпізнавання голосових команд Джарвіса. Для голосових команд скористайся Chrome або вводь їх текстом.";
+          setStatus("Мікрофон доступний; голосове розпізнавання недоступне.");
+          $("mic-hint").textContent = message;
+          addMessage("assistant", message);
+          return;
+        }
         if ("speechSynthesis" in window) {
           ++speechSequence;
           window.speechSynthesis.cancel();
@@ -412,7 +420,7 @@
         recognition.start();
       } catch (error) {
         const messages = {
-          NotAllowedError: "Доступ до мікрофона заблоковано. У Chrome натисни значок налаштувань біля адреси сайту → Дозволи мікрофон, потім спробуй знову.",
+          NotAllowedError: "Доступ до мікрофона заблоковано. Перевір у налаштуваннях Opera дозвіл на мікрофон для цього сайту, а в Android — дозвіл мікрофона для Opera.",
           PermissionDeniedError: "Доступ до мікрофона заборонено. Дозволь його в налаштуваннях сайту.",
           NotFoundError: "Мікрофон не знайдено. Перевір, чи пристрій має робочий мікрофон.",
           NotReadableError: "Мікрофон зайнятий іншою програмою або недоступний.",
