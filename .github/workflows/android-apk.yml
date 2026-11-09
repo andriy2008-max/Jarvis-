@@ -48,12 +48,14 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/AppNameMatcher.java \
             android/app/src/main/java/com/andriy/jarvis/DeviceCommands.java \
             android/app/src/main/java/com/andriy/jarvis/AiChatPolicy.java \
+            android/app/src/main/java/com/andriy/jarvis/WakeConversation.java \
             android/app/src/test/java/com/andriy/jarvis/CommandPatternsTest.java \
             android/app/src/test/java/com/andriy/jarvis/AssistantIntentsTest.java \
             android/app/src/test/java/com/andriy/jarvis/AppNameMatcherTest.java \
             android/app/src/test/java/com/andriy/jarvis/DeviceCommandsTest.java \
-            android/app/src/test/java/com/andriy/jarvis/AiChatPolicyTest.java
-          for test in CommandPatternsTest AssistantIntentsTest AppNameMatcherTest DeviceCommandsTest AiChatPolicyTest; do
+            android/app/src/test/java/com/andriy/jarvis/AiChatPolicyTest.java \
+            android/app/src/test/java/com/andriy/jarvis/WakeConversationTest.java
+          for test in CommandPatternsTest AssistantIntentsTest AppNameMatcherTest DeviceCommandsTest AiChatPolicyTest WakeConversationTest; do
             java -cp android/build/parser-tests "com.andriy.jarvis.$test"
           done
       - name: Restore stable signing keystore (stable only)
@@ -115,18 +117,18 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" > "$RUNNER_TEMP/jarvis-badging.txt"
           grep -Fq "package: name='$package'" "$RUNNER_TEMP/jarvis-badging.txt"
-          grep -Fq "versionCode='16'" "$RUNNER_TEMP/jarvis-badging.txt"
-          grep -Fq "versionName='0.1.6'" "$RUNNER_TEMP/jarvis-badging.txt"
+          grep -Fq "versionCode='17'" "$RUNNER_TEMP/jarvis-badging.txt"
+          grep -Fq "versionName='0.1.7'" "$RUNNER_TEMP/jarvis-badging.txt"
           mkdir -p android/dist
-          cp "$apk" "android/dist/JARVIS-0.1.6-$variant.apk"
-          (cd android/dist && sha256sum "JARVIS-0.1.6-$variant.apk" > "JARVIS-0.1.6-$variant.sha256")
+          cp "$apk" "android/dist/JARVIS-0.1.7-$variant.apk"
+          (cd android/dist && sha256sum "JARVIS-0.1.7-$variant.apk" > "JARVIS-0.1.7-$variant.sha256")
       - name: Upload verified APK as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: JARVIS-0.1.6-${{ inputs.variant }}-APK
+          name: JARVIS-0.1.7-${{ inputs.variant }}-APK
           path: |
-            android/dist/JARVIS-0.1.6-${{ inputs.variant }}.apk
-            android/dist/JARVIS-0.1.6-${{ inputs.variant }}.sha256
+            android/dist/JARVIS-0.1.7-${{ inputs.variant }}.apk
+            android/dist/JARVIS-0.1.7-${{ inputs.variant }}.sha256
           if-no-files-found: error
       - name: Clean up signing material
         if: always()
