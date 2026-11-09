@@ -14,7 +14,7 @@ on:
         default: stable
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   apk:
@@ -115,6 +115,15 @@ jobs:
           fi
           test -s "$apk"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+          if [ "$variant" = stable ]; then
+            # Never ship a new signing key as an alleged in-place update.
+            expected="$(tr -d '[:space:]' < android/RELEASE-CERT-SHA256.txt | tr '[:upper:]' '[:lower:]')"
+            actual="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1)"
+            if [ "$actual" != "$expected" ]; then
+              echo "::error::Stable signing certificate does not match the pinned JARVIS identity."
+              exit 1
+            fi
+          fi
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" > "$RUNNER_TEMP/jarvis-badging.txt"
           grep -Fq "package: name='$package'" "$RUNNER_TEMP/jarvis-badging.txt"
           grep -Fq "versionCode='18'" "$RUNNER_TEMP/jarvis-badging.txt"
@@ -130,6 +139,27 @@ jobs:
             android/dist/JARVIS-0.1.8-${{ inputs.variant }}.apk
             android/dist/JARVIS-0.1.8-${{ inputs.variant }}.sha256
           if-no-files-found: error
+      - name: Publish stable signed APK to direct GitHub release
+        if: inputs.variant == 'stable'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test -s 'android/dist/JARVIS-0.1.8-stable.apk'
+          # A version tag is immutable: do not overwrite older release packages.
+          if gh release view 'v0.1.8' --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error::Release v0.1.8 already exists. Bump versionCode and versionName for future updates."
+            exit 1
+          fi
+          gh release create 'v0.1.8' \
+            'android/dist/JARVIS-0.1.8-stable.apk' \
+            'android/dist/JARVIS-0.1.8-stable.sha256' \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title 'JARVIS 0.1.8 — stable signed Android' \
+            --notes 'Стабільний APK з постійним підписом та ID com.andriy.jarvis.stable. Збережи нотатки з попередніх тестових копій до їх видалення. Наступні stable-версії з більшим versionCode та тим самим сертифікатом оновлюватимуть цей застосунок.' \
+            --prerelease
       - name: Clean up signing material
         if: always()
         shell: bash
