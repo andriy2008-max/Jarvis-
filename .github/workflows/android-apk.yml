@@ -1,12 +1,8 @@
 name: Android APK (Jarvis)
 
-# One-time, user-authorized v0.1.3 build. Remove the push trigger after publishing.
+# APK workflow is manual-only. Do not build on source commits.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'android/app/build.gradle'
 
 permissions:
   contents: write
