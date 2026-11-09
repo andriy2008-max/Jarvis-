@@ -2,6 +2,9 @@ name: Android APK (Jarvis)
 
 # Manual only. Building or publishing must be explicitly requested.
 on:
+  push:
+    branches:
+      - qa/jarvis-018-voice
   workflow_dispatch:
     inputs:
       variant:
@@ -58,6 +61,9 @@ jobs:
           for test in CommandPatternsTest AssistantIntentsTest AppNameMatcherTest DeviceCommandsTest AiChatPolicyTest WakeConversationTest; do
             java -cp android/build/parser-tests "com.andriy.jarvis.$test"
           done
+      - name: Verify AI proxy regression tests
+        shell: bash
+        run: node --test server/jarvis-ai-worker/test/worker.test.mjs
       - name: Restore stable signing keystore (stable only)
         if: inputs.variant == 'stable'
         shell: bash
@@ -83,7 +89,7 @@ jobs:
           JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ "${{ inputs.variant }}" = stable ]; then
+          if [ "${{ inputs.variant || 'preview' }}" = stable ]; then
             gradle -p android --no-daemon --stacktrace :app:assembleRelease
           else
             gradle -p android --no-daemon --stacktrace :app:assembleDebug
@@ -96,7 +102,7 @@ jobs:
           JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ "${{ inputs.variant }}" = stable ]; then
+          if [ "${{ inputs.variant || 'preview' }}" = stable ]; then
             gradle -p android --no-daemon --rerun-tasks --stacktrace :app:assembleRelease
           else
             gradle -p android --no-daemon --rerun-tasks --stacktrace :app:assembleDebug
@@ -105,7 +111,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          variant='${{ inputs.variant }}'
+          variant='${{ inputs.variant || 'preview' }}'
           if [ "$variant" = stable ]; then
             apk='android/app/build/outputs/apk/release/app-release.apk'
             package='com.andriy.jarvis.stable'
@@ -125,10 +131,10 @@ jobs:
       - name: Upload verified APK as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: JARVIS-0.1.8-${{ inputs.variant }}-APK
+          name: JARVIS-0.1.8-${{ inputs.variant || 'preview' }}-APK
           path: |
-            android/dist/JARVIS-0.1.8-${{ inputs.variant }}.apk
-            android/dist/JARVIS-0.1.8-${{ inputs.variant }}.sha256
+            android/dist/JARVIS-0.1.8-${{ inputs.variant || 'preview' }}.apk
+            android/dist/JARVIS-0.1.8-${{ inputs.variant || 'preview' }}.sha256
           if-no-files-found: error
       - name: Clean up signing material
         if: always()
