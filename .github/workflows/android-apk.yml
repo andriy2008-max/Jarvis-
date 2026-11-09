@@ -1,11 +1,7 @@
 name: Android APK (Jarvis)
 
-# Single authorized compatibility build; return to manual-only after run starts.
+# APK builds are manual-only. No automatic builds on GitHub commits.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'android/app/build.gradle'
   workflow_dispatch:
 
 permissions:
