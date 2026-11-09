@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Flashlight optional: app also runs on tablets and Wear OS without a flash. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
     <!-- Delegates alarm/reminder requests to the installed system Clock app. -->
     <uses-permission android:name="android.permission.SET_ALARM" />
     <uses-feature android:name="android.hardware.microphone" android:required="true" />

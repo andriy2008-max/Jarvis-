@@ -1,16 +1,25 @@
 name: Android APK (Jarvis)
 
-# APK builds are manual-only. No automatic builds on GitHub commits.
+# Manual only. Building or publishing must be explicitly requested.
 on:
   workflow_dispatch:
+    inputs:
+      variant:
+        description: 'preview = debug test; stable = permanent signed release (requires secrets)'
+        required: true
+        type: choice
+        options:
+          - preview
+          - stable
+        default: preview
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,10 +33,12 @@ jobs:
         with:
           gradle-version: '8.11.1'
       - name: Install Android SDK 35
+        shell: bash
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
-      - name: Verify all three command parsers
+      - name: Verify command parser regression tests
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p android/build/parser-tests
@@ -35,47 +46,87 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java \
             android/app/src/main/java/com/andriy/jarvis/AssistantIntents.java \
             android/app/src/main/java/com/andriy/jarvis/AppNameMatcher.java \
+            android/app/src/main/java/com/andriy/jarvis/DeviceCommands.java \
             android/app/src/test/java/com/andriy/jarvis/CommandPatternsTest.java \
             android/app/src/test/java/com/andriy/jarvis/AssistantIntentsTest.java \
-            android/app/src/test/java/com/andriy/jarvis/AppNameMatcherTest.java
-          for test in CommandPatternsTest AssistantIntentsTest AppNameMatcherTest; do
+            android/app/src/test/java/com/andriy/jarvis/AppNameMatcherTest.java \
+            android/app/src/test/java/com/andriy/jarvis/DeviceCommandsTest.java
+          for test in CommandPatternsTest AssistantIntentsTest AppNameMatcherTest DeviceCommandsTest; do
             java -cp android/build/parser-tests "com.andriy.jarvis.$test"
           done
-      - name: Compile preview APK — pass 1
-        run: gradle -p android --no-daemon --stacktrace :app:assembleDebug
-      - name: Compile preview APK — pass 2
-        run: gradle -p android --no-daemon --rerun-tasks --stacktrace :app:assembleDebug
-      - name: Validate APK signature and distinct installation ID
+      - name: Restore stable signing keystore (stable only)
+        if: inputs.variant == 'stable'
+        shell: bash
+        env:
+          JARVIS_SIGNING_KEYSTORE_BASE64: ${{ secrets.JARVIS_SIGNING_KEYSTORE_BASE64 }}
+          JARVIS_RELEASE_STORE_PASSWORD: ${{ secrets.JARVIS_RELEASE_STORE_PASSWORD }}
+          JARVIS_RELEASE_KEY_ALIAS: ${{ secrets.JARVIS_RELEASE_KEY_ALIAS }}
+          JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          apk=android/app/build/outputs/apk/debug/app-debug.apk
+          : "${JARVIS_SIGNING_KEYSTORE_BASE64:?Missing GitHub secret JARVIS_SIGNING_KEYSTORE_BASE64}"
+          : "${JARVIS_RELEASE_STORE_PASSWORD:?Missing GitHub secret JARVIS_RELEASE_STORE_PASSWORD}"
+          : "${JARVIS_RELEASE_KEY_ALIAS:?Missing GitHub secret JARVIS_RELEASE_KEY_ALIAS}"
+          : "${JARVIS_RELEASE_KEY_PASSWORD:?Missing GitHub secret JARVIS_RELEASE_KEY_PASSWORD}"
+          printf '%s' "$JARVIS_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/jarvis-stable.jks"
+          chmod 600 "$RUNNER_TEMP/jarvis-stable.jks"
+          echo "JARVIS_RELEASE_STORE_FILE=$RUNNER_TEMP/jarvis-stable.jks" >> "$GITHUB_ENV"
+      - name: Compile APK, pass 1
+        shell: bash
+        env:
+          JARVIS_RELEASE_STORE_PASSWORD: ${{ secrets.JARVIS_RELEASE_STORE_PASSWORD }}
+          JARVIS_RELEASE_KEY_ALIAS: ${{ secrets.JARVIS_RELEASE_KEY_ALIAS }}
+          JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.variant }}" = stable ]; then
+            gradle -p android --no-daemon --stacktrace :app:assembleRelease
+          else
+            gradle -p android --no-daemon --stacktrace :app:assembleDebug
+          fi
+      - name: Compile APK, pass 2
+        shell: bash
+        env:
+          JARVIS_RELEASE_STORE_PASSWORD: ${{ secrets.JARVIS_RELEASE_STORE_PASSWORD }}
+          JARVIS_RELEASE_KEY_ALIAS: ${{ secrets.JARVIS_RELEASE_KEY_ALIAS }}
+          JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.variant }}" = stable ]; then
+            gradle -p android --no-daemon --rerun-tasks --stacktrace :app:assembleRelease
+          else
+            gradle -p android --no-daemon --rerun-tasks --stacktrace :app:assembleDebug
+          fi
+      - name: Verify signature, package, version and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          variant='${{ inputs.variant }}'
+          if [ "$variant" = stable ]; then
+            apk='android/app/build/outputs/apk/release/app-release.apk'
+            package='com.andriy.jarvis.stable'
+          else
+            apk='android/app/build/outputs/apk/debug/app-debug.apk'
+            package='com.andriy.jarvis.preview'
+          fi
           test -s "$apk"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" > /tmp/preview-badging.txt
-          cat /tmp/preview-badging.txt | head -12
-          grep -q "package: name='com.andriy.jarvis.preview'" /tmp/preview-badging.txt
-          grep -q "versionCode='14'" /tmp/preview-badging.txt
-          grep -q "versionName='0.1.4'" /tmp/preview-badging.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" > "$RUNNER_TEMP/jarvis-badging.txt"
+          grep -Fq "package: name='$package'" "$RUNNER_TEMP/jarvis-badging.txt"
+          grep -Fq "versionCode='15'" "$RUNNER_TEMP/jarvis-badging.txt"
+          grep -Fq "versionName='0.1.5'" "$RUNNER_TEMP/jarvis-badging.txt"
           mkdir -p android/dist
-          cp "$apk" android/dist/JARVIS-0.1.4-Preview.apk
-          sha256sum android/dist/JARVIS-0.1.4-Preview.apk | tee android/dist/JARVIS-0.1.4-Preview.sha256
-      - name: Upload installable preview APK
+          cp "$apk" "android/dist/JARVIS-0.1.5-$variant.apk"
+          (cd android/dist && sha256sum "JARVIS-0.1.5-$variant.apk" > "JARVIS-0.1.5-$variant.sha256")
+      - name: Upload verified APK as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: JARVIS-0.1.4-Preview-APK
+          name: JARVIS-0.1.5-${{ inputs.variant }}-APK
           path: |
-            android/dist/JARVIS-0.1.4-Preview.apk
-            android/dist/JARVIS-0.1.4-Preview.sha256
+            android/dist/JARVIS-0.1.5-${{ inputs.variant }}.apk
+            android/dist/JARVIS-0.1.5-${{ inputs.variant }}.sha256
           if-no-files-found: error
-      - name: Publish preview APK in separate release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create v0.1.4-preview \
-            android/dist/JARVIS-0.1.4-Preview.apk \
-            android/dist/JARVIS-0.1.4-Preview.sha256 \
-            --target "$GITHUB_SHA" \
-            --prerelease \
-            --title 'JARVIS 0.1.4 Preview — встановлюється поруч зі старим' \
-            --notes 'Тестовий APK: окремий applicationId com.andriy.jarvis.preview, щоб уникнути конфлікту підпису зі старими debug-версіями. Встановлюється поряд зі старим Джарвісом, не переносить старі нотатки. GitHub Actions перевіряє парсери, двічі збирає, перевіряє підпис, ідентифікатор пакета та контрольну суму.'
+      - name: Clean up signing material
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/jarvis-stable.jks"

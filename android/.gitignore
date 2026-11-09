@@ -5,3 +5,7 @@ local.properties
 .idea/
 *.apk
 *.aab
+*.jks
+*.keystore
+*.p12
+*.pfx

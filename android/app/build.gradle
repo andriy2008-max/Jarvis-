@@ -2,6 +2,13 @@ plugins {
     id 'com.android.application'
 }
 
+// Stable signing requires a user-controlled keystore. Nothing private is checked into GitHub.
+def stableKeystore = System.getenv('JARVIS_RELEASE_STORE_FILE')
+def stableStorePassword = System.getenv('JARVIS_RELEASE_STORE_PASSWORD')
+def stableAlias = System.getenv('JARVIS_RELEASE_KEY_ALIAS')
+def stableKeyPassword = System.getenv('JARVIS_RELEASE_KEY_PASSWORD')
+def stableSigningReady = [stableKeystore, stableStorePassword, stableAlias, stableKeyPassword].every { it != null && !it.isEmpty() }
+
 android {
     namespace 'com.andriy.jarvis'
     compileSdk 35
@@ -10,23 +17,48 @@ android {
         applicationId 'com.andriy.jarvis'
         minSdk 26
         targetSdk 35
-        versionCode 14
-        versionName '0.1.4'
+        versionCode 15
+        versionName '0.1.5'
     }
 
-    // Preview APK can coexist with previous JARVIS installs without signature conflict.
-    // Dedicated preview package prevents INSTALL_FAILED_UPDATE_INCOMPATIBLE with existing debug APKs.
+    signingConfigs {
+        jarvisStable {
+            if (stableSigningReady) {
+                storeFile file(stableKeystore)
+                storePassword stableStorePassword
+                keyAlias stableAlias
+                keyPassword stableKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         debug {
+            // Retain Preview package identity; debug signatures vary between CI runs.
             applicationIdSuffix '.preview'
             manifestPlaceholders = [appLabel: 'Джарвіс Тест']
         }
         release {
+            // First stable-signed release installs alongside legacy and preview APKs.
+            // All later stable releases can upgrade in-place with the same signing key.
+            applicationIdSuffix '.stable'
             manifestPlaceholders = [appLabel: 'Джарвіс']
+            if (stableSigningReady) signingConfig signingConfigs.jarvisStable
+            minifyEnabled false
         }
     }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+// Never complete an unsigned release build inadvertently.
+tasks.matching { it.name == 'assembleRelease' || it.name == 'bundleRelease' }.configureEach {
+    doFirst {
+        if (!stableSigningReady) {
+            throw new GradleException('Stable signing is not configured. See android/RELEASE-SIGNING.md')
+        }
     }
 }

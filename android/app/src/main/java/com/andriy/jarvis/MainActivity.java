@@ -72,6 +72,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private SpeechRecognizer recognizer;
     private TextToSpeech tts;
+    private DeviceActions deviceActions;
     private TextView status;
     private ScrollView feedScroll;
     private LinearLayout feedMessages;
@@ -98,6 +99,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         voiceEnabled = getPreferences(MODE_PRIVATE).getBoolean("voiceEnabled", true);
         loadNotes();
         buildInterface();
+        deviceActions = new DeviceActions(this);
 
         tts = new TextToSpeech(this, result -> {
             if (result == TextToSpeech.SUCCESS && tts != null) {
@@ -248,7 +250,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
         topbar.addView(brand);
 
-        TextView version = makeText("● V 0.1.4", isCompact ? 11 : 12, GREEN, Gravity.CENTER, false);
+        TextView version = makeText("● V 0.1.5", isCompact ? 11 : 12, GREEN, Gravity.CENTER, false);
         version.setBackground(roundedFill(Color.TRANSPARENT, Color.rgb(43, 131, 108), 99));
         version.setPadding(dp(10), dp(6), dp(10), dp(6));
         if (!isWatchDevice) topbar.addView(version);
@@ -396,7 +398,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "🔋 Заряд батареї", "⏱ Таймер на 1 хвилину",
             "⚙ Налаштування", "🗺 Відкрий карти",
             "⏰ Будильник 07:30", "🔔 Нагадай через 5 хв",
-            "📱 Відкрий Telegram", "⏰ Покажи будильники"
+            "📱 Відкрий Telegram", "⏰ Покажи будильники",
+            "🔦 Увімкни ліхтарик", "⏸ Пауза музики",
+            "🔉 Гучність 50%", "☀ Налаштування екрана"
         };
         String[] commands = {
             "Котра година", "Відкрий YouTube",
@@ -405,7 +409,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "Заряд батареї", "Таймер на 1 хвилину",
             "Відкрий налаштування", "Відкрий карти",
             "Постав будильник на 07:30", "Нагадай через 5 хвилин випити води",
-            "Відкрий Телеграм", "Покажи будильники"
+            "Відкрий Телеграм", "Покажи будильники",
+            "Увімкни ліхтарик", "Постав музику на паузу",
+            "Постав гучність на 50%", "Відкрий налаштування екрана"
         };
         for (int i = 0; i < examples.length; i += 2) {
             LinearLayout row = new LinearLayout(this);
@@ -444,7 +450,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         noteHintParams.topMargin = dp(12);
         notesPanel.addView(noteHint, noteHintParams);
 
-        TextView footer = makeText("JARVIS 0.1.4 • Тестовий Android-застосунок. Без GPT і акаунтів; для голосу потрібен сервіс розпізнавання Android.",
+        TextView footer = makeText("JARVIS 0.1.5 • Тестовий Android-застосунок. Без GPT і акаунтів; для голосу потрібен сервіс розпізнавання Android.",
             isCompact ? 11 : 12, Color.rgb(127, 154, 184), Gravity.CENTER, false);
         footer.setLineSpacing(0f, 1.25f);
         LinearLayout.LayoutParams footerParams = new LinearLayout.LayoutParams(-1, -2);
@@ -589,6 +595,17 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (code == REQUEST_MICROPHONE) {
             if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) beginListening();
             else setStatus("Дозволь доступ до мікрофона в налаштуваннях застосунку.");
+        } else if (code == DeviceActions.REQUEST_CAMERA_FOR_TORCH && deviceActions != null) {
+            String feedback = deviceActions.onCameraPermissionResult(
+                results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED);
+            if (feedback != null) {
+                appendDialogue("Джарвіс", feedback);
+                setStatus(feedback);
+                if (tts != null && voiceEnabled) {
+                    tts.speak(feedback, TextToSpeech.QUEUE_FLUSH, new Bundle(),
+                        "jarvis-torch-" + SystemClock.uptimeMillis());
+                }
+            }
         }
     }
 
@@ -866,10 +883,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
         AssistantIntents.ClockTime alarmTime = AssistantIntents.alarmTime(command);
         AssistantIntents.Reminder reminder = AssistantIntents.reminder(command);
         String requestedApp = AssistantIntents.requestedApp(command);
+        DeviceCommands.Action deviceCommand = DeviceCommands.parse(command);
         boolean silentReply = false;
         String reply;
 
-        if (command.equals("стоп") || command.equals("замовкни") ||
+        if (deviceCommand != null) {
+            reply = deviceActions == null ? "Керування пристроєм ще не готове." : deviceActions.perform(deviceCommand);
+        } else if (command.equals("стоп") || command.equals("замовкни") ||
             command.equals("зупини відповідь") || command.equals("припини говорити")) {
             stopSpeaking();
             reply = "Озвучення зупинено.";
@@ -976,7 +996,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         } else if (command.startsWith("привіт")) {
             reply = "Привіт! Я Джарвіс. Готовий допомагати.";
         } else if (command.contains("що ти вмієш") || command.equals("допомога") || command.equals("команди")) {
-            reply = "Я вмію: час і дату, заряд батареї, таймер, нотатки, гучність, пошук, карти, будильники, нагадування та запуск встановлених програм. Спробуй: нагадай через 5 хвилин випити води.";
+            reply = "Я вмію: час і дату, заряд батареї, таймер, нотатки, пошук, карти, будильники, нагадування, запуск програм, керування музикою, медіагучністю й ліхтариком. Спробуй: увімкни ліхтарик або наступна пісня.";
         } else if (command.contains("дякую")) {
             reply = "Завжди радий допомогти.";
         } else {
@@ -1019,6 +1039,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     @Override
     protected void onDestroy() {
         cancelTimerInternal();
+        if (deviceActions != null) deviceActions.close();
         if (recognizer != null) recognizer.destroy();
         if (tts != null) {
             tts.stop();
