@@ -100,7 +100,17 @@ public final class AiChatClient {
         final List<JSONObject> context;
         synchronized (this) {
             requestGeneration = generation;
-            context = new ArrayList<>(history);
+            // Keep the JSON request below the proxy's byte limit, even with long
+            // conversations in Ukrainian (UTF-8 can use multiple bytes/character).
+            context = new ArrayList<>();
+            int remainingBytes = 9000;
+            for (int i = history.size() - 1; i >= 0; i--) {
+                JSONObject turn = history.get(i);
+                int length = turn.toString().getBytes(StandardCharsets.UTF_8).length;
+                if (length > remainingBytes) break;
+                context.add(0, turn);
+                remainingBytes -= length;
+            }
         }
         final String url = endpoint();
         executor.execute(() -> {

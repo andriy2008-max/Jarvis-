@@ -992,7 +992,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 aiChatClient.configure(urlInput.getText().toString(), codeInput.getText().toString());
                 aiBusy = false;
                 processing = false;
-                setStatus("ШІ підключено");
+                setStatus("Налаштування ШІ збережено");
                 appendDialogue("Джарвіс", "Адресу та код доступу збережено. Тепер можемо спілкуватися!");
                 dialog.dismiss();
             } catch (Exception error) {
