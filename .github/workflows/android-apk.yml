@@ -17,7 +17,7 @@ on:
         default: preview
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   apk:
@@ -136,6 +136,21 @@ jobs:
             android/dist/JARVIS-0.1.7-${{ inputs.variant || 'preview' }}.apk
             android/dist/JARVIS-0.1.7-${{ inputs.variant || 'preview' }}.sha256
           if-no-files-found: error
+      - name: Publish direct-download preview APK to GitHub Releases
+        if: github.ref == 'refs/heads/build/jarvis-017-preview'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create 'v0.1.7-preview' \
+            'android/dist/JARVIS-0.1.7-preview.apk' \
+            'android/dist/JARVIS-0.1.7-preview.sha256' \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title 'JARVIS 0.1.7 Preview — Android APK' \
+            --notes 'Особистий тестовий APK Джарвіса з локальними командами, вільною ШІ-розмовою після підключення Cloudflare та компактним інтерфейсом годинника. Debug підпис: для встановлення поверх іншої тестової збірки може знадобитися видалити стару версію (попередньо збережи нотатки).' \
+            --prerelease
       - name: Clean up signing material
         if: always()
         shell: bash
