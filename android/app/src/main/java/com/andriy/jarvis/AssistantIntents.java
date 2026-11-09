@@ -109,7 +109,8 @@ public final class AssistantIntents {
     /** Exact label aliases; no fuzzy substring matching on untrusted app/package names. */
     public static String appLabel(String spoken) {
         if (spoken == null) return "";
-        String s = spoken.trim().toLowerCase(new Locale("uk", "UA"));
+        String s = spoken.trim().toLowerCase(new Locale("uk", "UA"))
+            .replaceAll("[.!?,:;]+$", "").trim();
         switch (s) {
             case "ютуб": case "youtube": return "youtube";
             case "телеграм": case "telegram": return "telegram";
@@ -124,6 +125,8 @@ public final class AssistantIntents {
             case "камеру": case "камера": return "camera";
             case "календар": case "календарь": return "calendar";
             case "годинник": return "clock";
+            case "карти": case "карта": case "мапи": return "google maps";
+            case "калькулятор": return "calculator";
             default: return s;
         }
     }

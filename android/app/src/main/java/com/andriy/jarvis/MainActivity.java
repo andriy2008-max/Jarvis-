@@ -683,44 +683,84 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
     }
 
-    /** Only launcher-visible apps; no QUERY_ALL_PACKAGES permission or shell commands. */
+    /** Discover all launchable apps visible to this Android profile, not a fixed app allowlist. */
     private String launchInstalledApp(String spoken) {
-        String wanted = AssistantIntents.appLabel(spoken);
         Intent query = new Intent(Intent.ACTION_MAIN);
         query.addCategory(Intent.CATEGORY_LAUNCHER);
         try {
             PackageManager manager = getPackageManager();
             List<ResolveInfo> candidates = manager.queryIntentActivities(query, 0);
-            ResolveInfo exact = null;
-            int matches = 0;
-            String entered = spoken.trim().toLowerCase(new Locale("uk", "UA"));
+            List<AppNameMatcher.App> installed = new ArrayList<>();
             for (ResolveInfo candidate : candidates) {
-                if (candidate.activityInfo == null) continue;
-                CharSequence label = candidate.loadLabel(manager);
-                String actual = label == null ? "" : label.toString().trim().toLowerCase(new Locale("uk", "UA"));
-                boolean sameName = actual.equals(wanted) || actual.equals(entered) ||
-                    (wanted.equals("camera") && actual.equals("камера")) ||
-                    (wanted.equals("calendar") && actual.equals("календар")) ||
-                    (wanted.equals("clock") && actual.equals("годинник"));
-                if (sameName) {
-                    exact = candidate;
-                    matches++;
+                if (candidate.activityInfo == null || candidate.activityInfo.packageName == null) continue;
+                String pkg = candidate.activityInfo.packageName;
+                String activity = candidate.activityInfo.name;
+                if (activity == null) continue;
+                CharSequence visible = candidate.loadLabel(manager);
+                String label = visible == null ? "" : visible.toString().trim();
+                if (!label.isEmpty()) installed.add(new AppNameMatcher.App(pkg, activity, label));
+                if (candidate.activityInfo.applicationInfo != null) {
+                    CharSequence application = manager.getApplicationLabel(candidate.activityInfo.applicationInfo);
+                    String appLabel = application == null ? "" : application.toString().trim();
+                    if (!appLabel.isEmpty() && !appLabel.equalsIgnoreCase(label)) {
+                        installed.add(new AppNameMatcher.App(pkg, activity, appLabel));
+                    }
                 }
             }
-            if (matches > 1) return "Знайшов кілька застосунків з назвою «" + spoken
-                + "». Уточни назву в меню програм.";
-            if (exact == null) return null;
-            Intent launch = new Intent(Intent.ACTION_MAIN);
-            launch.addCategory(Intent.CATEGORY_LAUNCHER);
-            launch.setClassName(exact.activityInfo.packageName, exact.activityInfo.name);
-            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(launch);
-            return "Відкриваю застосунок «" + spoken + "».";
+            AppNameMatcher.Result result = AppNameMatcher.match(spoken, installed);
+            if (result.ambiguous()) {
+                String[] labels = new String[result.alternatives.size()];
+                for (int i = 0; i < labels.length; i++) {
+                    AppNameMatcher.App app = result.alternatives.get(i);
+                    boolean repeated = false;
+                    for (int k = 0; k < labels.length; k++) {
+                        if (i != k && app.label.equalsIgnoreCase(result.alternatives.get(k).label)) {
+                            repeated = true;
+                            break;
+                        }
+                    }
+                    labels[i] = repeated ? app.label + " (" + app.packageName + ")" : app.label;
+                }
+                new AlertDialog.Builder(this)
+                    .setTitle("Яку програму відкрити?")
+                    .setItems(labels, (dialog, which) -> {
+                        String launched = startMatchedApp(result.alternatives.get(which));
+                        appendDialogue("Джарвіс", launched);
+                        setStatus(launched);
+                    })
+                    .setNegativeButton("Скасувати", null)
+                    .show();
+                return "Знайшов кілька відповідних програм. Обери потрібну на екрані.";
+            }
+            if (!result.found()) return null;
+            return startMatchedApp(result.app);
         } catch (Exception exception) {
-            return "Не вдалося відкрити застосунок «" + spoken + "».";
+            return "Не вдалося отримати список програм. Перевір доступність меню застосунків Android.";
         }
     }
 
+    /** Start the exact launcher activity; never substitute a website for an installed app. */
+    private String startMatchedApp(AppNameMatcher.App app) {
+        try {
+            Intent launch = new Intent(Intent.ACTION_MAIN);
+            launch.addCategory(Intent.CATEGORY_LAUNCHER);
+            launch.setClassName(app.packageName, app.activityName);
+            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+            startActivity(launch);
+            return "Відкриваю «" + app.label + "».";
+        } catch (Exception ignored) {
+            try {
+                Intent fallback = getPackageManager().getLaunchIntentForPackage(app.packageName);
+                if (fallback != null) {
+                    startActivity(fallback);
+                    return "Відкриваю «" + app.label + "».";
+                }
+            } catch (Exception second) {
+                // No exported launch activity was available for this installed package.
+            }
+            return "Не вдалося відкрити «" + app.label + "». Перевір, чи програма доступна для запуску.";
+        }
+    }
     private String batteryReport() {
         Intent battery = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         if (battery == null) return "Не вдалося дізнатися рівень заряду.";
@@ -923,22 +963,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
         } else if (command.equals("відкрий блютуз") || command.equals("відкрий bluetooth")) {
             reply = launchIntent(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS), "налаштування Bluetooth");
         } else if (command.equals("відкрий карти") || command.equals("відкрий карту") || command.equals("покажи карту")) {
-            reply = openUrl("https://www.google.com/maps", "карти");
+            // Prefer the installed Maps app; use a browser only for an explicit map request.
+            String installed = launchInstalledApp("карти");
+            reply = installed != null ? installed : openUrl("https://www.google.com/maps", "карти");
         } else if (requestedApp != null) {
-            // Prefer an installed application over an unrelated website.
-            String installed = launchInstalledApp(requestedApp);
-            if (installed != null) {
-                reply = installed;
-            } else {
-                String app = AssistantIntents.appLabel(requestedApp);
-                String url = null;
-                if (app.equals("youtube")) url = "https://www.youtube.com/";
-                else if (app.equals("chatgpt")) url = "https://chatgpt.com/";
-                else if (app.equals("telegram")) url = "https://web.telegram.org/";
-                else if (app.equals("gmail")) url = "https://mail.google.com/";
-                else if (app.equals("google") || app.equals("гугл")) url = "https://www.google.com/";
-                reply = url != null ? openUrl(url, "сайт")
-                    : "Не знайшов встановлений застосунок «" + requestedApp + "». Перевір його назву.";
+            // Launcher names are discovered dynamically; no hardcoded list of apps.
+            reply = launchInstalledApp(requestedApp);
+            if (reply == null) {
+                reply = "Не знайшов програму «" + requestedApp
+                    + "» у меню встановлених застосунків. Назви її так, як під іконкою на телефоні.";
             }
         } else if (command.startsWith("привіт")) {
             reply = "Привіт! Я Джарвіс. Готовий допомагати.";

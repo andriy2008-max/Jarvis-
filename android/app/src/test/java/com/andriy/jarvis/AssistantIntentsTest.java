@@ -44,6 +44,8 @@ public final class AssistantIntentsTest {
         eq(AssistantIntents.requestedApp("запусти програму Spotify"), "Spotify");
         eq(AssistantIntents.requestedApp("відкрий застосунок TikTok"), "TikTok");
         eq(AssistantIntents.requestedApp("покажи нотатки"), null);
+        eq(AssistantIntents.requestedApp("відкрий Krita Studio"), "Krita Studio");
+        eq(AssistantIntents.requestedApp("відкрий програму Мій щоденник"), "Мій щоденник");
         eq(AssistantIntents.appLabel("телеграм"), "telegram");
         eq(AssistantIntents.appLabel("спотіфай"), "spotify");
         eq(AssistantIntents.appLabel("інстаграм"), "instagram");
