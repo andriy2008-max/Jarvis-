@@ -35,8 +35,8 @@ android {
     buildTypes {
         debug {
             // Retain Preview package identity; debug signatures vary between CI runs.
-            applicationIdSuffix '.preview'
-            manifestPlaceholders = [appLabel: 'Джарвіс Тест']
+            applicationIdSuffix '.preview17'
+            manifestPlaceholders = [appLabel: 'Джарвіс 0.1.7 Тест']
         }
         release {
             // First stable-signed release installs alongside legacy and preview APKs.

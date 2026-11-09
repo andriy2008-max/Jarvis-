@@ -2,6 +2,9 @@ name: Android APK (Jarvis)
 
 # Manual only. Building or publishing must be explicitly requested.
 on:
+  push:
+    branches:
+      - build/jarvis-017-install-fix
   workflow_dispatch:
     inputs:
       variant:
@@ -14,7 +17,7 @@ on:
         default: preview
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   apk:
@@ -58,6 +61,9 @@ jobs:
           for test in CommandPatternsTest AssistantIntentsTest AppNameMatcherTest DeviceCommandsTest AiChatPolicyTest WakeConversationTest; do
             java -cp android/build/parser-tests "com.andriy.jarvis.$test"
           done
+      - name: Verify AI proxy regression tests
+        shell: bash
+        run: node --test server/jarvis-ai-worker/test/worker.test.mjs
       - name: Restore stable signing keystore (stable only)
         if: inputs.variant == 'stable'
         shell: bash
@@ -83,7 +89,7 @@ jobs:
           JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ "${{ inputs.variant }}" = stable ]; then
+          if [ "${{ inputs.variant || 'preview' }}" = stable ]; then
             gradle -p android --no-daemon --stacktrace :app:assembleRelease
           else
             gradle -p android --no-daemon --stacktrace :app:assembleDebug
@@ -96,7 +102,7 @@ jobs:
           JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ "${{ inputs.variant }}" = stable ]; then
+          if [ "${{ inputs.variant || 'preview' }}" = stable ]; then
             gradle -p android --no-daemon --rerun-tasks --stacktrace :app:assembleRelease
           else
             gradle -p android --no-daemon --rerun-tasks --stacktrace :app:assembleDebug
@@ -105,13 +111,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          variant='${{ inputs.variant }}'
+          variant='${{ inputs.variant || 'preview' }}'
           if [ "$variant" = stable ]; then
             apk='android/app/build/outputs/apk/release/app-release.apk'
             package='com.andriy.jarvis.stable'
           else
             apk='android/app/build/outputs/apk/debug/app-debug.apk'
-            package='com.andriy.jarvis.preview'
+            package='com.andriy.jarvis.preview17'
           fi
           test -s "$apk"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
@@ -125,11 +131,27 @@ jobs:
       - name: Upload verified APK as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: JARVIS-0.1.7-${{ inputs.variant }}-APK
+          name: JARVIS-0.1.7-${{ inputs.variant || 'preview' }}-APK
           path: |
-            android/dist/JARVIS-0.1.7-${{ inputs.variant }}.apk
-            android/dist/JARVIS-0.1.7-${{ inputs.variant }}.sha256
+            android/dist/JARVIS-0.1.7-${{ inputs.variant || 'preview' }}.apk
+            android/dist/JARVIS-0.1.7-${{ inputs.variant || 'preview' }}.sha256
           if-no-files-found: error
+      - name: Publish direct-download preview APK to GitHub Releases
+        if: github.ref == 'refs/heads/build/jarvis-017-install-fix'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cp 'android/dist/JARVIS-0.1.7-preview.apk' 'android/dist/JARVIS-0.1.7-install-fix.apk'
+          gh release create 'v0.1.7-install-fix' \
+            'android/dist/JARVIS-0.1.7-install-fix.apk' \
+            'android/dist/JARVIS-0.1.7-preview.sha256' \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title 'JARVIS 0.1.7 Install Fix — Android APK' \
+            --notes 'Тестовий APK JARVIS 0.1.7 для встановлення поруч зі старою версією. Окремий пакет com.andriy.jarvis.preview17 усуває конфлікт debug-підпису. Нотатки не переносяться автоматично.' \
+            --prerelease
       - name: Clean up signing material
         if: always()
         shell: bash
