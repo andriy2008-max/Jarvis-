@@ -8,11 +8,11 @@ import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.RadialGradient;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.os.SystemClock;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
@@ -20,10 +20,14 @@ import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.util.TypedValue;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -41,7 +45,6 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private static final int REQUEST_MICROPHONE = 101;
     private static final int BG = Color.rgb(8, 14, 29);
     private static final int PANEL = Color.rgb(17, 27, 48);
-    private static final int PANEL_DARK = Color.rgb(12, 21, 40);
     private static final int BORDER = Color.rgb(38, 57, 87);
     private static final int CYAN = Color.rgb(80, 223, 251);
     private static final int CYAN_DARK = Color.rgb(49, 199, 237);
@@ -50,13 +53,16 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private static final int MUTED = Color.rgb(161, 179, 208);
     private static final int RED = Color.rgb(255, 124, 145);
 
-    private final Handler handler = new Handler(Looper.getMainLooper());
     private final ArrayList<String> notes = new ArrayList<>();
 
     private SpeechRecognizer recognizer;
     private TextToSpeech tts;
     private TextView status;
-    private TextView dialogue;
+    private ScrollView feedScroll;
+    private LinearLayout feedMessages;
+    private TextView notesTitle;
+    private LinearLayout notesList;
+    private CheckBox voiceToggle;
     private EditText input;
     private Button microphone;
     private PixelFace face;
@@ -64,13 +70,17 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private boolean processing = false;
     private boolean speaking = false;
     private boolean isCompact = false;
+    private boolean isWatchDevice = false;
+    private boolean voiceEnabled = true;
 
     @Override
     public void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
+        isWatchDevice = getPackageManager().hasSystemFeature(PackageManager.FEATURE_WATCH);
         isCompact = getResources().getConfiguration().smallestScreenWidthDp < 360;
+        voiceEnabled = getPreferences(MODE_PRIVATE).getBoolean("voiceEnabled", true);
         loadNotes();
         buildInterface();
 
@@ -83,6 +93,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     @Override public void onStart(String id) {
                         runOnUiThread(() -> {
+                            if (!voiceEnabled) return;
                             speaking = true;
                             face.setState("speaking");
                         });
@@ -103,11 +114,6 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private int dp(float value) {
         return Math.round(getResources().getDisplayMetrics().density * value);
-    }
-
-    private int getStatusBarInset() {
-        int id = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        return id > 0 ? getResources().getDimensionPixelSize(id) : dp(24);
     }
 
     private void styleText(TextView view, String value, float sizeSp, int color, int gravity, boolean bold) {
@@ -178,12 +184,22 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private void buildInterface() {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
-        scroll.setBackgroundColor(BG);
+        GradientDrawable nightSky = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+            new int[]{Color.rgb(18, 49, 92), BG, Color.rgb(6, 10, 19)});
+        scroll.setBackground(nightSky);
 
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setGravity(Gravity.CENTER_HORIZONTAL);
-        content.setPadding(dp(16), getStatusBarInset() + dp(12), dp(16), dp(28));
+        // Explicit edge-to-edge makes the inset calculation consistent on Android 15+.
+        getWindow().getDecorView().setSystemUiVisibility(
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+        content.setPadding(dp(16), dp(16), dp(16), dp(28));
+        scroll.setOnApplyWindowInsetsListener((v, insets) -> {
+            content.setPadding(dp(16), insets.getSystemWindowInsetTop() + dp(16),
+                dp(16), insets.getSystemWindowInsetBottom() + dp(28));
+            return insets;
+        });
         scroll.addView(content, new ScrollView.LayoutParams(ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
 
         LinearLayout topbar = new LinearLayout(this);
@@ -220,7 +236,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         TextView version = makeText("● V 0.1.2", isCompact ? 11 : 12, GREEN, Gravity.CENTER, false);
         version.setBackground(roundedFill(Color.TRANSPARENT, Color.rgb(43, 131, 108), 99));
         version.setPadding(dp(10), dp(6), dp(10), dp(6));
-        topbar.addView(version);
+        if (!isWatchDevice) topbar.addView(version);
         content.addView(topbar);
 
         LinearLayout hero = new LinearLayout(this);
@@ -231,16 +247,20 @@ public final class MainActivity extends Activity implements RecognitionListener 
         content.addView(hero, heroParams);
 
         face = new PixelFace();
-        int faceSize = dp(isCompact ? 192 : 210);
+        int faceSize = Math.min(dp(isWatchDevice ? 164 : isCompact ? 192 : 210),
+            getResources().getDisplayMetrics().widthPixels - dp(32));
         LinearLayout.LayoutParams faceParams = new LinearLayout.LayoutParams(faceSize, faceSize);
         hero.addView(face, faceParams);
 
-        TextView hello = makeText("Вітаю, я Джарвіс", isCompact ? 28 : 32, WHITE, Gravity.CENTER, true);
+        TextView hello = makeText("Вітаю, я Джарвіс", isWatchDevice ? 19 : isCompact ? 28 : 32, WHITE, Gravity.CENTER, true);
+        SpannableString greeting = new SpannableString("Вітаю, я Джарвіс");
+        greeting.setSpan(new ForegroundColorSpan(CYAN), 7, greeting.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        hello.setText(greeting);
         LinearLayout.LayoutParams helloParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         helloParams.topMargin = dp(10);
         hero.addView(hello, helloParams);
 
-        TextView subtitle = makeText("Голосовий помічник українською. Натисни мікрофон або введи команду нижче.", isCompact ? 13 : 14, MUTED, Gravity.CENTER, false);
+        TextView subtitle = makeText("Голосовий помічник українською. Натисни мікрофон або введи команду нижче.", isWatchDevice ? 11 : isCompact ? 13 : 14, MUTED, Gravity.CENTER, false);
         subtitle.setLineSpacing(0f, 1.2f);
         subtitle.setPadding(dp(10), dp(8), dp(10), 0);
         hero.addView(subtitle);
@@ -272,69 +292,152 @@ public final class MainActivity extends Activity implements RecognitionListener 
         micParams.width = LinearLayout.LayoutParams.MATCH_PARENT;
         hero.addView(microphone, micParams);
 
-        TextView hint = makeText("Кнопка на екрані або бокова кнопка STEM_1/2 на сумісному годиннику: натисни для запису, ще раз — для обробки.", isCompact ? 11 : 12, MUTED, Gravity.CENTER, false);
+        TextView hint = makeText(isWatchDevice
+            ? "Бокова кнопка: натисни, щоб почати запис, ще раз — щоб надіслати."
+            : "Скажи: «Джарвіс, котра година?» або «Джарвіс, запиши купити хліб».",
+            isCompact ? 11 : 12, MUTED, Gravity.CENTER, false);
         hint.setLineSpacing(0f, 1.22f);
         LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         hintParams.topMargin = dp(10);
         hero.addView(hint, hintParams);
 
+        // Conversation card: the same hierarchy as web (title, voice toggle, bubbles, command field).
         LinearLayout chatPanel = panel();
-        LinearLayout.LayoutParams chatPanelParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        chatPanelParams.topMargin = dp(18);
-        content.addView(chatPanel, chatPanelParams);
+        LinearLayout.LayoutParams chatParams = new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        chatParams.topMargin = dp(20);
+        content.addView(chatPanel, chatParams);
 
-        TextView panelTitle = makeText("Команди", isCompact ? 13 : 14, Color.rgb(185, 214, 240), Gravity.START, true);
-        panelTitle.setLetterSpacing(0.10f);
-        chatPanel.addView(panelTitle);
+        LinearLayout chatHeader = new LinearLayout(this);
+        chatHeader.setOrientation(LinearLayout.HORIZONTAL);
+        chatHeader.setGravity(Gravity.CENTER_VERTICAL);
+        chatPanel.addView(chatHeader, new LinearLayout.LayoutParams(-1, -2));
+        TextView dialogHeading = panelHeading("ДІАЛОГ");
+        chatHeader.addView(dialogHeading, new LinearLayout.LayoutParams(0, -2, 1f));
+        voiceToggle = new CheckBox(this);
+        voiceToggle.setText("Голосові відповіді");
+        voiceToggle.setTextColor(MUTED);
+        voiceToggle.setTextSize(TypedValue.COMPLEX_UNIT_SP, isCompact ? 10 : 12);
+        voiceToggle.setButtonTintList(ColorStateList.valueOf(CYAN));
+        voiceToggle.setChecked(voiceEnabled);
+        voiceToggle.setOnCheckedChangeListener((btn, checked) -> {
+            voiceEnabled = checked;
+            getPreferences(MODE_PRIVATE).edit().putBoolean("voiceEnabled", checked).apply();
+            if (!checked) {
+                speaking = false;
+                if (tts != null) tts.stop();
+                if (face != null) face.setState(listening ? "listening" : processing ? "thinking" : "idle");
+            }
+        });
+        chatHeader.addView(voiceToggle);
 
+        feedScroll = new ScrollView(this);
+        feedScroll.setFillViewport(true);
+        feedScroll.setVerticalScrollBarEnabled(false);
+        LinearLayout.LayoutParams feedParams = new LinearLayout.LayoutParams(-1, dp(isWatchDevice ? 154 : 220));
+        feedParams.topMargin = dp(13);
+        chatPanel.addView(feedScroll, feedParams);
+        feedMessages = new LinearLayout(this);
+        feedMessages.setOrientation(LinearLayout.VERTICAL);
+        feedMessages.setGravity(Gravity.TOP);
+        feedScroll.addView(feedMessages, new ScrollView.LayoutParams(-1, -2));
+
+        LinearLayout commandRow = new LinearLayout(this);
+        commandRow.setOrientation(LinearLayout.HORIZONTAL);
+        commandRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams commandParams = new LinearLayout.LayoutParams(-1, -2);
+        commandParams.topMargin = dp(14);
+        chatPanel.addView(commandRow, commandParams);
         input = new EditText(this);
-        input.setHint("Напиши команду...");
+        input.setHint("Напиши команду Джарвісу...");
         input.setSingleLine(true);
         input.setTextColor(WHITE);
         input.setHintTextColor(MUTED);
-        input.setTextSize(TypedValue.COMPLEX_UNIT_SP, isCompact ? 14 : 15);
+        input.setTextSize(TypedValue.COMPLEX_UNIT_SP, isCompact ? 13 : 14);
         input.setBackground(roundedFill(Color.rgb(9, 21, 40), Color.rgb(52, 73, 108), 12));
-        input.setPadding(dp(14), dp(12), dp(14), dp(12));
-        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        inputParams.topMargin = dp(14);
-        chatPanel.addView(input, inputParams);
-
-        LinearLayout sendRow = new LinearLayout(this);
-        sendRow.setOrientation(LinearLayout.HORIZONTAL);
-        sendRow.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams sendRowParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        sendRowParams.topMargin = dp(12);
-        chatPanel.addView(sendRow, sendRowParams);
-
-        Button send = primaryButton("Надіслати", () -> {
+        input.setPadding(dp(12), dp(12), dp(12), dp(12));
+        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(0, dp(50), 1f);
+        commandRow.addView(input, inputParams);
+        Button send = secondaryButton("Надіслати", () -> {
             String command = input.getText().toString();
             input.setText("");
             processCommand(command);
         });
-        LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(0, dp(50), 1f);
-        sendRow.addView(send, sendParams);
+        send.setTextSize(TypedValue.COMPLEX_UNIT_SP, isCompact ? 12 : 13);
+        LinearLayout.LayoutParams sendParams = new LinearLayout.LayoutParams(dp(isWatchDevice ? 76 : 94), dp(50));
+        sendParams.leftMargin = dp(8);
+        commandRow.addView(send, sendParams);
 
-        Button showNotes = secondaryButton("Мої нотатки", () -> processCommand("Покажи нотатки"));
-        LinearLayout.LayoutParams notesParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(48));
-        notesParams.topMargin = dp(12);
-        chatPanel.addView(showNotes, notesParams);
+        // Web quick-command chips, in responsive two-column rows.
+        LinearLayout examplesPanel = panel();
+        LinearLayout.LayoutParams exParams = new LinearLayout.LayoutParams(-1, -2);
+        exParams.topMargin = dp(18);
+        content.addView(examplesPanel, exParams);
+        examplesPanel.addView(panelHeading("СПРОБУЙ КОМАНДИ"));
+        String[] examples = {
+            "🕒 Котра година?", "▶ Відкрий YouTube",
+            "✦ Відкрий ChatGPT", "✎ Запиши купити молоко",
+            "☷ Покажи нотатки", "? Що ти вмієш?"
+        };
+        String[] commands = {
+            "Котра година", "Відкрий YouTube",
+            "Відкрий ChatGPT", "Запиши купити молоко",
+            "Покажи нотатки", "Що ти вмієш"
+        };
+        for (int i = 0; i < examples.length; i += 2) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
+            rowParams.topMargin = dp(8);
+            examplesPanel.addView(row, rowParams);
+            for (int j = i; j < Math.min(i + 2, examples.length); j++) {
+                final String command = commands[j];
+                Button quick = secondaryButton(examples[j], () -> processCommand(command));
+                quick.setTypeface(Typeface.DEFAULT);
+                quick.setTextSize(TypedValue.COMPLEX_UNIT_SP, isCompact ? 10 : 12);
+                quick.setMinHeight(dp(48));
+                quick.setPadding(dp(7), dp(7), dp(7), dp(7));
+                LinearLayout.LayoutParams quickParams = new LinearLayout.LayoutParams(0, -2, 1f);
+                if (j % 2 == 1) quickParams.leftMargin = dp(8);
+                row.addView(quick, quickParams);
+            }
+        }
 
-        dialogue = makeText("", isCompact ? 13 : 14, WHITE, Gravity.START, false);
-        dialogue.setLineSpacing(0f, 1.28f);
-        dialogue.setBackground(roundedFill(PANEL_DARK, BORDER, 12));
-        dialogue.setPadding(dp(14), dp(12), dp(14), dp(12));
-        LinearLayout.LayoutParams dialogueParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        dialogueParams.topMargin = dp(14);
-        chatPanel.addView(dialogue, dialogueParams);
+        // Live notes list: web-style note cards, count, deletion and explanatory text.
+        LinearLayout notesPanel = panel();
+        LinearLayout.LayoutParams notesParams = new LinearLayout.LayoutParams(-1, -2);
+        notesParams.topMargin = dp(18);
+        content.addView(notesPanel, notesParams);
+        notesTitle = panelHeading("МОЇ НОТАТКИ (0)");
+        notesPanel.addView(notesTitle);
+        notesList = new LinearLayout(this);
+        notesList.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams listParams = new LinearLayout.LayoutParams(-1, -2);
+        listParams.topMargin = dp(12);
+        notesPanel.addView(notesList, listParams);
+        TextView noteHint = makeText("Зберігаються тільки на цьому пристрої, без синхронізації.",
+            isCompact ? 11 : 12, MUTED, Gravity.START, false);
+        LinearLayout.LayoutParams noteHintParams = new LinearLayout.LayoutParams(-1, -2);
+        noteHintParams.topMargin = dp(12);
+        notesPanel.addView(noteHint, noteHintParams);
 
-        TextView footer = makeText("JARVIS 0.1.2 • Тестовий Android APK. Голосове розпізнавання залежить від сервісів Android.", isCompact ? 11 : 12, Color.rgb(127, 154, 184), Gravity.CENTER, false);
+        TextView footer = makeText("JARVIS 0.1.2 • Тестовий Android-застосунок. Без GPT і акаунтів; для голосу потрібен сервіс розпізнавання Android.",
+            isCompact ? 11 : 12, Color.rgb(127, 154, 184), Gravity.CENTER, false);
         footer.setLineSpacing(0f, 1.25f);
-        LinearLayout.LayoutParams footerParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        LinearLayout.LayoutParams footerParams = new LinearLayout.LayoutParams(-1, -2);
         footerParams.topMargin = dp(18);
         content.addView(footer, footerParams);
 
         setContentView(scroll);
-        appendDialogue("Джарвіс", "Готовий! Скажи «Котра година?» або «Запиши купити хліб».\n\nТакож можеш попросити: «Що ти вмієш?» або «Покажи нотатки». ");
+        renderNotes();
+        appendDialogue("Джарвіс", "Система запущена. Я готовий до перших команд. Спробуй запитати, що я вмію.");
+    }
+
+    private TextView panelHeading(String title) {
+        TextView view = makeText(title, isCompact ? 13 : 14,
+            Color.rgb(185, 214, 240), Gravity.START, true);
+        view.setLetterSpacing(0.10f);
+        return view;
     }
 
     private void setStatus(String message) {
@@ -342,11 +445,66 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private void appendDialogue(String who, String message) {
-        if (dialogue == null) return;
-        String previous = dialogue.getText().toString().trim();
-        String block = who + ": " + message.trim();
-        String next = previous.isEmpty() ? block : previous + "\n\n" + block;
-        dialogue.setText(next.length() > 4000 ? next.substring(next.length() - 4000) : next);
+        if (feedMessages == null) return;
+        boolean user = "Ти".equals(who);
+        LinearLayout bubble = new LinearLayout(this);
+        bubble.setOrientation(LinearLayout.VERTICAL);
+        bubble.setPadding(dp(12), dp(10), dp(12), dp(10));
+        bubble.setBackground(roundedFill(
+            user ? Color.rgb(17, 53, 74) : Color.rgb(23, 33, 57),
+            user ? Color.rgb(36, 97, 122) : BORDER, 12));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.bottomMargin = dp(10);
+        if (user) params.leftMargin = dp(28);
+        else params.rightMargin = dp(20);
+        feedMessages.addView(bubble, params);
+        TextView name = makeText(user ? "ТИ" : "ДЖАРВІС", 11,
+            user ? Color.rgb(164, 232, 210) : CYAN, Gravity.START, true);
+        name.setLetterSpacing(0.09f);
+        bubble.addView(name);
+        TextView body = makeText(message.trim(), isCompact ? 13 : 14, WHITE, Gravity.START, false);
+        body.setLineSpacing(0f, 1.18f);
+        LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(-1, -2);
+        bodyParams.topMargin = dp(6);
+        bubble.addView(body, bodyParams);
+        while (feedMessages.getChildCount() > 40) feedMessages.removeViewAt(0);
+        feedScroll.post(() -> feedScroll.fullScroll(View.FOCUS_DOWN));
+    }
+
+    private void renderNotes() {
+        if (notesList == null || notesTitle == null) return;
+        notesTitle.setText("МОЇ НОТАТКИ (" + notes.size() + ")");
+        notesList.removeAllViews();
+        if (notes.isEmpty()) {
+            TextView empty = makeText("Тут з'являться твої нотатки.", 13, MUTED, Gravity.START, false);
+            notesList.addView(empty);
+            return;
+        }
+        for (int i = 0; i < notes.size(); i++) {
+            final int idx = i;
+            LinearLayout noteRow = new LinearLayout(this);
+            noteRow.setOrientation(LinearLayout.HORIZONTAL);
+            noteRow.setGravity(Gravity.CENTER_VERTICAL);
+            noteRow.setPadding(dp(10), dp(7), dp(7), dp(7));
+            noteRow.setBackground(roundedFill(Color.rgb(13, 27, 48), BORDER, 10));
+            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
+            if (i > 0) rowParams.topMargin = dp(8);
+            notesList.addView(noteRow, rowParams);
+            TextView noteText = makeText(notes.get(i), isCompact ? 12 : 13, WHITE, Gravity.START, false);
+            noteRow.addView(noteText, new LinearLayout.LayoutParams(0, -2, 1f));
+            TextView delete = makeText("×", 24, RED, Gravity.CENTER, false);
+            delete.setContentDescription("Видалити нотатку: " + notes.get(i));
+            delete.setClickable(true);
+            delete.setFocusable(true);
+            delete.setOnClickListener(v -> {
+                if (idx < notes.size()) {
+                    notes.remove(idx);
+                    saveNotes();
+                    renderNotes();
+                }
+            });
+            noteRow.addView(delete, new LinearLayout.LayoutParams(dp(40), dp(40)));
+        }
     }
 
     private void toggleListening() {
@@ -477,6 +635,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             else {
                 notes.add(item);
                 saveNotes();
+                renderNotes();
                 reply = "Записав: " + item;
             }
         } else if (command.contains("покажи нотатки") || command.contains("мої нотатки") || command.contains("прочитай нотатки")) {
@@ -509,9 +668,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
         appendDialogue("Джарвіс", reply);
         setStatus("Відповідь готова");
-        if (tts != null) {
+        if (tts != null && voiceEnabled) {
             Bundle speechParams = new Bundle();
             tts.speak(reply, TextToSpeech.QUEUE_FLUSH, speechParams, "jarvis-" + SystemClock.uptimeMillis());
+        } else if (!listening && !processing) {
+            face.setState("idle");
         }
     }
 
@@ -584,11 +745,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(dp(3));
-            paint.setColor(Color.argb(210, 114, 235, 255));
+            paint.setColor("listening".equals(expression) ? GREEN : Color.argb(210, 114, 235, 255));
             canvas.drawCircle(cx, cy, orb, paint);
 
             paint.setStyle(Paint.Style.FILL);
-            float pixel = orb * 0.13f;
+            // Match the web SVG sprite: 16x16 grid with a roughly 90/148 face/orb ratio.
+            float pixel = orb * 0.076f;
             float ox = cx - 8 * pixel;
             float oy = cy - 8 * pixel;
             paint.setColor(Color.rgb(217, 254, 255));
