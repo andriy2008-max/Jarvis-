@@ -2,6 +2,15 @@ package com.andriy.jarvis;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Context;
+import android.content.IntentFilter;
+import android.media.AudioManager;
+import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.Settings;
+import java.net.URLEncoder;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
@@ -54,6 +63,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private static final int RED = Color.rgb(255, 124, 145);
 
     private final ArrayList<String> notes = new ArrayList<>();
+    private final Handler timerHandler = new Handler(Looper.getMainLooper());
+    private Runnable timerCallback;
+    private long timerDeadlineMs = 0L;
 
     private SpeechRecognizer recognizer;
     private TextToSpeech tts;
@@ -377,12 +389,16 @@ public final class MainActivity extends Activity implements RecognitionListener 
         String[] examples = {
             "🕒 Котра година?", "▶ Відкрий YouTube",
             "✦ Відкрий ChatGPT", "✎ Запиши купити молоко",
-            "☷ Покажи нотатки", "? Що ти вмієш?"
+            "☷ Покажи нотатки", "? Що ти вмієш?",
+            "🔋 Заряд батареї", "⏱ Таймер на 1 хвилину",
+            "⚙ Налаштування", "🗺 Відкрий карти"
         };
         String[] commands = {
             "Котра година", "Відкрий YouTube",
             "Відкрий ChatGPT", "Запиши купити молоко",
-            "Покажи нотатки", "Що ти вмієш"
+            "Покажи нотатки", "Що ти вмієш",
+            "Заряд батареї", "Таймер на 1 хвилину",
+            "Відкрий налаштування", "Відкрий карти"
         };
         for (int i = 0; i < examples.length; i += 2) {
             LinearLayout row = new LinearLayout(this);
@@ -614,23 +630,159 @@ public final class MainActivity extends Activity implements RecognitionListener 
         return super.onKeyDown(keyCode, event);
     }
 
+    private String launchIntent(Intent intent, String label) {
+        try {
+            startActivity(intent);
+            return "Відкриваю " + label + ".";
+        } catch (Exception exception) {
+            return "Не вдалося відкрити " + label + " на цьому пристрої.";
+        }
+    }
+
+    private String openUrl(String url, String label) {
+        return launchIntent(new Intent(Intent.ACTION_VIEW, Uri.parse(url)), label);
+    }
+
+    private String batteryReport() {
+        Intent battery = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        if (battery == null) return "Не вдалося дізнатися рівень заряду.";
+        int level = battery.getIntExtra("level", -1);
+        int scale = battery.getIntExtra("scale", -1);
+        if (level < 0 || scale <= 0) return "Не вдалося дізнатися рівень заряду.";
+        int percent = Math.round(level * 100f / scale);
+        int plugged = battery.getIntExtra("plugged", 0);
+        return "Заряд батареї: " + percent + " відсотків." +
+            (plugged != 0 ? " Пристрій заряджається." : "");
+    }
+
+    private String setMusicVolume(int direction) {
+        try {
+            AudioManager audio = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            if (audio == null || audio.isVolumeFixed()) return "Гучність на цьому пристрої не можна змінити.";
+            audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI);
+            int current = audio.getStreamVolume(AudioManager.STREAM_MUSIC);
+            int max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+            return "Медіагучність: " + (max > 0 ? Math.round(current * 100f / max) : 0) + " відсотків.";
+        } catch (SecurityException exception) {
+            return "Android не дозволив змінити гучність.";
+        }
+    }
+
+    private String timerLabel(long seconds) {
+        long hours = seconds / 3600L;
+        long minutes = (seconds % 3600L) / 60L;
+        long remainder = seconds % 60L;
+        if (hours > 0) return hours + " год " + minutes + " хв";
+        if (minutes > 0) return minutes + " хв " + remainder + " с";
+        return remainder + " с";
+    }
+
+    private void cancelTimerInternal() {
+        if (timerCallback != null) timerHandler.removeCallbacks(timerCallback);
+        timerCallback = null;
+        timerDeadlineMs = 0L;
+    }
+
+    private String startTimer(int seconds) {
+        if (seconds <= 0) return "Можна встановити таймер від 1 секунди до 3 годин.";
+        cancelTimerInternal();
+        timerDeadlineMs = SystemClock.elapsedRealtime() + seconds * 1000L;
+        timerCallback = () -> {
+            timerCallback = null;
+            timerDeadlineMs = 0L;
+            String finished = "Час вийшов! Таймер завершено.";
+            appendDialogue("Джарвіс", finished);
+            setStatus(finished);
+            if (voiceEnabled && tts != null) {
+                tts.speak(finished, TextToSpeech.QUEUE_FLUSH, null,
+                    "jarvis-timer-" + SystemClock.uptimeMillis());
+            }
+        };
+        timerHandler.postDelayed(timerCallback, seconds * 1000L);
+        return "Таймер на " + timerLabel(seconds) + " запущено. Він працює, поки застосунок активний.";
+    }
+
+    private String cancelTimer() {
+        if (timerCallback == null) return "Активного таймера немає.";
+        cancelTimerInternal();
+        return "Таймер скасовано.";
+    }
+
+    private String timerRemaining() {
+        if (timerCallback == null) return "Активного таймера немає.";
+        long remaining = Math.max(0L,
+            (timerDeadlineMs - SystemClock.elapsedRealtime() + 999L) / 1000L);
+        return "До завершення таймера: " + timerLabel(remaining) + ".";
+    }
+
+    private void confirmDeleteAllNotes() {
+        new AlertDialog.Builder(this)
+            .setTitle("Очистити всі нотатки?")
+            .setMessage("Цю дію не можна скасувати.")
+            .setNegativeButton("Ні", (dialog, which) -> {})
+            .setPositiveButton("Видалити", (dialog, which) -> {
+                notes.clear();
+                saveNotes();
+                renderNotes();
+                appendDialogue("Джарвіс", "Усі нотатки видалено.");
+            })
+            .show();
+    }
+
+    private void stopSpeaking() {
+        if (tts != null) tts.stop();
+        speaking = false;
+        if (face != null) face.setState(listening ? "listening" : "idle");
+    }
+
     private void processCommand(String raw) {
         if (raw == null || raw.trim().isEmpty()) return;
         appendDialogue("Ти", raw.trim());
+        String command = CommandPatterns.normalize(raw);
+        if (command.isEmpty()) return;
 
-        String command = raw.trim().toLowerCase(new Locale("uk", "UA"))
-            .replaceFirst("^(джарвіс|джарвис|jarvis)[,\\s:—-]*", "")
-            .trim();
-
+        Integer requestedTimer = CommandPatterns.timerSeconds(command);
+        Integer noteIndex = CommandPatterns.noteIndex(command);
+        String dialNumber = CommandPatterns.dialNumber(command);
+        String searchTerms = CommandPatterns.searchTerms(command);
+        boolean silentReply = false;
         String reply;
-        if (command.contains("котра година") || command.contains("яка година") || command.contains("скільки часу")) {
+
+        if (command.equals("стоп") || command.equals("замовкни") ||
+            command.equals("зупини відповідь") || command.equals("припини говорити")) {
+            stopSpeaking();
+            reply = "Озвучення зупинено.";
+            silentReply = true;
+        } else if (command.contains("котра година") || command.contains("яка година") || command.contains("скільки часу")) {
             reply = "Зараз " + DateFormat.getTimeInstance(DateFormat.SHORT, new Locale("uk", "UA")).format(new Date()) + ".";
         } else if (command.contains("яка сьогодні дата") || command.contains("який сьогодні день") || command.contains("сьогоднішня дата")) {
             reply = "Сьогодні " + DateFormat.getDateInstance(DateFormat.FULL, new Locale("uk", "UA")).format(new Date()) + ".";
+        } else if (command.contains("заряд батареї") || command.contains("скільки заряду") ||
+            command.contains("заряд телефону") || command.contains("заряд годинника")) {
+            reply = batteryReport();
+        } else if (command.equals("гучніше") || command.equals("зроби гучніше") || command.equals("додай гучність")) {
+            reply = setMusicVolume(AudioManager.ADJUST_RAISE);
+        } else if (command.equals("тихіше") || command.equals("зроби тихіше") || command.equals("зменш гучність")) {
+            reply = setMusicVolume(AudioManager.ADJUST_LOWER);
+        } else if (command.equals("вимкни голос") || command.equals("вимкни озвучення")) {
+            voiceToggle.setChecked(false);
+            reply = "Голосові відповіді вимкнено.";
+            silentReply = true;
+        } else if (command.equals("увімкни голос") || command.equals("увімкни озвучення")) {
+            voiceToggle.setChecked(true);
+            reply = "Голосові відповіді увімкнено.";
+        } else if (command.equals("скасуй таймер") || command.equals("зупини таймер") || command.equals("вимкни таймер")) {
+            reply = cancelTimer();
+        } else if (command.equals("скільки залишилося таймеру") || command.equals("скільки залишилось таймеру") ||
+            command.equals("скільки до кінця таймера") || command.equals("скільки залишилось на таймері")) {
+            reply = timerRemaining();
+        } else if (requestedTimer != null) {
+            reply = startTimer(requestedTimer);
+        } else if (command.contains("таймер") && (command.startsWith("постав") || command.startsWith("встанови") || command.startsWith("таймер"))) {
+            reply = "Скажи, наприклад: таймер на 5 хвилин або таймер на 30 секунд.";
         } else if (command.startsWith("запиши ") || command.startsWith("занотуй ") || command.startsWith("нотатка ")) {
             String item = raw.trim().replaceFirst("(?iu)^(джарвіс|джарвис|jarvis)[,\\s:—-]*", "")
-                .replaceFirst("(?iu)^(запиши|занотуй|нотатка)\\s+", "")
-                .trim();
+                .replaceFirst("(?iu)^(запиши|занотуй|нотатка)\\s+", "").trim();
             if (item.isEmpty()) reply = "Скажи, що записати.";
             else {
                 notes.add(item);
@@ -638,28 +790,63 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 renderNotes();
                 reply = "Записав: " + item;
             }
+        } else if (noteIndex != null) {
+            if (noteIndex < 1 || noteIndex > notes.size()) reply = "Нотатки з таким номером немає.";
+            else {
+                String removed = notes.remove(noteIndex - 1);
+                saveNotes();
+                renderNotes();
+                reply = "Видалив нотатку: " + removed;
+            }
+        } else if (command.equals("видали останню нотатку")) {
+            if (notes.isEmpty()) reply = "Нотаток немає.";
+            else {
+                String removed = notes.remove(notes.size() - 1);
+                saveNotes();
+                renderNotes();
+                reply = "Видалив останню нотатку: " + removed;
+            }
+        } else if (command.equals("очисти нотатки") || command.equals("видали всі нотатки")) {
+            if (notes.isEmpty()) reply = "Нотаток немає.";
+            else {
+                confirmDeleteAllNotes();
+                reply = "Підтверди видалення нотаток у вікні на екрані.";
+            }
         } else if (command.contains("покажи нотатки") || command.contains("мої нотатки") || command.contains("прочитай нотатки")) {
             reply = notes.isEmpty() ? "У тебе ще немає нотаток." : "Нотатки: " + String.join("; ", notes);
+        } else if (dialNumber != null) {
+            reply = launchIntent(new Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + dialNumber)), "набір номера");
+        } else if (command.startsWith("подзвони") || command.startsWith("зателефонуй") || command.startsWith("набери ")) {
+            reply = "Назви номер телефону, наприклад: набери 0501234567. Дзвінок потрібно підтвердити самостійно.";
+        } else if (searchTerms != null) {
+            try {
+                String encoded = URLEncoder.encode(searchTerms, "UTF-8");
+                reply = openUrl("https://www.google.com/search?q=" + encoded, "результати пошуку");
+            } catch (Exception ex) {
+                reply = "Не вдалося сформувати пошуковий запит.";
+            }
+        } else if (command.equals("відкрий налаштування") || command.equals("налаштування телефону")) {
+            reply = launchIntent(new Intent(Settings.ACTION_SETTINGS), "налаштування");
+        } else if (command.equals("відкрий вайфай") || command.equals("відкрий wi-fi") || command.equals("налаштування вайфаю")) {
+            reply = launchIntent(new Intent(Settings.ACTION_WIFI_SETTINGS), "налаштування Wi-Fi");
+        } else if (command.equals("відкрий блютуз") || command.equals("відкрий bluetooth")) {
+            reply = launchIntent(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS), "налаштування Bluetooth");
+        } else if (command.equals("відкрий карти") || command.equals("відкрий карту") || command.equals("покажи карту")) {
+            reply = openUrl("https://www.google.com/maps", "карти");
         } else if (command.startsWith("відкрий ")) {
             String url = null;
             if (command.contains("youtube") || command.contains("ютуб")) url = "https://www.youtube.com/";
             else if (command.contains("chatgpt") || command.contains("чат гпт") || command.contains("чатгпт")) url = "https://chatgpt.com/";
             else if (command.contains("google") || command.contains("гугл")) url = "https://www.google.com/";
             else if (command.contains("телеграм") || command.contains("telegram")) url = "https://web.telegram.org/";
-            if (url == null) {
-                reply = "Поки відкриваю YouTube, ChatGPT, Google та Telegram.";
-            } else {
-                reply = "Відкриваю сайт.";
-                try {
-                    startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)));
-                } catch (Exception e) {
-                    reply = "На цьому пристрої немає браузера для відкриття сайту.";
-                }
-            }
+            else if (command.contains("gmail") || command.contains("пошту")) url = "https://mail.google.com/";
+            reply = url == null
+                ? "Можу відкривати YouTube, ChatGPT, Google, Telegram, Gmail, карти й налаштування."
+                : openUrl(url, "сайт");
         } else if (command.startsWith("привіт")) {
             reply = "Привіт! Я Джарвіс. Готовий допомагати.";
-        } else if (command.contains("що ти вмієш") || command.equals("допомога")) {
-            reply = "Я можу назвати час і дату, зберегти і прочитати нотатки, відкрити сайти та відповідати голосом.";
+        } else if (command.contains("що ти вмієш") || command.equals("допомога") || command.equals("команди")) {
+            reply = "Я вмію: час і дату, заряд батареї, таймер, нотатки, гучність, пошук Google, карти, набір номера, налаштування та сайти. Спробуй: таймер на 5 хвилин.";
         } else if (command.contains("дякую")) {
             reply = "Завжди радий допомогти.";
         } else {
@@ -668,9 +855,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
         appendDialogue("Джарвіс", reply);
         setStatus("Відповідь готова");
-        if (tts != null && voiceEnabled) {
-            Bundle speechParams = new Bundle();
-            tts.speak(reply, TextToSpeech.QUEUE_FLUSH, speechParams, "jarvis-" + SystemClock.uptimeMillis());
+        if (!silentReply && tts != null && voiceEnabled) {
+            tts.speak(reply, TextToSpeech.QUEUE_FLUSH, new Bundle(),
+                "jarvis-" + SystemClock.uptimeMillis());
         } else if (!listening && !processing) {
             face.setState("idle");
         }
@@ -701,6 +888,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     protected void onDestroy() {
+        cancelTimerInternal();
         if (recognizer != null) recognizer.destroy();
         if (tts != null) {
             tts.stop();

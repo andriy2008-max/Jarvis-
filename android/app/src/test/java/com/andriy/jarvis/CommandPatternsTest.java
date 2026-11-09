@@ -1,0 +1,33 @@
+package com.andriy.jarvis;
+
+public final class CommandPatternsTest {
+    private static int assertions = 0;
+    private static void eq(Object actual, Object expected) {
+        if (actual == null ? expected != null : !actual.equals(expected)) {
+            throw new AssertionError("Expected " + expected + " but got " + actual);
+        }
+        assertions++;
+    }
+    public static void main(String[] args) {
+        eq(CommandPatterns.normalize("Джарвіс, Таймер на 5 хвилин!"), "таймер на 5 хвилин");
+        eq(CommandPatterns.normalize("Jarvis: ЗНАЙДИ КОТА."), "знайди кота");
+        eq(CommandPatterns.timerSeconds("постав таймер на 5 хвилин"), 300);
+        eq(CommandPatterns.timerSeconds("таймер 30 секунд"), 30);
+        eq(CommandPatterns.timerSeconds("таймер на 1 годину"), 3600);
+        eq(CommandPatterns.timerSeconds("таймер на 3 години"), 10800);
+        eq(CommandPatterns.timerSeconds("таймер 4 години"), -1);
+        eq(CommandPatterns.timerSeconds("таймер на 0 секунд"), -1);
+        eq(CommandPatterns.timerSeconds("запиши купити молоко"), null);
+        eq(CommandPatterns.searchTerms("знайди рецепти борщу"), "рецепти борщу");
+        eq(CommandPatterns.searchTerms("пошукай в інтернеті прогноз погоди"), "прогноз погоди");
+        eq(CommandPatterns.searchTerms("привіт"), null);
+        eq(CommandPatterns.dialNumber("подзвони +380 (67) 123-45-67"), "+380671234567");
+        eq(CommandPatterns.dialNumber("набери номер 050 123 45 67"), "0501234567");
+        eq(CommandPatterns.dialNumber("подзвони 123"), null);
+        eq(CommandPatterns.dialNumber("подзвони +380671234567;rm"), null);
+        eq(CommandPatterns.noteIndex("видали нотатку 2"), 2);
+        eq(CommandPatterns.noteIndex("видали нотатку 0"), 0);
+        eq(CommandPatterns.noteIndex("видали всі нотатки"), null);
+        System.out.println("PASS " + assertions + " parser assertions");
+    }
+}
