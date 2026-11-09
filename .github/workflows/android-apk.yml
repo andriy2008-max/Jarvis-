@@ -1,8 +1,12 @@
 name: Android APK (Jarvis)
 
-# APK builds must be started manually from GitHub Actions, not on push or PR.
+# One-time, user-authorized v0.1.3 build. Remove the push trigger after publishing.
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'android/app/build.gradle'
 
 permissions:
   contents: write
@@ -27,12 +31,32 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
-      - name: Build debug APK
-        run: gradle -p android --no-daemon :app:assembleDebug
+      - name: Verify command parsers (plain Java)
+        run: |
+          mkdir -p android/build/parser-tests
+          javac -encoding UTF-8 -d android/build/parser-tests \
+            android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java \
+            android/app/src/main/java/com/andriy/jarvis/AssistantIntents.java \
+            android/app/src/main/java/com/andriy/jarvis/AppNameMatcher.java \
+            android/app/src/test/java/com/andriy/jarvis/CommandPatternsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/AssistantIntentsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/AppNameMatcherTest.java
+          for test in CommandPatternsTest AssistantIntentsTest AppNameMatcherTest; do
+            java -cp android/build/parser-tests "com.andriy.jarvis.$test"
+          done
+      - name: Build debug APK — first verification
+        run: gradle -p android --no-daemon --stacktrace :app:assembleDebug
+      - name: Rebuild APK — independent verification
+        run: gradle -p android --no-daemon --rerun-tasks --stacktrace :app:assembleDebug
+      - name: Verify APK artifact and checksum
+        run: |
+          test -s android/app/build/outputs/apk/debug/app-debug.apk
+          ls -lh android/app/build/outputs/apk/debug/app-debug.apk
+          sha256sum android/app/build/outputs/apk/debug/app-debug.apk
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: JARVIS-0.1.2-debug-APK
+          name: JARVIS-0.1.3-debug-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Publish direct APK download on main
@@ -40,8 +64,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create v0.1.2 \
-            'android/app/build/outputs/apk/debug/app-debug.apk#JARVIS-0.1.2-debug.apk' \
+          gh release create v0.1.3 \
+            'android/app/build/outputs/apk/debug/app-debug.apk#JARVIS-0.1.3-debug.apk' \
             --target "$GITHUB_SHA" \
-            --title 'JARVIS 0.1.2 — Android APK' \
-            --notes 'Тестовий APK для Android. Голосові команди, 8-бітне обличчя, нотатки, STEM_1/2/3 на сумісних Wear OS годинниках. Debug-підпис: для майбутніх оновлень потрібен постійний release keystore.'
+            --title 'JARVIS 0.1.3 — Android APK' \
+            --notes 'Тестовий APK для Android. Оновлений дизайн, голосові команди, нагадування, будильники, універсальний запуск встановлених застосунків, 8-бітне обличчя, нотатки та кнопки STEM на сумісних Wear OS годинниках. Debug-підпис: для майбутніх оновлень потрібен постійний release keystore.'
