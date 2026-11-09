@@ -260,6 +260,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private void buildInterface() {
+        if (isWatchDevice) {
+            buildWatchInterface();
+            return;
+        }
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
         GradientDrawable nightSky = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
@@ -369,6 +373,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
         micParams.topMargin = dp(18);
         micParams.width = LinearLayout.LayoutParams.MATCH_PARENT;
         hero.addView(microphone, micParams);
+
+        wakeToggle = makeWakeToggle();
+        LinearLayout.LayoutParams wakeParams = new LinearLayout.LayoutParams(-1, -2);
+        wakeParams.topMargin = dp(8);
+        hero.addView(wakeToggle, wakeParams);
 
         TextView hint = makeText(isWatchDevice
             ? "Бокова кнопка: натисни, щоб почати запис, ще раз — щоб надіслати."
@@ -534,7 +543,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         noteHintParams.topMargin = dp(12);
         notesPanel.addView(noteHint, noteHintParams);
 
-        TextView footer = makeText("JARVIS 0.1.7 • Тестовий Android-застосунок. Без GPT і акаунтів; для голосу потрібен сервіс розпізнавання Android.",
+        TextView footer = makeText("JARVIS 0.1.7 • Вільна розмова із ШІ після підключення сервера. Активація «Джарвіс» доступна лише у відкритій програмі за підтримки локального розпізнавання Android.",
             isCompact ? 11 : 12, Color.rgb(127, 154, 184), Gravity.CENTER, false);
         footer.setLineSpacing(0f, 1.25f);
         LinearLayout.LayoutParams footerParams = new LinearLayout.LayoutParams(-1, -2);
@@ -546,6 +555,119 @@ public final class MainActivity extends Activity implements RecognitionListener 
         appendDialogue("Джарвіс", "Система запущена. Я готовий до перших команд. Спробуй запитати, що я вмію.");
     }
 
+    /** A compact Wear OS view. All commands and AI processing are shared with the phone. */
+    private void buildWatchInterface() {
+        ScrollView root = new ScrollView(this);
+        root.setFillViewport(true);
+        root.setBackgroundColor(BG);
+        LinearLayout body = new LinearLayout(this);
+        body.setPadding(dp(14), dp(10), dp(14), dp(18));
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setGravity(Gravity.CENTER_HORIZONTAL);
+        root.addView(body, new ScrollView.LayoutParams(-1, -2));
+
+        TextView heading = makeText("J.A.R.V.I.S.", 13, CYAN, Gravity.CENTER, true);
+        heading.setLetterSpacing(0.14f);
+        body.addView(heading, new LinearLayout.LayoutParams(-1, -2));
+
+        face = new PixelFace();
+        int diameter = Math.min(dp(132), Math.max(dp(104),
+            getResources().getDisplayMetrics().widthPixels - dp(38)));
+        LinearLayout.LayoutParams faceParams = new LinearLayout.LayoutParams(diameter, diameter);
+        faceParams.topMargin = dp(3);
+        body.addView(face, faceParams);
+
+        status = makeText("Скажи «Джарвіс»", 12, WHITE, Gravity.CENTER, false);
+        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(-1, -2);
+        statusParams.topMargin = dp(3);
+        body.addView(status, statusParams);
+
+        microphone = primaryButton("🎙 Говорити", this::toggleListening);
+        microphone.setMinHeight(dp(45));
+        LinearLayout.LayoutParams micParams = new LinearLayout.LayoutParams(-1, dp(48));
+        micParams.topMargin = dp(7);
+        body.addView(microphone, micParams);
+
+        wakeToggle = makeWakeToggle();
+        wakeToggle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+        body.addView(wakeToggle, new LinearLayout.LayoutParams(-1, -2));
+
+        LinearLayout controls = new LinearLayout(this);
+        controls.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams controlsParams = new LinearLayout.LayoutParams(-1, -2);
+        controlsParams.topMargin = dp(5);
+        body.addView(controls, controlsParams);
+        Button textButton = secondaryButton("⌨️", this::showWatchTextInput);
+        textButton.setContentDescription("Ввести текстову команду");
+        controls.addView(textButton, new LinearLayout.LayoutParams(0, dp(42), 1f));
+        Button menuButton = secondaryButton("⚙️", this::showWatchActions);
+        menuButton.setContentDescription("Налаштування і команди");
+        LinearLayout.LayoutParams menuParams = new LinearLayout.LayoutParams(0, dp(42), 1f);
+        menuParams.leftMargin = dp(6);
+        controls.addView(menuButton, menuParams);
+
+        voiceToggle = new CheckBox(this);
+        voiceToggle.setText("Голосові відповіді");
+        voiceToggle.setTextColor(MUTED);
+        voiceToggle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+        voiceToggle.setChecked(voiceEnabled);
+        voiceToggle.setOnCheckedChangeListener((button, selected) -> {
+            voiceEnabled = selected;
+            getPreferences(MODE_PRIVATE).edit().putBoolean("voiceEnabled", selected).apply();
+            if (!selected && tts != null) tts.stop();
+        });
+        body.addView(voiceToggle, new LinearLayout.LayoutParams(-1, -2));
+
+        feedScroll = new ScrollView(this);
+        feedScroll.setFillViewport(true);
+        LinearLayout.LayoutParams feedParams = new LinearLayout.LayoutParams(-1, dp(124));
+        feedParams.topMargin = dp(5);
+        body.addView(feedScroll, feedParams);
+        feedMessages = new LinearLayout(this);
+        feedMessages.setOrientation(LinearLayout.VERTICAL);
+        feedScroll.addView(feedMessages, new ScrollView.LayoutParams(-1, -2));
+
+        setContentView(root);
+        appendDialogue("Джарвіс", "Готовий. Натисни кнопку або скажи моє ім'я.");
+    }
+
+    private void showWatchTextInput() {
+        EditText editor = new EditText(this);
+        editor.setSingleLine(false);
+        editor.setMinLines(2);
+        editor.setHint("Команда або запитання");
+        new AlertDialog.Builder(this)
+            .setTitle("Написати Джарвісу")
+            .setView(editor)
+            .setNegativeButton("Скасувати", null)
+            .setPositiveButton("Надіслати", (dialog, which) -> processCommand(editor.getText().toString()))
+            .show();
+    }
+
+    private void showWatchActions() {
+        final String[] actions = {
+            "Підключення до ШІ", "Новий діалог", "Показати нотатки",
+            "Що ти вмієш?", "Введення текстом", "Голосова активація"
+        };
+        new AlertDialog.Builder(this).setTitle("Джарвіс — дії")
+            .setItems(actions, (dialog, which) -> {
+                switch (which) {
+                    case 0: showAiSettings(); break;
+                    case 1: clearAiConversation(); break;
+                    case 2: processCommand("покажи нотатки"); break;
+                    case 3: processCommand("що ти вмієш"); break;
+                    case 4: showWatchTextInput(); break;
+                    case 5:
+                        if (supportsOnDeviceRecognizer && wakeToggle != null) {
+                            wakeToggle.setChecked(!wakeToggle.isChecked());
+                        } else {
+                            setStatus("Для активації голосом потрібне локальне розпізнавання Android.");
+                        }
+                        break;
+                    default: break;
+                }
+            }).show();
+    }
     private TextView panelHeading(String title) {
         TextView view = makeText(title, isCompact ? 13 : 14,
             Color.rgb(185, 214, 240), Gravity.START, true);
