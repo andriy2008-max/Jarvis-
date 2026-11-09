@@ -24,6 +24,7 @@ import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.os.Build;
 import android.os.SystemClock;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
@@ -74,6 +75,17 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private SpeechRecognizer recognizer;
     private TextToSpeech tts;
     private DeviceActions deviceActions;
+    private final WakeConversation wakeConversation = new WakeConversation();
+    private final Handler wakeHandler = new Handler(Looper.getMainLooper());
+    private Runnable wakeRestart;
+    private CheckBox wakeToggle;
+    private boolean autoWakeEnabled;
+    private boolean supportsOnDeviceRecognizer;
+    private boolean foreground;
+    private boolean manualCapture;
+    private boolean autoWakeListening;
+    private boolean autoWakePausedForErrors;
+    private int autoWakeErrors;
     private AiChatClient aiChatClient;
     private boolean aiBusy = false;
     private TextView status;
@@ -100,6 +112,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
         isWatchDevice = getPackageManager().hasSystemFeature(PackageManager.FEATURE_WATCH);
         isCompact = getResources().getConfiguration().smallestScreenWidthDp < 360;
         voiceEnabled = getPreferences(MODE_PRIVATE).getBoolean("voiceEnabled", true);
+        autoWakeEnabled = getPreferences(MODE_PRIVATE).getBoolean("autoWakeEnabled", true);
+        supportsOnDeviceRecognizer = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(this);
         loadNotes();
         aiChatClient = new AiChatClient(this);
         buildInterface();
@@ -116,6 +131,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         runOnUiThread(() -> {
                             if (!voiceEnabled) return;
                             speaking = true;
+                            // Do not let the assistant's own speech trigger a new wake command.
+                            if (autoWakeListening && recognizer != null) {
+                                recognizer.cancel();
+                                listening = false;
+                                autoWakeListening = false;
+                            }
                             face.setState("speaking");
                         });
                     }
@@ -125,12 +146,48 @@ public final class MainActivity extends Activity implements RecognitionListener 
             }
         });
 
-        if (SpeechRecognizer.isRecognitionAvailable(this)) {
-            recognizer = SpeechRecognizer.createSpeechRecognizer(this);
-            recognizer.setRecognitionListener(this);
-        } else {
-            setStatus("Розпізнавання мовлення не встановлено. Текстові команди працюють.");
+        try {
+            if (supportsOnDeviceRecognizer) {
+                recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this);
+            } else if (SpeechRecognizer.isRecognitionAvailable(this)) {
+                recognizer = SpeechRecognizer.createSpeechRecognizer(this);
+            }
+            if (recognizer != null) recognizer.setRecognitionListener(this);
+            else setStatus("Розпізнавання мовлення не встановлено. Текстові команди працюють.");
+        } catch (Exception error) {
+            supportsOnDeviceRecognizer = false;
+            if (SpeechRecognizer.isRecognitionAvailable(this)) {
+                recognizer = SpeechRecognizer.createSpeechRecognizer(this);
+                recognizer.setRecognitionListener(this);
+            } else setStatus("Розпізнавання мовлення недоступне.");
         }
+        if (wakeToggle != null) {
+            wakeToggle.setEnabled(supportsOnDeviceRecognizer);
+            wakeToggle.setChecked(autoWakeEnabled && supportsOnDeviceRecognizer);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        foreground = true;
+        autoWakePausedForErrors = false;
+        autoWakeErrors = 0;
+        scheduleAutoWake(650L);
+    }
+
+    @Override
+    protected void onPause() {
+        foreground = false;
+        cancelAutoWakeSchedule();
+        if (recognizer != null && listening) recognizer.cancel();
+        listening = false;
+        processing = false;
+        autoWakeListening = false;
+        manualCapture = false;
+        if (microphone != null)
+            microphone.setText(isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Джарвісом");
+        super.onPause();
     }
 
     private int dp(float value) {
@@ -254,7 +311,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
         topbar.addView(brand);
 
-        TextView version = makeText("● V 0.1.6", isCompact ? 11 : 12, GREEN, Gravity.CENTER, false);
+        TextView version = makeText("● V 0.1.7", isCompact ? 11 : 12, GREEN, Gravity.CENTER, false);
         version.setBackground(roundedFill(Color.TRANSPARENT, Color.rgb(43, 131, 108), 99));
         version.setPadding(dp(10), dp(6), dp(10), dp(6));
         if (!isWatchDevice) topbar.addView(version);
@@ -477,7 +534,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         noteHintParams.topMargin = dp(12);
         notesPanel.addView(noteHint, noteHintParams);
 
-        TextView footer = makeText("JARVIS 0.1.6 • Тестовий Android-застосунок. Без GPT і акаунтів; для голосу потрібен сервіс розпізнавання Android.",
+        TextView footer = makeText("JARVIS 0.1.7 • Тестовий Android-застосунок. Без GPT і акаунтів; для голосу потрібен сервіс розпізнавання Android.",
             isCompact ? 11 : 12, Color.rgb(127, 154, 184), Gravity.CENTER, false);
         footer.setLineSpacing(0f, 1.25f);
         LinearLayout.LayoutParams footerParams = new LinearLayout.LayoutParams(-1, -2);
@@ -563,9 +620,78 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
     }
 
+
+    private void cancelAutoWakeSchedule() {
+        if (wakeRestart != null) {
+            wakeHandler.removeCallbacks(wakeRestart);
+            wakeRestart = null;
+        }
+    }
+
+    private void scheduleAutoWake(long delayMs) {
+        cancelAutoWakeSchedule();
+        wakeRestart = () -> {
+            wakeRestart = null;
+            if (canAutoWake()) beginListening();
+        };
+        wakeHandler.postDelayed(wakeRestart, delayMs);
+    }
+
+    private boolean canAutoWake() {
+        return foreground && autoWakeEnabled && supportsOnDeviceRecognizer &&
+            !autoWakePausedForErrors && recognizer != null &&
+            checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED &&
+            !manualCapture && !listening && !processing && !aiBusy && !speaking &&
+            (tts == null || !tts.isSpeaking());
+    }
+
+    private void resumeAfterReply() {
+        wakeConversation.assistantFinished(SystemClock.elapsedRealtime());
+        scheduleAutoWake(450L);
+    }
+
+    private CheckBox makeWakeToggle() {
+        CheckBox toggle = new CheckBox(this);
+        toggle.setText("Активація «Джарвіс»");
+        toggle.setTextColor(MUTED);
+        toggle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        toggle.setButtonTintList(ColorStateList.valueOf(CYAN));
+        toggle.setChecked(autoWakeEnabled && supportsOnDeviceRecognizer);
+        toggle.setEnabled(supportsOnDeviceRecognizer);
+        toggle.setOnCheckedChangeListener((button, enabled) -> {
+            autoWakeEnabled = enabled;
+            getPreferences(MODE_PRIVATE).edit().putBoolean("autoWakeEnabled", enabled).apply();
+            if (!enabled) {
+                cancelAutoWakeSchedule();
+                wakeConversation.end();
+                if (autoWakeListening && recognizer != null) {
+                    recognizer.cancel();
+                    autoWakeListening = false;
+                    listening = false;
+                }
+                setStatus("Режим активації голосом вимкнено");
+            } else {
+                autoWakePausedForErrors = false;
+                autoWakeErrors = 0;
+                setStatus("Очікую «Джарвіс» у відкритому застосунку");
+                scheduleAutoWake(350L);
+            }
+        });
+        return toggle;
+    }
+
     private void toggleListening() {
-        if (processing) {
+        if (processing && !listening) {
             setStatus("Обробляю команду...");
+            return;
+        }
+        if (listening && autoWakeListening && !manualCapture) {
+            // Press one captures the on-device listener, press two submits.
+            manualCapture = true;
+            autoWakeListening = false;
+            microphone.setText("■ Завершити та надіслати");
+            face.setState("listening");
+            setStatus("Говори. Натисни повторно для надсилання.");
             return;
         }
         if (listening) {
@@ -581,6 +707,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             setStatus("Сервіс розпізнавання відсутній. Спробуй текстову команду.");
             return;
         }
+        manualCapture = true;
+        cancelAutoWakeSchedule();
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQUEST_MICROPHONE);
             return;
@@ -590,28 +718,37 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void beginListening() {
         if (recognizer == null || processing || listening) return;
-        if (tts != null) tts.stop();
+        if (tts != null && tts.isSpeaking()) tts.stop();
         speaking = false;
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "uk-UA");
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "uk-UA");
         intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false);
+        intent.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, supportsOnDeviceRecognizer);
+        autoWakeListening = !manualCapture;
         listening = true;
-        microphone.setText("■ Зупинити прослуховування");
-        face.setState("listening");
-        setStatus("Слухаю тебе...");
+        microphone.setText(manualCapture ? "■ Завершити та надіслати" :
+            isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Джарвісом");
+        face.setState(manualCapture || wakeConversation.isActive(SystemClock.elapsedRealtime())
+            ? "listening" : "idle");
+        setStatus(manualCapture ? "Слухаю команду..." :
+            wakeConversation.isActive(SystemClock.elapsedRealtime()) ? "Продовжуй розмову..." :
+                "Очікую «Джарвіс»");
         try {
             recognizer.startListening(intent);
-        } catch (Exception e) {
+        } catch (Exception error) {
             resetListening("Не вдалося запустити запис. Спробуй ще раз.");
+            manualCapture = false;
+            autoWakeListening = false;
+            autoWakePausedForErrors = true;
         }
     }
 
     private void resetListening(String message) {
         listening = false;
         processing = false;
-        microphone.setText("🎙️ Говорити з Джарвісом");
+        microphone.setText(isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Джарвісом");
         face.setState(speaking ? "speaking" : "idle");
         setStatus(message);
     }
@@ -620,8 +757,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
     public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(code, permissions, results);
         if (code == REQUEST_MICROPHONE) {
-            if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) beginListening();
-            else setStatus("Дозволь доступ до мікрофона в налаштуваннях застосунку.");
+            if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
+                beginListening();
+            } else {
+                manualCapture = false;
+                setStatus("Дозволь доступ до мікрофона в налаштуваннях застосунку.");
+            }
         } else if (code == DeviceActions.REQUEST_CAMERA_FOR_TORCH && deviceActions != null) {
             String feedback = deviceActions.onCameraPermissionResult(
                 results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED);
@@ -636,8 +777,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
     }
 
-    @Override public void onReadyForSpeech(Bundle params) { setStatus("Слухаю — говори..."); }
-    @Override public void onBeginningOfSpeech() { setStatus("Розпізнаю голос..."); }
+    @Override public void onReadyForSpeech(Bundle params) {
+        if (manualCapture) setStatus("Слухаю — говори...");
+        else setStatus(wakeConversation.isActive(SystemClock.elapsedRealtime())
+            ? "Продовжуй розмову..." : "Очікую «Джарвіс»");
+    }
+    @Override public void onBeginningOfSpeech() {
+        setStatus(manualCapture ? "Розпізнаю голос..." : "Слухаю фразу...");
+    }
     @Override public void onRmsChanged(float rmsdB) { }
     @Override public void onBufferReceived(byte[] buffer) { }
 
@@ -653,18 +800,63 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     public void onError(int error) {
-        String message = error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
-            ? "Не вдалося розпізнати. Спробуй ще раз."
-            : "Помилка голосу (" + error + "). Перевір розпізнавання в Android.";
-        resetListening(message);
+        boolean wasManual = manualCapture;
+        manualCapture = false;
+        autoWakeListening = false;
+        if (!foreground) {
+            resetListening("Режим очікування");
+            return;
+        }
+        if (wasManual) {
+            String message = error == SpeechRecognizer.ERROR_NO_MATCH ||
+                error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
+                ? "Не вдалося розпізнати. Спробуй ще раз."
+                : "Помилка голосу (" + error + "). Перевір розпізнавання в Android.";
+            resetListening(message);
+        } else {
+            resetListening("Очікую «Джарвіс»");
+            if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                autoWakeErrors = 0;
+            } else {
+                autoWakeErrors++;
+                if (autoWakeErrors >= 4) {
+                    autoWakePausedForErrors = true;
+                    setStatus("Голосову активацію призупинено. Використай кнопку мікрофона.");
+                }
+            }
+        }
+        if (!autoWakePausedForErrors) scheduleAutoWake(wasManual ? 400L :
+            (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) ? 650L : 1800L);
     }
 
     @Override
     public void onResults(Bundle results) {
         ArrayList<String> matches = results == null ? null : results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+        boolean wasManual = manualCapture;
+        manualCapture = false;
+        autoWakeListening = false;
         resetListening("Команду розпізнано");
-        if (matches != null && !matches.isEmpty()) processCommand(matches.get(0));
-        else setStatus("Порожня команда. Спробуй ще раз.");
+        if (!foreground) return;
+        autoWakeErrors = 0;
+        if (matches == null || matches.isEmpty()) {
+            setStatus("Не вдалося розпізнати фразу.");
+            scheduleAutoWake(400L);
+            return;
+        }
+        WakeConversation.Decision decision = wakeConversation.accept(
+            matches.get(0), SystemClock.elapsedRealtime(), wasManual);
+        if (decision.kind == WakeConversation.Kind.ARMED) {
+            setStatus("Активовано — говори, Джарвіс слухає мовчки.");
+            face.setState("listening");
+        } else if (decision.kind == WakeConversation.Kind.FINISHED) {
+            setStatus("Розмову завершено. Очікую «Джарвіс».");
+            face.setState("idle");
+        } else if (decision.kind == WakeConversation.Kind.COMMAND) {
+            processCommand(decision.command);
+        } else {
+            setStatus("Очікую «Джарвіс».");
+        }
+        scheduleAutoWake(450L);
     }
 
     @Override public void onPartialResults(Bundle results) { }
@@ -928,6 +1120,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     "jarvis-ai-" + SystemClock.uptimeMillis());
             } else {
                 face.setState("idle");
+                resumeAfterReply();
             }
         });
     }
@@ -1148,6 +1341,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 "jarvis-" + SystemClock.uptimeMillis());
         } else if (!listening && !processing) {
             face.setState("idle");
+            resumeAfterReply();
         }
     }
 
@@ -1171,11 +1365,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
         runOnUiThread(() -> {
             speaking = false;
             if (!listening && !processing) face.setState("idle");
+            resumeAfterReply();
         });
     }
 
     @Override
     protected void onDestroy() {
+        cancelAutoWakeSchedule();
+        wakeConversation.end();
         cancelTimerInternal();
         if (deviceActions != null) deviceActions.close();
         if (aiChatClient != null) aiChatClient.close();
