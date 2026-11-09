@@ -10,9 +10,11 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.provider.AlarmClock;
 import java.net.URLEncoder;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -49,6 +51,7 @@ import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Locale;
+import java.util.List;
 
 public final class MainActivity extends Activity implements RecognitionListener {
     private static final int REQUEST_MICROPHONE = 101;
@@ -391,14 +394,18 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "✦ Відкрий ChatGPT", "✎ Запиши купити молоко",
             "☷ Покажи нотатки", "? Що ти вмієш?",
             "🔋 Заряд батареї", "⏱ Таймер на 1 хвилину",
-            "⚙ Налаштування", "🗺 Відкрий карти"
+            "⚙ Налаштування", "🗺 Відкрий карти",
+            "⏰ Будильник 07:30", "🔔 Нагадай через 5 хв",
+            "📱 Відкрий Telegram", "⏰ Покажи будильники"
         };
         String[] commands = {
             "Котра година", "Відкрий YouTube",
             "Відкрий ChatGPT", "Запиши купити молоко",
             "Покажи нотатки", "Що ти вмієш",
             "Заряд батареї", "Таймер на 1 хвилину",
-            "Відкрий налаштування", "Відкрий карти"
+            "Відкрий налаштування", "Відкрий карти",
+            "Постав будильник на 07:30", "Нагадай через 5 хвилин випити води",
+            "Відкрий Телеграм", "Покажи будильники"
         };
         for (int i = 0; i < examples.length; i += 2) {
             LinearLayout row = new LinearLayout(this);
@@ -590,8 +597,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     @Override public void onRmsChanged(float rmsdB) { }
     @Override public void onBufferReceived(byte[] buffer) { }
 
-    @Override
-    public void onEndOfSpeech() {
+    @Override    public void onEndOfSpeech() {
         if (listening) {
             listening = false;
             processing = true;
@@ -641,6 +647,78 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private String openUrl(String url, String label) {
         return launchIntent(new Intent(Intent.ACTION_VIEW, Uri.parse(url)), label);
+    }
+
+    /** System Clock owns the alarm; the user sees and confirms the request there. */
+    private String openAlarmClock(AssistantIntents.ClockTime time, String message) {
+        Intent intent = new Intent(AlarmClock.ACTION_SET_ALARM);
+        intent.putExtra(AlarmClock.EXTRA_HOUR, time.hour);
+        intent.putExtra(AlarmClock.EXTRA_MINUTES, time.minute);
+        intent.putExtra(AlarmClock.EXTRA_MESSAGE, message);
+        intent.putExtra(AlarmClock.EXTRA_SKIP_UI, false);
+        try {
+            startActivity(intent);
+            return "Відкрив Годинник: " + String.format(Locale.forLanguageTag("uk-UA"), "%02d:%02d", time.hour, time.minute)
+                + ". Перевір і підтвердь будильник у системному застосунку.";
+        } catch (Exception exception) {
+            return "На цьому пристрої не вдалося відкрити системний Годинник для будильника.";
+        }
+    }
+
+    /** Reminders use the Clock app's persistent timer/alarm, not Jarvis's in-process Handler. */
+    private String openReminder(AssistantIntents.Reminder reminder) {
+        if (reminder.time != null) {
+            return openAlarmClock(reminder.time, "Нагадування: " + reminder.message);
+        }
+        Intent intent = new Intent(AlarmClock.ACTION_SET_TIMER);
+        intent.putExtra(AlarmClock.EXTRA_LENGTH, reminder.seconds);
+        intent.putExtra(AlarmClock.EXTRA_MESSAGE, "Нагадування: " + reminder.message);
+        intent.putExtra(AlarmClock.EXTRA_SKIP_UI, false);
+        try {
+            startActivity(intent);
+            return "Відкрив системний таймер для нагадування «" + reminder.message
+                + "». Перевір його запуск у Годиннику.";
+        } catch (Exception exception) {
+            return "Не вдалося відкрити системний таймер. Перевір наявність застосунку Годинник.";
+        }
+    }
+
+    /** Only launcher-visible apps; no QUERY_ALL_PACKAGES permission or shell commands. */
+    private String launchInstalledApp(String spoken) {
+        String wanted = AssistantIntents.appLabel(spoken);
+        Intent query = new Intent(Intent.ACTION_MAIN);
+        query.addCategory(Intent.CATEGORY_LAUNCHER);
+        try {
+            PackageManager manager = getPackageManager();
+            List<ResolveInfo> candidates = manager.queryIntentActivities(query, 0);
+            ResolveInfo exact = null;
+            int matches = 0;
+            String entered = spoken.trim().toLowerCase(new Locale("uk", "UA"));
+            for (ResolveInfo candidate : candidates) {
+                if (candidate.activityInfo == null) continue;
+                CharSequence label = candidate.loadLabel(manager);
+                String actual = label == null ? "" : label.toString().trim().toLowerCase(new Locale("uk", "UA"));
+                boolean sameName = actual.equals(wanted) || actual.equals(entered) ||
+                    (wanted.equals("camera") && actual.equals("камера")) ||
+                    (wanted.equals("calendar") && actual.equals("календар")) ||
+                    (wanted.equals("clock") && actual.equals("годинник"));
+                if (sameName) {
+                    exact = candidate;
+                    matches++;
+                }
+            }
+            if (matches > 1) return "Знайшов кілька застосунків з назвою «" + spoken
+                + "». Уточни назву в меню програм.";
+            if (exact == null) return null;
+            Intent launch = new Intent(Intent.ACTION_MAIN);
+            launch.addCategory(Intent.CATEGORY_LAUNCHER);
+            launch.setClassName(exact.activityInfo.packageName, exact.activityInfo.name);
+            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(launch);
+            return "Відкриваю застосунок «" + spoken + "».";
+        } catch (Exception exception) {
+            return "Не вдалося відкрити застосунок «" + spoken + "».";
+        }
     }
 
     private String batteryReport() {
@@ -745,6 +823,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
         Integer noteIndex = CommandPatterns.noteIndex(command);
         String dialNumber = CommandPatterns.dialNumber(command);
         String searchTerms = CommandPatterns.searchTerms(command);
+        AssistantIntents.ClockTime alarmTime = AssistantIntents.alarmTime(command);
+        AssistantIntents.Reminder reminder = AssistantIntents.reminder(command);
+        String requestedApp = AssistantIntents.requestedApp(command);
         boolean silentReply = false;
         String reply;
 
@@ -753,6 +834,16 @@ public final class MainActivity extends Activity implements RecognitionListener 
             stopSpeaking();
             reply = "Озвучення зупинено.";
             silentReply = true;
+        } else if (command.equals("покажи будильники") || command.equals("відкрий будильники")) {
+            reply = launchIntent(new Intent(AlarmClock.ACTION_SHOW_ALARMS), "список будильників");
+        } else if (alarmTime != null) {
+            reply = openAlarmClock(alarmTime, "Будильник Джарвіса");
+        } else if (AssistantIntents.isAlarmCommand(command)) {
+            reply = "Вкажи час у 24-годинному форматі, наприклад: постав будильник на 07:30.";
+        } else if (reminder != null) {
+            reply = openReminder(reminder);
+        } else if (AssistantIntents.isReminderCommand(command)) {
+            reply = "Скажи: нагадай через 10 хвилин випити води, або нагадай о 18:30 тренування. Дату «завтра» ця версія ще не підтримує.";
         } else if (command.contains("котра година") || command.contains("яка година") || command.contains("скільки часу")) {
             reply = "Зараз " + DateFormat.getTimeInstance(DateFormat.SHORT, new Locale("uk", "UA")).format(new Date()) + ".";
         } else if (command.contains("яка сьогодні дата") || command.contains("який сьогодні день") || command.contains("сьогоднішня дата")) {
@@ -833,20 +924,26 @@ public final class MainActivity extends Activity implements RecognitionListener 
             reply = launchIntent(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS), "налаштування Bluetooth");
         } else if (command.equals("відкрий карти") || command.equals("відкрий карту") || command.equals("покажи карту")) {
             reply = openUrl("https://www.google.com/maps", "карти");
-        } else if (command.startsWith("відкрий ")) {
-            String url = null;
-            if (command.contains("youtube") || command.contains("ютуб")) url = "https://www.youtube.com/";
-            else if (command.contains("chatgpt") || command.contains("чат гпт") || command.contains("чатгпт")) url = "https://chatgpt.com/";
-            else if (command.contains("google") || command.contains("гугл")) url = "https://www.google.com/";
-            else if (command.contains("телеграм") || command.contains("telegram")) url = "https://web.telegram.org/";
-            else if (command.contains("gmail") || command.contains("пошту")) url = "https://mail.google.com/";
-            reply = url == null
-                ? "Можу відкривати YouTube, ChatGPT, Google, Telegram, Gmail, карти й налаштування."
-                : openUrl(url, "сайт");
+        } else if (requestedApp != null) {
+            // Prefer an installed application over an unrelated website.
+            String installed = launchInstalledApp(requestedApp);
+            if (installed != null) {
+                reply = installed;
+            } else {
+                String app = AssistantIntents.appLabel(requestedApp);
+                String url = null;
+                if (app.equals("youtube")) url = "https://www.youtube.com/";
+                else if (app.equals("chatgpt")) url = "https://chatgpt.com/";
+                else if (app.equals("telegram")) url = "https://web.telegram.org/";
+                else if (app.equals("gmail")) url = "https://mail.google.com/";
+                else if (app.equals("google") || app.equals("гугл")) url = "https://www.google.com/";
+                reply = url != null ? openUrl(url, "сайт")
+                    : "Не знайшов встановлений застосунок «" + requestedApp + "». Перевір його назву.";
+            }
         } else if (command.startsWith("привіт")) {
             reply = "Привіт! Я Джарвіс. Готовий допомагати.";
         } else if (command.contains("що ти вмієш") || command.equals("допомога") || command.equals("команди")) {
-            reply = "Я вмію: час і дату, заряд батареї, таймер, нотатки, гучність, пошук Google, карти, набір номера, налаштування та сайти. Спробуй: таймер на 5 хвилин.";
+            reply = "Я вмію: час і дату, заряд батареї, таймер, нотатки, гучність, пошук, карти, будильники, нагадування та запуск встановлених програм. Спробуй: нагадай через 5 хвилин випити води.";
         } else if (command.contains("дякую")) {
             reply = "Завжди радий допомогти.";
         } else {
