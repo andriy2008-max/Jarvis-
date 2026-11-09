@@ -73,6 +73,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private long timerDeadlineMs = 0L;
 
     private SpeechRecognizer recognizer;
+    private boolean recognizerUsesOnDevice;
     private TextToSpeech tts;
     private DeviceActions deviceActions;
     private final WakeConversation wakeConversation = new WakeConversation();
@@ -154,10 +155,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
         });
 
         try {
-            if (supportsOnDeviceRecognizer) {
-                recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this);
-            } else if (SpeechRecognizer.isRecognitionAvailable(this)) {
+            if (SpeechRecognizer.isRecognitionAvailable(this)) {
+                // For user-initiated conversation prefer the normal recognizer:
+                // Ukrainian offline packs may be missing even when Android reports
+                // that some on-device recognition service is available.
                 recognizer = SpeechRecognizer.createSpeechRecognizer(this);
+                recognizerUsesOnDevice = false;
+            } else if (supportsOnDeviceRecognizer) {
+                recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this);
+                recognizerUsesOnDevice = true;
             }
             if (recognizer != null) recognizer.setRecognitionListener(this);
             else setStatus("Розпізнавання мовлення не встановлено. Текстові команди працюють.");
@@ -165,6 +171,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             supportsOnDeviceRecognizer = false;
             if (SpeechRecognizer.isRecognitionAvailable(this)) {
                 recognizer = SpeechRecognizer.createSpeechRecognizer(this);
+                recognizerUsesOnDevice = false;
                 recognizer.setRecognitionListener(this);
             } else setStatus("Розпізнавання мовлення недоступне.");
         }
@@ -835,6 +842,45 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
 
+
+    /** Switch between the general user-initiated recognizer (may use network)
+     * and the locally running wake listener. On-device availability does not
+     * guarantee that an offline Ukrainian language pack has been installed. */
+    private void selectRecognizerForMode(boolean forManual) {
+        if (recognizerSessionActive) return;
+        boolean wantOnDevice = !forManual && supportsOnDeviceRecognizer;
+        if (recognizer != null && recognizerUsesOnDevice == wantOnDevice) return;
+        SpeechRecognizer next = null;
+        boolean nextIsOnDevice = false;
+        try {
+            if (wantOnDevice) {
+                next = SpeechRecognizer.createOnDeviceSpeechRecognizer(this);
+                nextIsOnDevice = true;
+            } else if (SpeechRecognizer.isRecognitionAvailable(this)) {
+                next = SpeechRecognizer.createSpeechRecognizer(this);
+            } else if (supportsOnDeviceRecognizer) {
+                // Fallback when an Android device has only an offline provider.
+                next = SpeechRecognizer.createOnDeviceSpeechRecognizer(this);
+                nextIsOnDevice = true;
+            }
+        } catch (Exception error) {
+            if (wantOnDevice) {
+                supportsOnDeviceRecognizer = false;
+                if (wakeToggle != null) {
+                    wakeToggle.setChecked(false);
+                    wakeToggle.setEnabled(false);
+                }
+            }
+            return;
+        }
+        if (next != null) {
+            if (recognizer != null) recognizer.destroy();
+            recognizer = next;
+            recognizerUsesOnDevice = nextIsOnDevice;
+            recognizer.setRecognitionListener(this);
+        }
+    }
+
     /** Manual press-to-talk stays armed until the SECOND press. Android recognition
      * may end each low-level segment on silence: we restart those segments instead of
      * treating the service callback as the end of the user's requested recording. */
@@ -940,7 +986,18 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private void beginListening() {
-        if (recognizer == null || processing || recognizerSessionActive) return;
+        if (processing || recognizerSessionActive) return;
+        selectRecognizerForMode(manualCapture);
+        if (recognizer == null) {
+            setStatus("На пристрої немає сервісу розпізнавання мовлення.");
+            manualCapture = false;
+            return;
+        }
+        if (!manualCapture && !recognizerUsesOnDevice) {
+            autoWakePausedForErrors = true;
+            setStatus("Локальне розпізнавання недоступне. Користуйся кнопкою мікрофона.");
+            return;
+        }
         if (tts != null && tts.isSpeaking()) tts.stop();
         speaking = false;
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
@@ -948,7 +1005,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "uk-UA");
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "uk-UA");
         intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false);
-        intent.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, supportsOnDeviceRecognizer);
+        intent.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, recognizerUsesOnDevice);
         if (manualCapture) {
             // Hints only; engines may still end a segment early. Cycling handles that.
             intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L);
