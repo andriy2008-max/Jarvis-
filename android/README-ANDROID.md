@@ -1,6 +1,6 @@
-# JARVIS 0.1.5 — Android
+# JARVIS 0.1.6 — Android
 
-**Стан:** код змінено; APK 0.1.5 не збирався. GitHub Actions запускається лише вручну (`workflow_dispatch`).
+**Стан:** код змінено; APK 0.1.6 не збирався. GitHub Actions запускається лише вручну (`workflow_dispatch`).
 
 ## Що вже працювало у Preview 0.1.4
 
@@ -39,3 +39,7 @@
 - `app/src/main/java/com/andriy/jarvis/DeviceCommands.java` — незалежний парсер нових команд.
 - `app/src/main/java/com/andriy/jarvis/DeviceActions.java` — виклики Android API.
 - `.github/workflows/android-apk.yml` — ручна збірка й перевірка APK.
+
+## ШІ для вільного спілкування — 0.1.6
+
+Реалізовано довільні текстові та голосові розмови через особистий HTTPS-сервер. Відомі команди телефону обробляються локально, решта фраз передається ШІ. Контекст із 14 останніх реплік зберігається тільки в оперативній пам'яті. Кнопка «ШІ — підключення» приймає HTTPS-адресу та окремий код доступу; **OpenAI API key не зберігається в Android**. Див. [AI-CONVERSATION.md](AI-CONVERSATION.md) і [сервер](../server/jarvis-ai-worker/README.md). Без розгортання сервера ШІ-відповіді недоступні.

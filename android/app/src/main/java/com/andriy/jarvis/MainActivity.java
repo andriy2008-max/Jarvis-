@@ -39,6 +39,7 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.text.InputType;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -73,6 +74,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private SpeechRecognizer recognizer;
     private TextToSpeech tts;
     private DeviceActions deviceActions;
+    private AiChatClient aiChatClient;
+    private boolean aiBusy = false;
     private TextView status;
     private ScrollView feedScroll;
     private LinearLayout feedMessages;
@@ -98,6 +101,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         isCompact = getResources().getConfiguration().smallestScreenWidthDp < 360;
         voiceEnabled = getPreferences(MODE_PRIVATE).getBoolean("voiceEnabled", true);
         loadNotes();
+        aiChatClient = new AiChatClient(this);
         buildInterface();
         deviceActions = new DeviceActions(this);
 
@@ -250,7 +254,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
         topbar.addView(brand);
 
-        TextView version = makeText("● V 0.1.5", isCompact ? 11 : 12, GREEN, Gravity.CENTER, false);
+        TextView version = makeText("● V 0.1.6", isCompact ? 11 : 12, GREEN, Gravity.CENTER, false);
         version.setBackground(roundedFill(Color.TRANSPARENT, Color.rgb(43, 131, 108), 99));
         version.setPadding(dp(10), dp(6), dp(10), dp(6));
         if (!isWatchDevice) topbar.addView(version);
@@ -385,6 +389,27 @@ public final class MainActivity extends Activity implements RecognitionListener 
         sendParams.leftMargin = dp(8);
         commandRow.addView(send, sendParams);
 
+        // Voice/text chat and local device commands share the same conversation feed.
+        LinearLayout aiControls = new LinearLayout(this);
+        aiControls.setOrientation(isWatchDevice ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams aiControlsParams = new LinearLayout.LayoutParams(-1, -2);
+        aiControlsParams.topMargin = dp(10);
+        chatPanel.addView(aiControls, aiControlsParams);
+        Button aiSettingsButton = secondaryButton("🤖 ШІ — підключення", this::showAiSettings);
+        aiSettingsButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, isCompact ? 10 : 12);
+        LinearLayout.LayoutParams aiConnectParams = isWatchDevice
+            ? new LinearLayout.LayoutParams(-1, -2)
+            : new LinearLayout.LayoutParams(0, -2, 1f);
+        aiControls.addView(aiSettingsButton, aiConnectParams);
+        Button aiResetButton = secondaryButton("🧹 Новий діалог", this::clearAiConversation);
+        aiResetButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, isCompact ? 10 : 12);
+        LinearLayout.LayoutParams aiResetParams = isWatchDevice
+            ? new LinearLayout.LayoutParams(-1, -2)
+            : new LinearLayout.LayoutParams(0, -2, 1f);
+        if (isWatchDevice) aiResetParams.topMargin = dp(6);
+        else aiResetParams.leftMargin = dp(8);
+        aiControls.addView(aiResetButton, aiResetParams);
+
         // Web quick-command chips, in responsive two-column rows.
         LinearLayout examplesPanel = panel();
         LinearLayout.LayoutParams exParams = new LinearLayout.LayoutParams(-1, -2);
@@ -400,7 +425,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "⏰ Будильник 07:30", "🔔 Нагадай через 5 хв",
             "📱 Відкрий Telegram", "⏰ Покажи будильники",
             "🔦 Увімкни ліхтарик", "⏸ Пауза музики",
-            "🔉 Гучність 50%", "☀ Налаштування екрана"
+            "🔉 Гучність 50%", "☀ Налаштування екрана",
+            "💬 Поговорімо", "🤔 Поясни мені"
         };
         String[] commands = {
             "Котра година", "Відкрий YouTube",
@@ -411,7 +437,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "Постав будильник на 07:30", "Нагадай через 5 хвилин випити води",
             "Відкрий Телеграм", "Покажи будильники",
             "Увімкни ліхтарик", "Постав музику на паузу",
-            "Постав гучність на 50%", "Відкрий налаштування екрана"
+            "Постав гучність на 50%", "Відкрий налаштування екрана",
+            "Привіт, Джарвіс", "Поясни простими словами, як працює штучний інтелект"
         };
         for (int i = 0; i < examples.length; i += 2) {
             LinearLayout row = new LinearLayout(this);
@@ -450,7 +477,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         noteHintParams.topMargin = dp(12);
         notesPanel.addView(noteHint, noteHintParams);
 
-        TextView footer = makeText("JARVIS 0.1.5 • Тестовий Android-застосунок. Без GPT і акаунтів; для голосу потрібен сервіс розпізнавання Android.",
+        TextView footer = makeText("JARVIS 0.1.6 • Тестовий Android-застосунок. Без GPT і акаунтів; для голосу потрібен сервіс розпізнавання Android.",
             isCompact ? 11 : 12, Color.rgb(127, 154, 184), Gravity.CENTER, false);
         footer.setLineSpacing(0f, 1.25f);
         LinearLayout.LayoutParams footerParams = new LinearLayout.LayoutParams(-1, -2);
@@ -870,6 +897,111 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (face != null) face.setState(listening ? "listening" : "idle");
     }
 
+
+    /** Unrecognized conversation goes to AI; local phone commands never give AI device control. */
+    private void askAi(String question) {
+        if (aiChatClient == null || !aiChatClient.isConfigured()) {
+            String info = "Для вільної розмови підключи особистий ШІ-сервер. Натисни «ШІ — підключення». Ключ OpenAI у телефон вводити не потрібно.";
+            appendDialogue("Джарвіс", info);
+            setStatus("ШІ не підключений");
+            showAiSettings();
+            return;
+        }
+        if (aiBusy) {
+            appendDialogue("Джарвіс", "Я ще відповідаю на попереднє запитання.");
+            return;
+        }
+        aiBusy = true;
+        processing = true;
+        face.setState("thinking");
+        setStatus("Джарвіс думає...");
+        aiChatClient.send(question, (answer, error) -> {
+            aiBusy = false;
+            processing = false;
+            if (isFinishing() || isDestroyed()) return;
+            String response = error == null ? answer : error;
+            if (response == null || response.isEmpty()) response = "Не вдалося отримати відповідь від ШІ.";
+            appendDialogue("Джарвіс", response);
+            setStatus(error == null ? "Відповідь ШІ готова" : "Не вдалося звернутися до ШІ");
+            if (error == null && voiceEnabled && tts != null) {
+                tts.speak(response, TextToSpeech.QUEUE_FLUSH, new Bundle(),
+                    "jarvis-ai-" + SystemClock.uptimeMillis());
+            } else {
+                face.setState("idle");
+            }
+        });
+    }
+
+    private void clearAiConversation() {
+        if (aiChatClient != null) aiChatClient.clearHistory();
+        aiBusy = false;
+        processing = false;
+        if (face != null) face.setState("idle");
+        setStatus("Новий діалог ШІ");
+        appendDialogue("Джарвіс", "Контекст ШІ очищено. Можемо почати нову розмову.");
+    }
+
+    private void showAiSettings() {
+        if (aiChatClient == null) return;
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(20), dp(10), dp(20), dp(6));
+
+        TextView description = makeText(
+            "Введи адресу особистого HTTPS-сервера /chat та код доступу. Це НЕ ключ OpenAI — він має залишатися тільки на сервері.",
+            13, MUTED, Gravity.START, false);
+        form.addView(description, new LinearLayout.LayoutParams(-1, -2));
+
+        EditText urlInput = new EditText(this);
+        urlInput.setSingleLine(true);
+        urlInput.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        urlInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        urlInput.setHint("https://...workers.dev/chat");
+        urlInput.setText(aiChatClient.endpoint());
+        LinearLayout.LayoutParams urlParams = new LinearLayout.LayoutParams(-1, -2);
+        urlParams.topMargin = dp(10);
+        form.addView(urlInput, urlParams);
+
+        EditText codeInput = new EditText(this);
+        codeInput.setSingleLine(true);
+        codeInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        codeInput.setHint("Код доступу (не OpenAI API key)");
+        LinearLayout.LayoutParams codeParams = new LinearLayout.LayoutParams(-1, -2);
+        codeParams.topMargin = dp(8);
+        form.addView(codeInput, codeParams);
+        TextView note = makeText(
+            "Якщо код уже збережено, залиш поле порожнім. «Від'єднати» очищує адресу, код і контекст ШІ.",
+            11, MUTED, Gravity.START, false);
+        form.addView(note, new LinearLayout.LayoutParams(-1, -2));
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Підключення Джарвіса до ШІ")
+            .setView(form)
+            .setNegativeButton("Скасувати", null)
+            .setNeutralButton("Від'єднати", (d, which) -> {
+                aiChatClient.disconnect();
+                aiBusy = false;
+                processing = false;
+                appendDialogue("Джарвіс", "Підключення ШІ видалено з телефону.");
+                setStatus("ШІ від'єднаний");
+            })
+            .setPositiveButton("Зберегти", null)
+            .create();
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            try {
+                aiChatClient.configure(urlInput.getText().toString(), codeInput.getText().toString());
+                aiBusy = false;
+                processing = false;
+                setStatus("ШІ підключено");
+                appendDialogue("Джарвіс", "Адресу та код доступу збережено. Тепер можемо спілкуватися!");
+                dialog.dismiss();
+            } catch (Exception error) {
+                urlInput.setError(error.getMessage() == null ? "Перевір адресу й код." : error.getMessage());
+            }
+        }));
+        dialog.show();
+    }
+
     private void processCommand(String raw) {
         if (raw == null || raw.trim().isEmpty()) return;
         appendDialogue("Ти", raw.trim());
@@ -889,6 +1021,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
         if (deviceCommand != null) {
             reply = deviceActions == null ? "Керування пристроєм ще не готове." : deviceActions.perform(deviceCommand);
+        } else if (command.equals("новий діалог") || command.equals("очисти діалог") ||
+            command.equals("забудь розмову") || command.equals("почни новий діалог")) {
+            clearAiConversation();
+            return;
         } else if (command.equals("стоп") || command.equals("замовкни") ||
             command.equals("зупини відповідь") || command.equals("припини говорити")) {
             stopSpeaking();
@@ -994,13 +1130,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     + "» у меню встановлених застосунків. Назви її так, як під іконкою на телефоні.";
             }
         } else if (command.startsWith("привіт")) {
-            reply = "Привіт! Я Джарвіс. Готовий допомагати.";
+            askAi(raw);
+            return;
         } else if (command.contains("що ти вмієш") || command.equals("допомога") || command.equals("команди")) {
-            reply = "Я вмію: час і дату, заряд батареї, таймер, нотатки, пошук, карти, будильники, нагадування, запуск програм, керування музикою, медіагучністю й ліхтариком. Спробуй: увімкни ліхтарик або наступна пісня.";
+            reply = "Я вмію: команди телефону, нотатки, таймери, будильники, запуск програм, музику, гучність, ліхтарик та вільну розмову з ШІ (після підключення сервера). Спробуй: розкажи цікаву історію.";
         } else if (command.contains("дякую")) {
             reply = "Завжди радий допомогти.";
         } else {
-            reply = "Не знаю такої команди. Скажи: що ти вмієш?";
+            askAi(raw);
+            return;
         }
 
         appendDialogue("Джарвіс", reply);
@@ -1040,6 +1178,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     protected void onDestroy() {
         cancelTimerInternal();
         if (deviceActions != null) deviceActions.close();
+        if (aiChatClient != null) aiChatClient.close();
         if (recognizer != null) recognizer.destroy();
         if (tts != null) {
             tts.stop();
