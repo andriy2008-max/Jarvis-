@@ -173,6 +173,7 @@
     let notes = [];
     let recognition = null;
     let isListening = false;
+    let micPermissionPending = false;
     let faceResetTimer = null;
     let speechSequence = 0;
     function setFaceState(next) {
@@ -383,16 +384,51 @@
       $("mic-hint").textContent = "Цей браузер не підтримує голосове розпізнавання. Спробуй Chrome або Edge через HTTPS чи використовуй текстові команди.";
       setStatus("Текстові команди доступні");
     }
-    $("listen").addEventListener("click", () => {
-      if (!recognition) return;
+    async function startListeningWithPermission() {
+      if (!recognition || micPermissionPending) return;
       if (isListening) { recognition.stop(); return; }
-      if ("speechSynthesis" in window) {
-        ++speechSequence;
-        window.speechSynthesis.cancel();
+
+      // Browser permission dialogs require a secure context and a user gesture.
+      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+        const message = "Для доступу до мікрофона відкрий Джарвіса через HTTPS у Chrome або Edge.";
+        setStatus(message);
+        $("mic-hint").textContent = message;
+        return;
       }
-      try {recognition.start();}
-      catch (_) { setStatus("Мікрофон ще працює або недоступний. Спробуй повторити."); }
-    });
+
+      micPermissionPending = true;
+      $("listen").disabled = true;
+      setStatus("Дозволь використання мікрофона у вікні браузера.");
+      $("mic-hint").textContent = "Коли браузер запитає дозвіл, натисни «Дозволити».";
+      try {
+        // getUserMedia requests the native microphone permission prompt if it is not already granted.
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        // SpeechRecognition accesses the mic separately, so immediately release this test stream.
+        stream.getTracks().forEach((track) => track.stop());
+        if ("speechSynthesis" in window) {
+          ++speechSequence;
+          window.speechSynthesis.cancel();
+        }
+        recognition.start();
+      } catch (error) {
+        const messages = {
+          NotAllowedError: "Доступ до мікрофона заблоковано. У Chrome натисни значок налаштувань біля адреси сайту → Дозволи мікрофон, потім спробуй знову.",
+          PermissionDeniedError: "Доступ до мікрофона заборонено. Дозволь його в налаштуваннях сайту.",
+          NotFoundError: "Мікрофон не знайдено. Перевір, чи пристрій має робочий мікрофон.",
+          NotReadableError: "Мікрофон зайнятий іншою програмою або недоступний.",
+          SecurityError: "Браузер заборонив доступ до мікрофона. Відкрий Джарвіса через HTTPS."
+        };
+        const message = messages[error?.name] || "Не вдалося увімкнути мікрофон. Перевір дозволи браузера та спробуй ще раз.";
+        setFaceState("idle");
+        setStatus(message);
+        $("mic-hint").textContent = message;
+        addMessage("assistant", message);
+      } finally {
+        micPermissionPending = false;
+        $("listen").disabled = false;
+      }
+    }
+    $("listen").addEventListener("click", startListeningWithPermission);
     renderNotes();
   </script>
 </body>
