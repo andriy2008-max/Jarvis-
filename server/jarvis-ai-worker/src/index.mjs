@@ -7,7 +7,7 @@
 const MAX_REQUEST_BYTES = 18000;
 const MAX_MESSAGE_CHARS = 2000;
 const MAX_HISTORY_TURNS = 14;
-const DEFAULT_MODEL = 'gpt-5.6-luna';
+const DEFAULT_MODEL = 'gpt-6-luna';
 const INSTRUCTIONS = `Ти Джарвіс — дружній, уважний персональний голосовий помічник.
 Відповідай українською, природно і стисло, переважно 1–4 речення, якщо не просять деталі.
 Підтримуй звичайну розмову та враховуй попередній контекст.

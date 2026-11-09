@@ -17,7 +17,7 @@ The Android app contains **no OpenAI API key**. The user's device holds only a s
 
 ## Security / costs / limitations
 
-- Both `OPENAI_API_KEY` and `JARVIS_CLIENT_TOKEN` must be Worker secrets. `OPENAI_MODEL` is a non-sensitive optional setting, defaulting to `gpt-5.6-luna`. Model access and prices depend on your OpenAI API project.
+- Both `OPENAI_API_KEY` and `JARVIS_CLIENT_TOKEN` must be Worker secrets. `OPENAI_MODEL` is a non-sensitive optional setting, defaulting to `gpt-6-luna`. Model access and prices depend on your OpenAI API project.
 - Restrict access to your Worker, keep client code private, rotate it if a phone is lost, configure account-level spending limits and preferably Cloudflare rate limiting. **A single shared client token is suitable only for a private prototype**, not for publicly distributed users; a multi-user application needs proper user authentication and per-user quotas.
 - Responses are requested with `store: false`. Server code does not intentionally log messages. They are transmitted to the Worker and OpenAI for processing. The Android app retains up to 14 prior messages **in RAM only**; a new session or clearing context forgets them.
 - Current prototype supports **text in / text out**, not streaming or low-latency live conversation. The existing Android SpeechRecognizer and TTS convert voice to text and read answers aloud. Internet is required.

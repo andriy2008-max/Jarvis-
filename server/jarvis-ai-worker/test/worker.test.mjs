@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import worker, { validateInput, extractText, safeBearer } from '../src/index.mjs';
 
 const token = 'local_testing_token_please_rotate';
-const env = { OPENAI_API_KEY: 'test-only-mocked-never-live', JARVIS_CLIENT_TOKEN: token, OPENAI_MODEL: 'gpt-5.6-luna' };
+const env = { OPENAI_API_KEY: 'test-only-mocked-never-live', JARVIS_CLIENT_TOKEN: token, OPENAI_MODEL: 'gpt-6-luna' };
 const body = JSON.stringify({ message: 'Як справи?', history: [{ role: 'user', content: 'Привіт' }, { role: 'assistant', content: 'Привіт!' }] });
 const request = (path, tokenValue = token, data = body) => new Request(`https://jarvis.example.workers.dev${path}`, {
   method: 'POST', headers: { authorization: `Bearer ${tokenValue}`, 'content-type': 'application/json' }, body: data,
@@ -51,7 +51,7 @@ test('authorized chat sends no-store Responses request and returns text', async 
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), { reply: 'Звісно! Поговорімо.' });
     assert.equal(seen.url, 'https://api.openai.com/v1/responses');
-    assert.equal(seen.body.model, 'gpt-5.6-luna');
+    assert.equal(seen.body.model, 'gpt-6-luna');
     assert.equal(seen.body.store, false);
     assert.equal(seen.body.input.length, 3);
     assert.equal(seen.body.input.at(-1).content, 'Як справи?');
