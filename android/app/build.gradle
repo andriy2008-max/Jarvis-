@@ -17,8 +17,8 @@ android {
         applicationId 'com.andriy.jarvis'
         minSdk 26
         targetSdk 35
-        versionCode 17
-        versionName '0.1.7'
+        versionCode 18
+        versionName '0.1.8'
     }
 
     signingConfigs {
@@ -34,12 +34,12 @@ android {
 
     buildTypes {
         debug {
-            // Retain Preview package identity; debug signatures vary between CI runs.
+            // Debug is for CI/local testing only; ephemeral signing cannot deliver in-place updates.
             applicationIdSuffix '.preview'
             manifestPlaceholders = [appLabel: 'Джарвіс Тест']
         }
         release {
-            // First stable-signed release installs alongside legacy and preview APKs.
+            // Freeze this stable applicationId forever; changes break in-place upgrades.
             // All later stable releases can upgrade in-place with the same signing key.
             applicationIdSuffix '.stable'
             manifestPlaceholders = [appLabel: 'Джарвіс']
