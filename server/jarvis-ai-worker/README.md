@@ -1,6 +1,6 @@
 # JARVIS AI proxy (personal Cloudflare Worker)
 
-This is an **optional, separately deployed backend** for JARVIS Android 0.1.6. It is not live by default.
+This is an **optional, separately deployed backend** for JARVIS Android 0.1.7. It is not live by default.
 The phone sends a text prompt to `POST /chat`; the Worker forwards it to the OpenAI Responses API.
 The Android app contains **no OpenAI API key**. The user's device holds only a separate revocable access token encrypted by Android Keystore.
 
@@ -32,3 +32,11 @@ npm test
 ```
 
 Deploying this server, setting secrets and configuring an HTTPS endpoint are **separate setup steps**; pushing the files to GitHub does not deploy them.
+
+## Без комп'ютера — через браузер телефону
+
+Cloudflare Workers підтримує імпорт GitHub-репозиторію без локального Node.js. У браузері відкрий <https://dash.cloudflare.com/>, потім **Workers & Pages → Create application → GitHub** і дозволь Cloudflare читати репозиторій `andriy2008-max/Jarvis-`. У налаштуваннях збирання вибери **Root directory**: `server/jarvis-ai-worker`, а **Deploy command**: `npx wrangler deploy`. Після успішного імпорту отримаєш адресу `*.workers.dev`. Вона працює для `/health` і `/chat` лише після налаштування секретів.
+
+На сторінці самого Worker додай **runtime secrets**, не відкриті Build variables: `OPENAI_API_KEY` (особистий API-ключ OpenAI, створений через OpenAI Platform) та `JARVIS_CLIENT_TOKEN` (інший випадковий довгий код, щонайменше 20 символів). Для останнього не використовуй пароль OpenAI чи GitHub. Збережи свої секрети приватно — їх **не слід надсилати в чат**. Після додавання змінних перевір HTTPS-адресу `...workers.dev/health` — вона лише підтверджує, що Worker відповідає, але не гарантує активність платного API. Потім у додатку введи `...workers.dev/chat` і окремий код `JARVIS_CLIENT_TOKEN`.
+
+Увага: Cloudflare Git integration автоматично розгортає **сервер** після пушів у GitHub, але **не збирає APK Android**. Workflow APK залишається ручним.

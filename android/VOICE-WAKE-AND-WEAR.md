@@ -42,3 +42,7 @@ java -cp /tmp/jarvis-wake-tests com.andriy.jarvis.WakeConversationTest
 ```
 
 Ці тести **не** замінюють Android-компіляцію, перевірку Wear OS і реального голосового сервісу. Без прямого дозволу APK не збирати.
+
+## Налаштування із телефона
+
+Cloudflare Workers можна підключити через браузер телефону: вибрати GitHub-репозиторій `andriy2008-max/Jarvis-` та кореневу папку `server/jarvis-ai-worker`. Далі в Cloudflare створити runtime secrets `OPENAI_API_KEY` і `JARVIS_CLIENT_TOKEN`. Це не запуск Android APK і не вимагає передавати секрети в ChatGPT. Після розгортання ввести адресу `https://...workers.dev/chat` і особистий код доступу в інтерфейсі JARVIS. Інструкція у [server README](../server/jarvis-ai-worker/README.md).
