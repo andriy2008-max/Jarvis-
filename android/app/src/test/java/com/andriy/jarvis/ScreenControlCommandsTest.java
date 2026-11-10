@@ -23,6 +23,17 @@ public final class ScreenControlCommandsTest {
         is("прокрути вгору", ScreenControlCommands.Kind.SCROLL_UP, null);
         is("повернись назад", ScreenControlCommands.Kind.BACK, null);
         is("натисни кнопку пошук", ScreenControlCommands.Kind.CLICK, "пошук");
+        is("натисни на значок лупи", ScreenControlCommands.Kind.CLICK, "лупи");
+        is("відкрий пошук", ScreenControlCommands.Kind.CLICK, "пошук");
+        is("знайди чати", ScreenControlCommands.Kind.CLICK, "чати");
+        is("покажи профіль", ScreenControlCommands.Kind.CLICK, "профіль");
+        is("перейди до налаштувань", ScreenControlCommands.Kind.CLICK, "налаштувань");
+        is("де тут повідомлення", ScreenControlCommands.Kind.CLICK, "повідомлення");
+        is("мені потрібна галерея", ScreenControlCommands.Kind.CLICK, "галерея");
+        is("натисни іконку три крапки", ScreenControlCommands.Kind.CLICK, "три крапки");
+        eq(ScreenControlCommands.parse("відкрий телеграм"), null);
+        eq(ScreenControlCommands.parse("покажи нотатки"), null);
+        eq(ScreenControlCommands.parse("перейди в рандомне місце"), null);
         is("натисни на кнопку налаштування", ScreenControlCommands.Kind.CLICK, "налаштування");
         is("натисни пошук", ScreenControlCommands.Kind.CLICK, "пошук");
         is("натисни кнопку оплатити", ScreenControlCommands.Kind.CLICK, "");
