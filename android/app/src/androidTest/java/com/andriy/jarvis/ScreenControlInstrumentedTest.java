@@ -52,7 +52,7 @@ public final class ScreenControlInstrumentedTest {
             clicked[0] = ScreenControlAccessibilityService.perform(
                 ScreenControlCommands.parse("натисни кнопку тестова кнопка")));
         String done = clicked[0];
-        assertEquals("Натиснув «тестова кнопка».", done);
+        assertEquals("Знайшов потрібну кнопку й натиснув.", done);
         SystemClock.sleep(350);
         String changed = ScreenControlAccessibilityService.perform(
             ScreenControlCommands.parse("натисни кнопку тестова кнопка"));
@@ -67,7 +67,7 @@ public final class ScreenControlInstrumentedTest {
         // The dangerous generic confirmation is always rejected.
         String denied = ScreenControlAccessibilityService.perform(
             ScreenControlCommands.parse("натисни підтвердити"));
-        assertTrue(denied.contains("не натискатиму"));
+        assertTrue(denied.contains("не виконуватиму"));
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync(
             () -> ScreenControlAccessibilityService.stop());
