@@ -1,6 +1,10 @@
 package com.andriy.jarvis;
 
 import android.Manifest;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.StatusBarManager;
@@ -144,6 +148,26 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private boolean speaking = false;
     private boolean isCompact = false;
     private boolean isWatchDevice = false;
+    private static final String SHAKE_PREF = "shake_to_wake_enabled";
+    private SensorManager shakeSensors;
+    private Sensor accelerometer;
+    private final JarvisShakePattern shakePattern = new JarvisShakePattern();
+    private JarvisShakeWakeProbe shakeProbe;
+    private boolean shakeEnabled;
+    private boolean shakeCommandCapture;
+    private boolean shakeAiPromptNext;
+    private boolean shakeLocalOnly;
+    private CheckBox shakeToggle;
+    private final SensorEventListener shakeListener = new SensorEventListener() {
+        @Override public void onAccuracyChanged(Sensor sensor, int accuracy) {}
+        @Override public void onSensorChanged(SensorEvent event) {
+            if (event == null || event.values == null || event.values.length < 3 ||
+                !foreground || !shakeEnabled) return;
+            if (shakePattern.onAcceleration(event.values[0],event.values[1],
+                event.values[2],event.timestamp / 1000000L))
+                onShakeDetected();
+        }
+    };
     private JarvisWearPhoneLink watchPhoneLink;
     private final Runnable phoneModeListener = () -> runOnUiThread(() -> {
         if (isFinishing() || isDestroyed()) return;
@@ -169,6 +193,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
         isWatchDevice = getPackageManager().hasSystemFeature(PackageManager.FEATURE_WATCH);
         if (isWatchDevice) watchPhoneLink = new JarvisWearPhoneLink(this);
         isCompact = getResources().getConfiguration().smallestScreenWidthDp < 360;
+        shakeEnabled = getPreferences(MODE_PRIVATE).getBoolean(SHAKE_PREF, true);
+        shakeSensors = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        accelerometer = shakeSensors == null ? null :
+            shakeSensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        shakeProbe = new JarvisShakeWakeProbe(this);
         voiceEnabled = getPreferences(MODE_PRIVATE).getBoolean("voiceEnabled", true);
         // Watch microphone is user-activated by face/stem key, not an always-on listener.
         autoWakeEnabled = !isWatchDevice &&
@@ -280,6 +309,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         autoWakePausedForErrors = false;
         autoWakeErrors = 0;
         scheduleAutoWake(650L);
+        registerShakeSensor();
         if (TimerScheduler.consumeCompletion(this)) {
             appendDialogue("Джарвіс", "Час вийшов! Фоновий таймер завершився.");
             setStatus("Час вийшов! Таймер завершено.");
@@ -295,6 +325,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     protected void onPause() {
+        unregisterShakeSensor();
+        if (shakeProbe != null) shakeProbe.close();
+        shakeCommandCapture = false;
+        shakeAiPromptNext = false;
         cancelPendingWakeCommand();
         if (manualCapture || autoWakeListening) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
         JarvisLiveTranscript.setCorrectionHandler(TRANSCRIPT_OWNER, null);
@@ -510,6 +544,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
         hero.addView(microphone, micParams);
 
         wakeToggle = makeWakeToggle();
+        shakeToggle = makeShakeToggle();
+        LinearLayout.LayoutParams shakeParams = new LinearLayout.LayoutParams(-1,-2);
+        shakeParams.topMargin = dp(6);
+        hero.addView(shakeToggle, shakeParams);
         LinearLayout.LayoutParams wakeParams = new LinearLayout.LayoutParams(-1, -2);
         wakeParams.topMargin = dp(8);
         hero.addView(wakeToggle, wakeParams);
@@ -1568,6 +1606,111 @@ public final class MainActivity extends Activity implements RecognitionListener 
         scheduleManualRestart(550L);
     }
 
+    private CheckBox makeShakeToggle() {
+        CheckBox toggle = new CheckBox(this);
+        toggle.setText("Струсни телефон → 3 с для «Джарвіс»");
+        toggle.setTextColor(MUTED);
+        toggle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        toggle.setButtonTintList(ColorStateList.valueOf(CYAN));
+        toggle.setChecked(shakeEnabled);
+        toggle.setEnabled(accelerometer != null);
+        toggle.setOnCheckedChangeListener((button, enabled) -> {
+            shakeEnabled = enabled;
+            getPreferences(MODE_PRIVATE).edit().putBoolean(SHAKE_PREF,enabled).apply();
+            if (enabled) {
+                cancelAutoWakeSchedule();
+                if (autoWakeListening && recognizer != null) {
+                    try { recognizer.cancel(); } catch (Exception ignored) {}
+                    autoWakeListening = false;
+                    recognizerSessionActive = false;
+                    listening = false;
+                    processing = false;
+                }
+                registerShakeSensor();
+                setStatus("Струси телефон двічі. Після «Джарвіс» слухатиму команду.");
+            } else {
+                unregisterShakeSensor();
+                if (shakeProbe != null) shakeProbe.close();
+                shakeCommandCapture = false;
+                shakeAiPromptNext = false;
+                scheduleAutoWake(350L);
+                setStatus("Активація струшуванням вимкнена.");
+            }
+        });
+        return toggle;
+    }
+
+    private void registerShakeSensor() {
+        if (!foreground || !shakeEnabled || accelerometer == null ||
+            shakeSensors == null) return;
+        shakePattern.reset();
+        shakeSensors.unregisterListener(shakeListener);
+        shakeSensors.registerListener(shakeListener, accelerometer,
+            SensorManager.SENSOR_DELAY_GAME);
+    }
+
+    private void unregisterShakeSensor() {
+        if (shakeSensors != null) shakeSensors.unregisterListener(shakeListener);
+    }
+
+    private void onShakeDetected() {
+        if (!foreground || !shakeEnabled || accelerometer == null ||
+            visibleDialogs != 0 || manualCapture || processing || listening ||
+            aiBusy || speaking || JarvisPhoneMode.isActive() ||
+            shakeProbe == null || shakeProbe.active() ||
+            shakeCommandCapture || shakeAiPromptNext ||
+            FloatingJarvisService.isShowing()) return;
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED) {
+            setStatus("Для активації струшуванням дозволь мікрофон Джарвісу.");
+            return;
+        }
+        // Recognition runs only in foreground after a deliberate gesture.
+        // No audio, text or device command reaches AI during the wake probe.
+        cancelAutoWakeSchedule();
+        if (autoWakeListening && recognizer != null) {
+            try { recognizer.cancel(); } catch (Exception ignored) {}
+            autoWakeListening = false;
+            recognizerSessionActive = false;
+            listening = false;
+            processing = false;
+        }
+        stopSpeaking();
+        face.setState("listening");
+        JarvisLiveTranscript.begin(TRANSCRIPT_OWNER);
+        setStatus("Струшування: 3 секунди чекаю «Джарвіс»...");
+        boolean started = shakeProbe.start(new JarvisShakeWakeProbe.Callback() {
+            @Override public void onPartial(String words) {
+                if (foreground) JarvisLiveTranscript.update(
+                    TRANSCRIPT_OWNER,words,false,SystemClock.uptimeMillis());
+            }
+            @Override public void onFinished(boolean heard, String detail) {
+                if (!foreground) return;
+                JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+                if (!heard) {
+                    face.setState("idle");
+                    setStatus(detail);
+                    scheduleAutoWake(550L);
+                    return;
+                }
+                shakeCommandCapture = true;
+                shakeAiPromptNext = false;
+                face.setState("listening");
+                setStatus("Прокинувся. Слухаю команду. Для ШІ знову скажи «Джарвіс».");
+                // Let the recognizer release its audio session first.
+                wakeHandler.postDelayed(() -> {
+                    if (foreground && shakeCommandCapture && !manualCapture)
+                        toggleListening();
+                }, 350L);
+            }
+        });
+        if (!started) {
+            face.setState("idle");
+            JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+            setStatus("Не вдалося почати прослуховування. Перевір доступ до мікрофона.");
+        }
+    }
+
     private void cancelAutoWakeSchedule() {
         if (wakeRestart != null) {
             wakeHandler.removeCallbacks(wakeRestart);
@@ -1585,7 +1728,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private boolean canAutoWake() {
-        return foreground && visibleDialogs == 0 &&
+        return foreground && !shakeEnabled &&
+            (shakeProbe == null || !shakeProbe.active()) &&
+            visibleDialogs == 0 &&
             autoWakeEnabled && supportsOnDeviceRecognizer &&
             !autoWakePausedForErrors && pendingWakeCommand == null &&
             !FloatingJarvisService.isShowing() && recognizer != null &&
