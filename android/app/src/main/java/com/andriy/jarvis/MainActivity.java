@@ -274,7 +274,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             } else setStatus("Розпізнавання мовлення недоступне.");
         }
         if (wakeToggle != null) {
-            wakeToggle.setEnabled(supportsOnDeviceRecognizer);
+            wakeToggle.setEnabled(supportsOnDeviceRecognizer && !shakeEnabled);
             wakeToggle.setChecked(autoWakeEnabled && supportsOnDeviceRecognizer);
         }
         acceptImageIntent(getIntent());
@@ -1617,6 +1617,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
         toggle.setOnCheckedChangeListener((button, enabled) -> {
             shakeEnabled = enabled;
             getPreferences(MODE_PRIVATE).edit().putBoolean(SHAKE_PREF,enabled).apply();
+            if (wakeToggle != null) {
+                wakeToggle.setEnabled(supportsOnDeviceRecognizer && !enabled);
+                wakeToggle.setText(enabled ?
+                    "Постійне очікування «Джарвіс» (призупинене через струшування)" :
+                    "Активація «Джарвіс»");
+            }
             if (enabled) {
                 cancelAutoWakeSchedule();
                 if (autoWakeListening && recognizer != null) {
@@ -1762,12 +1768,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private CheckBox makeWakeToggle() {
         CheckBox toggle = new CheckBox(this);
-        toggle.setText("Активація «Джарвіс»");
+        toggle.setText(shakeEnabled ?
+            "Постійне очікування «Джарвіс» (призупинене через струшування)" :
+            "Активація «Джарвіс»");
         toggle.setTextColor(MUTED);
         toggle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         toggle.setButtonTintList(ColorStateList.valueOf(CYAN));
         toggle.setChecked(autoWakeEnabled && supportsOnDeviceRecognizer);
-        toggle.setEnabled(supportsOnDeviceRecognizer);
+        toggle.setEnabled(supportsOnDeviceRecognizer && !shakeEnabled);
         toggle.setOnCheckedChangeListener((button, enabled) -> {
             autoWakeEnabled = enabled;
             getPreferences(MODE_PRIVATE).edit().putBoolean("autoWakeEnabled", enabled).apply();
