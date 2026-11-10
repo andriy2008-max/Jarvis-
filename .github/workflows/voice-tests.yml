@@ -28,6 +28,11 @@ on:
       - 'android/app/src/test/java/com/andriy/jarvis/OfflineVoicePackRulesTest.java'
       - 'tools/voice-export/**'
       - 'android/app/src/main/java/com/andriy/jarvis/MainActivity.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisQuickTileService.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisBubbleLauncherActivity.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/FloatingJarvisService.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisOrbView.java'
+      - 'android/app/src/main/res/values/styles.xml'
       - 'android/app/build.gradle'
       - 'android/app/src/test/java/com/andriy/jarvis/NeuralSpeechPolicyTest.java'
   workflow_dispatch:
