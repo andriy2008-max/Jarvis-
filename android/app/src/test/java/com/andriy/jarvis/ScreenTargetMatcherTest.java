@@ -19,6 +19,7 @@ public final class ScreenTargetMatcherTest {
     public static void main(String[] args) {
         eq(ScreenTargetMatcher.intent("лупа"), "search");
         eq(ScreenTargetMatcher.intent("знайди чати"), "chats");
+        eq(ScreenTargetMatcher.intent("покажи мої переписки"), "chats");
         eq(ScreenTargetMatcher.intent("іконка шестерні"), "settings");
         eq(ScreenTargetMatcher.intent("три крапки"), "menu");
         eq(ScreenTargetMatcher.intent("відкрити повідомлення"), "messages");
