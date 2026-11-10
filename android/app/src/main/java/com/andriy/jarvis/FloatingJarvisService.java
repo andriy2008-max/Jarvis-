@@ -755,6 +755,8 @@ public final class FloatingJarvisService extends Service {
     }
 
     private String performQuickDeviceAction(DeviceCommands.Action action) {
+        String systemResponse = SystemToggleActions.perform(this, action);
+        if (systemResponse != null) return systemResponse;
         AudioManager audio = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         if (audio == null) return "Аудіокерування недоступне.";
         int key = -1;
