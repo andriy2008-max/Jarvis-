@@ -1,0 +1,170 @@
+name: Jarvis 0.1.17 signed stable APK — explicit user request
+
+# ONE-SHOT, only for the user's request. No repeated automatic APK builds.
+on:
+  push:
+    paths:
+      - '.github/workflows/jarvis-017-user-request.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  signed-release:
+    if: github.event.head_commit.message == 'User-requested signed JARVIS v0.1.17 build (one-shot)'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout exact source commit
+        uses: actions/checkout@v4
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Android SDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Verify AI, voice-server and ONNX export contracts
+        run: |
+          set -euo pipefail
+          node --test server/jarvis-ai-worker/test/*.test.mjs
+          python -m unittest discover -s server/jarvis-tts-server -p 'test_*.py' -v
+          python -m unittest discover -s tools/voice-export -p 'test_*.py' -v
+      - name: Verify Android unit tests and upgradable package/version
+        run: |
+          set -euo pipefail
+          grep -Fq "applicationId 'com.andriy.jarvis'" android/app/build.gradle
+          grep -Fq "applicationIdSuffix '.stable'" android/app/build.gradle
+          grep -Fq 'versionCode 27' android/app/build.gradle
+          grep -Fq "versionName '0.1.17'" android/app/build.gradle
+          gradle -p android --no-daemon --stacktrace :app:testDebugUnitTest
+      - name: Restore ORIGINAL stable signing key
+        shell: bash
+        env:
+          SIGNING_KEYSTORE: ${{ secrets.JARVIS_SIGNING_KEYSTORE_BASE64 }}
+          JARVIS_RELEASE_STORE_PASSWORD: ${{ secrets.JARVIS_RELEASE_STORE_PASSWORD }}
+          JARVIS_RELEASE_KEY_ALIAS: ${{ secrets.JARVIS_RELEASE_KEY_ALIAS }}
+          JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$SIGNING_KEYSTORE"
+          test -n "$JARVIS_RELEASE_STORE_PASSWORD"
+          test -n "$JARVIS_RELEASE_KEY_ALIAS"
+          test -n "$JARVIS_RELEASE_KEY_PASSWORD"
+          printf '%s' "$SIGNING_KEYSTORE" | base64 --decode > "$RUNNER_TEMP/jarvis-original-stable.jks"
+          chmod 600 "$RUNNER_TEMP/jarvis-original-stable.jks"
+          echo "JARVIS_RELEASE_STORE_FILE=$RUNNER_TEMP/jarvis-original-stable.jks" >> "$GITHUB_ENV"
+      - name: Build complete signed release APK twice
+        shell: bash
+        env:
+          JARVIS_RELEASE_STORE_PASSWORD: ${{ secrets.JARVIS_RELEASE_STORE_PASSWORD }}
+          JARVIS_RELEASE_KEY_ALIAS: ${{ secrets.JARVIS_RELEASE_KEY_ALIAS }}
+          JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          gradle -p android --no-daemon --stacktrace :app:assembleRelease
+          gradle -p android --no-daemon --rerun-tasks --stacktrace :app:assembleRelease
+      - name: Verify signature, manifest, identity and previous APK compatibility
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          test -s "$apk"
+          "$tools/apksigner" verify --verbose "$apk"
+          expected="$(tr -d '[:space:]' < android/RELEASE-CERT-SHA256.txt | tr '[:upper:]' '[:lower:]')"
+          actual="$("$tools/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1)"
+          test -n "$expected" && test "$actual" = "$expected"
+          "$tools/aapt" dump badging "$apk" > "$RUNNER_TEMP/badging.txt"
+          grep -Fq "package: name='com.andriy.jarvis.stable'" "$RUNNER_TEMP/badging.txt"
+          grep -Fq "versionCode='27'" "$RUNNER_TEMP/badging.txt"
+          grep -Fq "versionName='0.1.17'" "$RUNNER_TEMP/badging.txt"
+          "$tools/aapt" dump xmltree "$apk" AndroidManifest.xml > "$RUNNER_TEMP/manifest.txt"
+          for component in MainActivity FloatingJarvisService JarvisWearMessageReceiver ScreenControlAccessibilityService JarvisQuickTileService TimerFireReceiver TimerAlertService; do
+            grep -Fq "$component" "$RUNNER_TEMP/manifest.txt"
+          done
+          mkdir -p "$RUNNER_TEMP/jarvis-old"
+          gh release download v0.1.16 --repo "$GITHUB_REPOSITORY" --pattern 'JARVIS-0.1.16-stable.apk' --dir "$RUNNER_TEMP/jarvis-old"
+          old="$RUNNER_TEMP/jarvis-old/JARVIS-0.1.16-stable.apk"
+          test -s "$old"
+          oldcert="$("$tools/apksigner" verify --print-certs "$old" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1)"
+          test "$oldcert" = "$actual"
+          "$tools/aapt" dump badging "$old" | grep -Fq "package: name='com.andriy.jarvis.stable'"
+          "$tools/aapt" dump badging "$old" | grep -Fq "versionCode='26'"
+          mkdir -p android/dist
+          cp "$apk" android/dist/JARVIS-0.1.17-stable.apk
+          (cd android/dist && sha256sum JARVIS-0.1.17-stable.apk > JARVIS-0.1.17-stable.sha256)
+          (cd android/dist && sha256sum -c JARVIS-0.1.17-stable.sha256)
+          echo "PASS: pinned signing certificate and update over v0.1.16"
+      - name: Android 35 emulator install-over-old and launch smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_4
+          ram-size: 3072M
+          disk-size: 4096M
+          disable-animations: true
+          script: |
+            set -eu
+            adb wait-for-device
+            adb install "$RUNNER_TEMP/jarvis-old/JARVIS-0.1.16-stable.apk"
+            adb install -r android/dist/JARVIS-0.1.17-stable.apk
+            adb shell dumpsys package com.andriy.jarvis.stable | grep -F "versionCode=27"
+            adb logcat -c
+            adb shell am start -W -n com.andriy.jarvis.stable/com.andriy.jarvis.MainActivity
+            sleep 7
+            adb shell pidof com.andriy.jarvis.stable
+            adb logcat -d -s AndroidRuntime:E '*:S' > /tmp/jarvis-crashes.txt
+            if grep -Eq 'FATAL EXCEPTION|Process: com.andriy.jarvis.stable' /tmp/jarvis-crashes.txt; then
+              cat /tmp/jarvis-crashes.txt
+              exit 1
+            fi
+            echo "PASS: old stable upgraded in-place and new app launched"
+      - name: Upload signed APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: JARVIS-0.1.17-original-signature-APK
+          path: |
+            android/dist/JARVIS-0.1.17-stable.apk
+            android/dist/JARVIS-0.1.17-stable.sha256
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish direct APK download in GitHub Releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view v0.1.17 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Release already exists; refusing replacement"
+            exit 1
+          fi
+          gh release create v0.1.17 \
+            android/dist/JARVIS-0.1.17-stable.apk \
+            android/dist/JARVIS-0.1.17-stable.sha256 \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "JARVIS 0.1.17 — stable signed Android + Wear OS update" \
+            --prerelease \
+            --notes 'Full stable signed APK, original package and signing certificate, upgrade verified from v0.1.16. Includes AI tools, voice pause/lip-sync, Spotify, phone screen gestures, fullscreen Wear OS face and watch-to-phone link, shake-to-wake, timers and prior fixes. CI checks unit/server tests, signature, in-place upgrade and Android emulator launch; physical Watch7 and Spotify UI still need testing. Cloudflare AI worker deploy is separate. Shake while watch app is closed is not implemented.'
+      - name: Wipe temporary signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/jarvis-original-stable.jks"
