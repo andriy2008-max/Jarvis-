@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Explicit one-time grant for the small round Jarvis orb. This is NOT Accessibility. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <!-- Only outgoing HTTPS to a user-configured AI proxy. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
@@ -36,6 +39,28 @@
         android:usesCleartextTraffic="false"
         android:allowBackup="true"
         android:supportsRtl="true">
+        <!-- Android Quick Settings: pressing the tile opens only the circular overlay. -->
+        <service
+            android:name=".JarvisQuickTileService"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:label="Джарвіс"
+            android:icon="@drawable/ic_launcher">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+        <activity
+            android:name=".JarvisBubbleLauncherActivity"
+            android:theme="@style/JarvisBubbleLaunchTheme"
+            android:excludeFromRecents="true"
+            android:exported="false" />
+        <service
+            android:name=".FloatingJarvisService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
         <receiver android:name=".TimerFireReceiver" android:exported="false" />
         <receiver android:name=".TimerRestoreReceiver" android:exported="true">
             <intent-filter>
