@@ -131,48 +131,61 @@ def export_model(cache_dir, output):
             vecs[voice] = vector.tolist()
         vocab = list(native_model.preprocess_fn.token_id_converter.token_list)
         sample_rate = int(native_model.fs)
-        # The Android engine needs exact Tacotron2 LSTM/state and vocoder
-        # metadata. Never infer it from a hard-coded demo model.
+        # The official v6 release is VITS although an older source-tree
+        # config describes Tacotron2. Always inspect the EXPORTED checkpoint,
+        # never infer the architecture from unrelated files on main.
         raw = yaml.safe_load((model_dir / "config.yaml").read_text(encoding="utf-8"))
-        decoder = raw["tts_model"]["decoder"]
-        normalization = raw["normalize"]
-        stats = np.load(model_dir / "feats_stats.npz")
-        count = float(stats["count"])
-        mean = np.asarray(stats["sum"] / count, dtype=np.float32)
-        variance = np.asarray(stats["sum_square"] / count - np.square(mean), dtype=np.float32)
-        std = np.sqrt(np.maximum(variance, float(normalization.get("eps", 1e-20))))
-        synthesis = {
-            "model_type": raw["tts_model"]["model_type"],
-            "dlayers": int(decoder["dlayers"]),
-            "dunits": int(decoder["dunits"]),
-            "odim": int(decoder["odim"]),
-            "threshold": float(decoder["threshold"]),
-            "reduction_factor": int(decoder["reduction_factor"]),
-            "maxlenratio": float(decoder["maxlenratio"]),
-            "minlenratio": float(decoder["minlenratio"]),
-            "cumulate_att_w": bool(decoder["cumulate_att_w"]),
-            "use_att_constraint": bool(decoder["use_att_constraint"]),
-            "norm_means": bool(normalization["norm_means"]),
-            "norm_vars": bool(normalization["norm_vars"]),
-            "mean": mean.tolist(),
-            "std": std.tolist(),
-        }
-        if synthesis["model_type"] != "Tacotron2":
-            raise RuntimeError("This Android renderer supports only Tacotron2 + HiFiGAN")
-        if synthesis["odim"] != len(synthesis["mean"]):
-            raise RuntimeError("Wrong normalization dimension")
-        if synthesis["reduction_factor"] != 1 or synthesis["use_att_constraint"]:
-            raise RuntimeError("Unsupported decoder configuration for Android")
-        expected_graphs = (
-            "tts_model_encoder.onnx", "tts_model_decoder.onnx",
-            "predecoder_0.onnx", "postdecoder.onnx", "HiFiGANVocoder.onnx")
-        for graph in expected_graphs:
-            if not (model_dir / "full" / graph).is_file():
-                raise RuntimeError("Missing exported ONNX submodel: " + graph)
-        # Supports multiple generated ONNX submodels for Tacotron2+HiFiGAN.
+        model_type = raw["tts_model"]["model_type"]
+        if model_type == "VITS":
+            graph = model_dir / "full" / "vits.onnx"
+            if not graph.is_file():
+                raise RuntimeError("VITS graph did not export correctly")
+            synthesis = {
+                "model_type": "VITS",
+                "graph": "onnx/full/vits.onnx",
+            }
+            architecture = "espnet-exported-vits"
+        elif model_type == "Tacotron2":
+            decoder = raw["tts_model"]["decoder"]
+            normalization = raw["normalize"]
+            stats = np.load(model_dir / "feats_stats.npz")
+            count = float(stats["count"])
+            mean = np.asarray(stats["sum"] / count, dtype=np.float32)
+            variance = np.asarray(stats["sum_square"] / count - np.square(mean), dtype=np.float32)
+            std = np.sqrt(np.maximum(variance, float(normalization.get("eps", 1e-20))))
+            synthesis = {
+                "model_type": "Tacotron2",
+                "dlayers": int(decoder["dlayers"]),
+                "dunits": int(decoder["dunits"]),
+                "odim": int(decoder["odim"]),
+                "threshold": float(decoder["threshold"]),
+                "reduction_factor": int(decoder["reduction_factor"]),
+                "maxlenratio": float(decoder["maxlenratio"]),
+                "minlenratio": float(decoder["minlenratio"]),
+                "cumulate_att_w": bool(decoder["cumulate_att_w"]),
+                "use_att_constraint": bool(decoder["use_att_constraint"]),
+                "norm_means": bool(normalization["norm_means"]),
+                "norm_vars": bool(normalization["norm_vars"]),
+                "mean": mean.tolist(),
+                "std": std.tolist(),
+            }
+            if synthesis["odim"] != len(synthesis["mean"]):
+                raise RuntimeError("Wrong normalization dimension")
+            if synthesis["reduction_factor"] != 1 or synthesis["use_att_constraint"]:
+                raise RuntimeError("Unsupported decoder configuration for Android")
+            expected_graphs = (
+                "tts_model_encoder.onnx", "tts_model_decoder.onnx",
+                "predecoder_0.onnx", "postdecoder.onnx", "HiFiGANVocoder.onnx")
+            for graph in expected_graphs:
+                if not (model_dir / "full" / graph).is_file():
+                    raise RuntimeError("Missing exported ONNX submodel: " + graph)
+            architecture = "espnet-exported-joint-text2wav"
+        else:
+            raise RuntimeError("Unsupported ONNX architecture: " + model_type)
+        print("Detected actual ONNX architecture:", model_type)
         digest = create_package(
             model_dir, Path(output), vocab, vecs, sample_rate,
-            architecture="espnet-exported-joint-text2wav",
+            architecture=architecture,
             smoke_verified=True, synthesis=synthesis,
         )
     print("Model pack:", output)
