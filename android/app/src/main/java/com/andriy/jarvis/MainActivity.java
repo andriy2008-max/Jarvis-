@@ -68,6 +68,7 @@ import java.util.List;
 public final class MainActivity extends Activity implements RecognitionListener {
     private static final int REQUEST_MICROPHONE = 101;
     private static final int REQUEST_TIMER_NOTIFICATIONS = 103;
+    private static final int REQUEST_AI_ATTACHMENT = 106;
     private static final int BG = Color.rgb(8, 14, 29);
     private static final int PANEL = Color.rgb(17, 27, 48);
     private static final int BORDER = Color.rgb(38, 57, 87);
@@ -577,6 +578,30 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (isWatchDevice) aiResetParams.topMargin = dp(6);
         else aiResetParams.leftMargin = dp(8);
         aiControls.addView(aiResetButton, aiResetParams);
+        // AI actions remain explicit: these never run simply from opening Jarvis.
+        LinearLayout aiTools = new LinearLayout(this);
+        aiTools.setOrientation(isCompact ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams toolsParams = new LinearLayout.LayoutParams(-1, -2);
+        toolsParams.topMargin = dp(8);
+        chatPanel.addView(aiTools, toolsParams);
+        String[] names = {"🌐 ШІ-пошук", "📎 Фото / файл", "🎨 Створити зображення"};
+        Runnable[] actions = {
+            () -> askAiFromInput("web"),
+            this::chooseAiAttachment,
+            () -> askAiFromInput("image"),
+        };
+        for (int n = 0; n < names.length; n++) {
+            Button button = secondaryButton(names[n], actions[n]);
+            button.setTextSize(TypedValue.COMPLEX_UNIT_SP, isCompact ? 10 : 11);
+            LinearLayout.LayoutParams p = isCompact
+                ? new LinearLayout.LayoutParams(-1, dp(41))
+                : new LinearLayout.LayoutParams(0, dp(44), 1f);
+            if (n > 0) {
+                if (isCompact) p.topMargin = dp(5);
+                else p.leftMargin = dp(5);
+            }
+            aiTools.addView(button, p);
+        }
 
         // Lite APK deliberately has NO accessibility service: do not misrepresent it.
         Button screenControlButton = secondaryButton(
@@ -1351,6 +1376,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
         bubble.addView(name);
         TextView body = makeText(message.trim(), isCompact ? 13 : 14, WHITE, Gravity.START, false);
         body.setLineSpacing(0f, 1.18f);
+        if ("Джерела".equals(who)) {
+            android.text.util.Linkify.addLinks(body, android.text.util.Linkify.WEB_URLS);
+            body.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
+        }
         LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(-1, -2);
         bodyParams.topMargin = dp(6);
         bubble.addView(body, bodyParams);
