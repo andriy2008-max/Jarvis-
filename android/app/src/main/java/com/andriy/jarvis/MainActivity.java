@@ -1913,13 +1913,19 @@ public final class MainActivity extends Activity implements RecognitionListener 
             return;
         }
         if (wasManual) {
-            manualHypothesis = "";
             processing = false;
+            if (!manualHypothesis.isEmpty()) {
+                if (manualTranscript.length() > 0) manualTranscript.append(' ');
+                manualTranscript.append(manualHypothesis);
+                observedManualWords(manualTranscript.toString());
+                manualHypothesis = "";
+            }
             if (manualStopRequested) {
                 finishManualCapture();
                 return;
             }
             if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                cancelSilenceCheck();
                 manualCapture = false;
                 resetListening("Надай дозвіл на мікрофон у налаштуваннях Android.");
                 return;
@@ -1933,6 +1939,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                 else JarvisLiveTranscript.update(TRANSCRIPT_OWNER,
                     manualTranscript.toString(), true, SystemClock.uptimeMillis());
+                cancelSilenceCheck();
                 manualCapture = false;
                 resetListening("Розпізнавання зупинилося через повторні помилки (" + error + ").");
                 if (manualTranscript.length() > 0) {
@@ -1948,7 +1955,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     manualTranscript.toString(), false, SystemClock.uptimeMillis());
             microphone.setText("■ Завершити та надіслати");
             face.setState("listening");
-            setStatus("Запис триває. Натисни ще раз, щоб надіслати.");
+            setStatus(speechPause.armed()
+                ? "Чекаю " + speechPauseSeconds() + " с тиші після слова."
+                : "Чекаю першого слова...");
             scheduleManualRestart(noSpeech ? 450L : 1100L);
             return;
         }
@@ -1993,7 +2002,20 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 if (!segment.isEmpty()) {
                     if (manualTranscript.length() > 0) manualTranscript.append(' ');
                     manualTranscript.append(segment);
+                    if (autoSilenceStop)
+                        speechPause.sawWords(manualTranscript.toString(), SystemClock.uptimeMillis());
+                    else
+                        observedManualWords(manualTranscript.toString());
                 }
+            }
+            // A late final result may include an additional word after an
+            // earlier partial. It must extend the countdown, not get cut off.
+            if (autoSilenceStop && !speechPause.expired(
+                SystemClock.uptimeMillis(), speechPauseSeconds())) {
+                autoSilenceStop = false;
+                manualStopRequested = false;
+                cancelSilenceCheck();
+                scheduleSilenceCheck();
             }
             if (manualStopRequested) {
                 finishManualCapture();
@@ -2002,7 +2024,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     manualTranscript.toString(), false, SystemClock.uptimeMillis());
                 microphone.setText("■ Завершити та надіслати");
                 face.setState("listening");
-                setStatus("Запис триває. Натисни ще раз, щоб надіслати.");
+                setStatus(speechPause.armed()
+                    ? "Пауза після слова: " + speechPauseSeconds() + " с."
+                    : "Чекаю першого слова...");
                 scheduleManualRestart(350L);
             }
             return;
@@ -2047,6 +2071,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             manualHypothesis = partial;
             partial = JarvisTranscriptCorrection.join(
                 manualTranscript.toString(), manualHypothesis);
+            observedManualWords(partial);
         } else {
             wakeHypothesis = partial;
         }
