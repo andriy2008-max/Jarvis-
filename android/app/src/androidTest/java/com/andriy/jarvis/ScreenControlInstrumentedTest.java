@@ -41,10 +41,17 @@ public final class ScreenControlInstrumentedTest {
             ScreenControlCommands.parse("натисни кнопку тестова кнопка"));
         assertTrue("Must reject action before user opt-in", notYet.contains("Спочатку"));
 
-        assertTrue(ScreenControlAccessibilityService.start().contains("увімкнено"));
+        final String[] enabled = new String[1];
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(
+            () -> enabled[0] = ScreenControlAccessibilityService.start());
+        assertTrue("Cannot show accessibility overlay: " + enabled[0],
+            enabled[0].contains("увімкнено"));
         assertTrue(ScreenControlAccessibilityService.isSessionActive());
-        String done = ScreenControlAccessibilityService.perform(
-            ScreenControlCommands.parse("натисни кнопку тестова кнопка"));
+        final String[] clicked = new String[1];
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() ->
+            clicked[0] = ScreenControlAccessibilityService.perform(
+                ScreenControlCommands.parse("натисни кнопку тестова кнопка")));
+        String done = clicked[0];
         assertEquals("Натиснув «тестова кнопка».", done);
         SystemClock.sleep(350);
         String changed = ScreenControlAccessibilityService.perform(
@@ -62,7 +69,8 @@ public final class ScreenControlInstrumentedTest {
             ScreenControlCommands.parse("натисни підтвердити"));
         assertTrue(denied.contains("не натискатиму"));
 
-        ScreenControlAccessibilityService.stop();
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(
+            () -> ScreenControlAccessibilityService.stop());
         assertFalse(ScreenControlAccessibilityService.isSessionActive());
     }
 }
