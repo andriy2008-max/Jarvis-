@@ -250,10 +250,10 @@ public final class FloatingJarvisService extends Service {
                     case MotionEvent.ACTION_UP:
                         if (holdAction != null) ui.removeCallbacks(holdAction);
                         if (swipingBack && !longPressed && !closing) {
-                            float dx = event.getRawX() - downRawX;
-                            float dy = event.getRawY() - downRawY;
+                            float swipeDx = event.getRawX() - downRawX;
+                            float swipeDy = event.getRawY() - downRawY;
                             if (JarvisTranscriptCorrection.isLeftSwipe(
-                                dx, dy, dp(28))) JarvisLiveTranscript.requestCorrection();
+                                swipeDx, swipeDy, dp(28))) JarvisLiveTranscript.requestCorrection();
                         } else if (dragging) persistPosition();
                         else if (!longPressed && !closing) v.performClick();
                         return true;
