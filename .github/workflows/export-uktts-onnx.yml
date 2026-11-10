@@ -33,6 +33,14 @@ jobs:
           # ONNX 1.14.x and protobuf 3.20.x are the compatible legacy export path.
           python -m pip install 'scipy==1.10.1' 'protobuf==3.20.3' 'onnx==1.14.1' 'onnxruntime==1.15.1'
           python -m pip check || true
+          # Ubuntu 26.04 refuses old ORT wheels marked with an executable stack.
+          # This only changes a native library flag in the temporary CI environment.
+          if ! command -v patchelf >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq patchelf
+          fi
+          ORT_SO="$(find "$(python -c 'import site; print(site.getsitepackages()[0])')/onnxruntime/capi" -name 'onnxruntime_pybind11_state*.so' -print -quit)"
+          if [ -n "$ORT_SO" ]; then patchelf --clear-execstack "$ORT_SO"; fi
       - name: Real ONNX synthesis of both voices
         run: |
           python -u tools/voice-export/export_voice_pack.py --cache-dir /tmp/uktts-v6-cache --output /tmp/jarvis-uktts-v6-onnx.zip
