@@ -61,14 +61,9 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     }
 
     public static String start() {
-        ScreenControlAccessibilityService s = connected.get();
-        if (s == null)
-            return "Спочатку ввімкни службу «Джарвіс — керування екраном» у Спеціальних можливостях Android.";
-        s.sessionActive = true;
-        s.showOverlay();
-        return s.sessionActive
-            ? "Керування екраном увімкнено. Відкрий потрібну програму й натисни плаваючий мікрофон Джарвіса. Довго натисни на нього, щоб зупинити."
-            : "Не вдалося показати плаваючу кнопку. Режим вимкнено.";
+        // Legacy entry also uses the ONE existing pixel face, not a second
+        // white Accessibility microphone button.
+        return startFromBubble();
     }
 
     /**
@@ -80,8 +75,14 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         ScreenControlAccessibilityService service = connected.get();
         if (service == null)
             return "Увімкни Джарвіс — керування екраном у Спеціальних можливостях Android.";
+        // Remove a stale microphone overlay left by an older invocation.
+        if (service.buttonOverlay != null && service.windows != null) {
+            try { service.windows.removeView(service.buttonOverlay); }
+            catch (Exception ignored) {}
+            service.buttonOverlay = null;
+        }
         service.sessionActive = true;
-        return "Керування екраном активне в плаваючому Джарвісі.";
+        return "Керування екраном активне в обличчі Джарвіса.";
     }
 
     public static String stop() {
