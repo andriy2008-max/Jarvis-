@@ -729,7 +729,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
         tts.setPitch((knownProfile || clearlyMale) ? 1.0f : 0.86f);
         tts.setSpeechRate(0.94f);
         if (namedVoice == null && (neuralSpeech == null || !neuralSpeech.isConfigured())) {
-            setStatus("Підключи TTS-сервер для голосу " + profileLabel(profile) + ". Зараз озвучує Android.");
+            String why = offlinePacks != null && offlinePacks.hasInstalledFiles()
+                ? "Офлайн-файли збережені, але синтез ще тестується."
+                : "Офлайн-пакет ще не підключений.";
+            setStatus(why + " Зараз озвучує Android.");
         }
     }
 
@@ -838,9 +841,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
         boolean hasDmytro = voiceForProfile(available, VoiceRanking.DMYTRO) != null;
         boolean hasLada = voiceForProfile(available, VoiceRanking.LADA) != null;
         boolean modelConfigured = neuralSpeech != null && neuralSpeech.isConfigured();
+        boolean offlineSaved = offlinePacks != null && offlinePacks.hasInstalledFiles();
         String[] labels = {
-            "Дмитро — чоловічий · " + (modelConfigured ? "сервер налаштовано" : hasDmytro ? "доступний через Android" : "потрібен сервер"),
-            "Лада — жіночий · " + (modelConfigured ? "сервер налаштовано" : hasLada ? "доступна через Android" : "потрібен сервер")
+            "Дмитро — чоловічий · " + (modelConfigured ? "сервер налаштовано" : hasDmytro ? "системний голос" : offlineSaved ? "файли офлайн збережені, рушій не готовий" : "не підключений"),
+            "Лада — жіночий · " + (modelConfigured ? "сервер налаштовано" : hasLada ? "системний голос" : offlineSaved ? "файли офлайн збережені, рушій не готовий" : "не підключений")
         };
         int checked = VoiceRanking.LADA.equals(selectedVoiceProfile()) ? 1 : 0;
         AlertDialog dialog = new AlertDialog.Builder(this)
