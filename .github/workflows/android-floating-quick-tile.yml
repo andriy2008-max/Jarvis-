@@ -61,8 +61,10 @@ jobs:
             adb shell cmd statusbar expand-settings
             adb shell cmd statusbar add-tile com.andriy.jarvis.preview/com.andriy.jarvis.JarvisQuickTileService
             sleep 4
-            adb shell cmd statusbar click-tile com.andriy.jarvis.preview/com.andriy.jarvis.JarvisQuickTileService
-            sleep 16
+            # Some emulator SystemUI builds don't deliver shell-generated tile taps
+            # until the tile is bound and the shade is re-expanded.
+            for attempt in 1 2 3 4; do adb shell cmd statusbar expand-settings; sleep 2; adb shell cmd statusbar click-tile com.andriy.jarvis.preview/com.andriy.jarvis.JarvisQuickTileService; sleep 5; if adb logcat -d -s JARVIS_FLOATING_QA:I '*:S' | grep -Fq 'orb_shown=true'; then break; fi; adb shell cmd statusbar collapse; sleep 1; done
+            sleep 4
             adb logcat -d -s JARVIS_FLOATING_QA:V AndroidRuntime:E '*:S' > /tmp/jarvis-tile.log
             cat /tmp/jarvis-tile.log
             adb shell dumpsys activity activities | grep -i -E 'jarvis|Resumed' | head -25 || true
