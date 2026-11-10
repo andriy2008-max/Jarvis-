@@ -3,6 +3,9 @@ package com.andriy.jarvis;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.StatusBarManager;
+import android.content.ComponentName;
+import android.graphics.drawable.Icon;
 import android.content.Context;
 import android.content.IntentFilter;
 import android.media.AudioManager;
@@ -529,6 +532,24 @@ public final class MainActivity extends Activity implements RecognitionListener 
         LinearLayout.LayoutParams screenControlParams = new LinearLayout.LayoutParams(-1, -2);
         screenControlParams.topMargin = dp(8);
         chatPanel.addView(screenControlButton, screenControlParams);
+
+        // Android Quick Settings shortcut: only the tiny floating face is shown,
+        // and the microphone starts only after tapping it.
+        if (!isWatchDevice) {
+            Button quickTileButton = secondaryButton(
+                "◉ Додати Джарвіса в швидкі налаштування",
+                this::requestJarvisQuickTile);
+            LinearLayout.LayoutParams tileParams = new LinearLayout.LayoutParams(-1, -2);
+            tileParams.topMargin = dp(8);
+            chatPanel.addView(quickTileButton, tileParams);
+
+            Button floatingButton = secondaryButton(
+                "🫧 Показати плаваюче обличчя",
+                () -> startActivity(new Intent(this, JarvisBubbleLauncherActivity.class)));
+            LinearLayout.LayoutParams floatParams = new LinearLayout.LayoutParams(-1, -2);
+            floatParams.topMargin = dp(6);
+            chatPanel.addView(floatingButton, floatParams);
+        }
 
         // Web quick-command chips, in responsive two-column rows.
         LinearLayout examplesPanel = panel();
@@ -1066,6 +1087,37 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         }
                     }
                 }).create();
+        showDialogWithoutWake(dialog);
+    }
+
+    private void requestJarvisQuickTile() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            StatusBarManager statusBar = getSystemService(StatusBarManager.class);
+            if (statusBar != null) {
+                try {
+                    statusBar.requestAddTileService(
+                        new ComponentName(this, JarvisQuickTileService.class),
+                        "Джарвіс",
+                        Icon.createWithResource(this, R.drawable.ic_launcher),
+                        getMainExecutor(),
+                        result -> {
+                            if (result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED)
+                                setStatus("Кнопку Джарвіса додано до швидких налаштувань.");
+                            else
+                                setStatus("Якщо кнопки немає, відкрий шторку → Редагувати → додай «Джарвіс».");
+                        });
+                    return;
+                } catch (Exception ignored) {
+                    // OEM may not offer requestAddTileService. Use manual editor.
+                }
+            }
+        }
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Додати Джарвіса у швидкі налаштування")
+            .setMessage("Потягни шторку зверху двічі, натисни «Редагувати» (олівець) " +
+                "і перетягни плитку «Джарвіс» у швидкі кнопки. " +
+                "Після натискання відкриється лише маленьке плаваюче обличчя.")
+            .setPositiveButton("Зрозуміло", null).create();
         showDialogWithoutWake(dialog);
     }
 
