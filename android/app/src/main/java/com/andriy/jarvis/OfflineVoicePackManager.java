@@ -315,26 +315,36 @@ public final class OfflineVoicePackManager {
             }
         }
         JSONObject synth = manifest.optJSONObject("synthesis");
-        if (synth == null || !"Tacotron2".equals(synth.optString("model_type")) ||
-            synth.optInt("dlayers") < 1 || synth.optInt("dlayers") > 8 ||
-            synth.optInt("dunits") < 64 || synth.optInt("dunits") > 2048 ||
-            synth.optInt("odim") < 32 || synth.optInt("odim") > 256 ||
-            synth.optInt("reduction_factor") != 1 ||
-            synth.optBoolean("use_att_constraint"))
-            throw new Exception("Недостатньо параметрів для локального Tacotron2.");
-        int melDims = synth.getInt("odim");
-        JSONArray mean = synth.optJSONArray("mean");
-        JSONArray std = synth.optJSONArray("std");
-        if (mean == null || std == null ||
-            mean.length() != melDims || std.length() != melDims)
-            throw new Exception("Невірні параметри нормалізації моделі.");
-        // Expected submodels for the ESPnet Tacotron2 + HiFiGAN mobile runner.
-        Set<String> requiredGraphs = new HashSet<>(java.util.Arrays.asList(
-            "onnx/full/tts_model_encoder.onnx",
-            "onnx/full/tts_model_decoder.onnx",
-            "onnx/full/predecoder_0.onnx",
-            "onnx/full/postdecoder.onnx",
-            "onnx/full/HiFiGANVocoder.onnx"));
+        if (synth == null) throw new Exception("Відсутній опис ONNX синтезу.");
+        String modelType = synth.optString("model_type");
+        Set<String> requiredGraphs;
+        if ("VITS".equals(modelType)) {
+            if (!"onnx/full/vits.onnx".equals(synth.optString("graph")))
+                throw new Exception("Невірний шлях до VITS.");
+            requiredGraphs = new HashSet<>(java.util.Collections.singletonList(
+                "onnx/full/vits.onnx"));
+        } else if ("Tacotron2".equals(modelType)) {
+            if (synth.optInt("dlayers") < 1 || synth.optInt("dlayers") > 8 ||
+                synth.optInt("dunits") < 64 || synth.optInt("dunits") > 2048 ||
+                synth.optInt("odim") < 32 || synth.optInt("odim") > 256 ||
+                synth.optInt("reduction_factor") != 1 ||
+                synth.optBoolean("use_att_constraint"))
+                throw new Exception("Недостатньо параметрів для локального Tacotron2.");
+            int melDims = synth.getInt("odim");
+            JSONArray mean = synth.optJSONArray("mean");
+            JSONArray std = synth.optJSONArray("std");
+            if (mean == null || std == null ||
+                mean.length() != melDims || std.length() != melDims)
+                throw new Exception("Невірні параметри нормалізації моделі.");
+            requiredGraphs = new HashSet<>(java.util.Arrays.asList(
+                "onnx/full/tts_model_encoder.onnx",
+                "onnx/full/tts_model_decoder.onnx",
+                "onnx/full/predecoder_0.onnx",
+                "onnx/full/postdecoder.onnx",
+                "onnx/full/HiFiGANVocoder.onnx"));
+        } else {
+            throw new Exception("Непідтримуваний тип ONNX: " + modelType);
+        }
         JSONArray files = manifest.optJSONArray("files");
         if (files == null || files.length() < 1 || files.length() > OfflineVoicePackRules.MAX_ENTRIES - 1)
             throw new Exception("Не вказано модельні файли.");
