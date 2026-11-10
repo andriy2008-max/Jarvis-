@@ -68,14 +68,13 @@ public final class FloatingJarvisService extends Service {
             if (face != null) face.showTranscript(words, active, untilMs);
         };
     private WindowManager.LayoutParams faceParams;
-    private android.widget.Button phoneMic;
-    private WindowManager.LayoutParams phoneMicParams;
     private final Runnable phoneModeListener = () -> ui.post(() -> {
         if (!FloatingJarvisService.this.closing) refreshPhoneModeUi();
     });
     private int displayWidth;
     private int displayHeight;
     private SpeechRecognizer recognizer;
+    private JarvisHeadsetAudioRouter headsetRoute;
     private boolean listening;
     private boolean recording;
     private boolean aiBusy;
@@ -112,6 +111,7 @@ public final class FloatingJarvisService extends Service {
 
     @Override public void onCreate() {
         super.onCreate();
+        headsetRoute = new JarvisHeadsetAudioRouter(this);
         JarvisPhoneMode.subscribe(phoneModeListener);
         packs = new OfflineVoicePackManager(this);
         offline = new OfflineSpeechClient(this, packs);
@@ -223,8 +223,13 @@ public final class FloatingJarvisService extends Service {
             } else toggleListening();
         });
         face.setOnLongClickListener(v -> {
-            Toast.makeText(this, "Плаваючий Джарвіс закрито.", Toast.LENGTH_SHORT).show();
-            stopSelf();
+            if (JarvisPhoneMode.isActive()) {
+                // One face only: tap exits Phone mode, hold starts voice control.
+                toggleListening();
+            } else {
+                Toast.makeText(this, "Плаваючий Джарвіс закрито.", Toast.LENGTH_SHORT).show();
+                stopSelf();
+            }
             return true;
         });
         int diameter = dp(JarvisOrbPlacement.supportedSize(
@@ -292,7 +297,6 @@ public final class FloatingJarvisService extends Service {
                                 startingY + Math.round(dy), topLimit(), bottomLimit());
                             try { windows.updateViewLayout(face, faceParams); }
                             catch (IllegalArgumentException ignored) { }
-                            positionPhoneMic();
                         }
                         return true;
                     case MotionEvent.ACTION_UP:
@@ -378,7 +382,6 @@ public final class FloatingJarvisService extends Service {
         restorePosition();
         try { windows.updateViewLayout(face, faceParams); }
         catch (IllegalArgumentException ignored) { }
-        positionPhoneMic();
     }
 
     @Override public void onConfigurationChanged(Configuration config) {
@@ -390,76 +393,20 @@ public final class FloatingJarvisService extends Service {
         if (face != null) face.setState(state);
     }
 
-    /**
-     * Phone icon tap exits the mode. A separate microphone remains available
-     * next to the icon for deliberate tap-to-speak screen commands.
+    /** Only the existing floating face changes into an 8-bit phone.
+     * Tap exits Phone mode, long-press activates the same microphone.
+     * Never create a second overlay icon or a microphone bubble.
      */
     private void refreshPhoneModeUi() {
-        if (windows == null || closing) return;
-        if (face != null) {
-            face.setContentDescription(JarvisPhoneMode.isActive()
-                ? "8-бітний телефон, натисни для виходу з керування"
-                : "8-бітне обличчя Джарвіса, натисни, щоб говорити.");
-            face.invalidate();
-        }
-        if (!JarvisPhoneMode.isActive() || face == null || faceParams == null) {
-            removePhoneMic();
-            return;
-        }
-        if (phoneMic == null) {
-            android.widget.Button mic = new android.widget.Button(this);
-            mic.setText("🎙");
-            mic.setTextSize(19f);
-            mic.setAllCaps(false);
-            mic.setContentDescription("Мікрофон у режимі «Телефон»: натисни, щоб говорити");
-            android.graphics.drawable.GradientDrawable bg =
-                new android.graphics.drawable.GradientDrawable();
-            bg.setColor(android.graphics.Color.rgb(12, 37, 64));
-            bg.setCornerRadius(dp(27));
-            bg.setStroke(dp(2), android.graphics.Color.rgb(107, 224, 249));
-            mic.setBackground(bg);
-            mic.setOnClickListener(v -> toggleListening());
-            int size = dp(50);
-            phoneMicParams = new WindowManager.LayoutParams(
-                size, size, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-                PixelFormat.TRANSLUCENT);
-            phoneMicParams.gravity = Gravity.TOP | Gravity.START;
-            phoneMic = mic;
-            positionPhoneMic();
-            try { windows.addView(mic, phoneMicParams); }
-            catch (Exception error) { phoneMic = null; phoneMicParams = null; }
-        } else positionPhoneMic();
-    }
-
-    private void positionPhoneMic() {
-        if (phoneMicParams == null || faceParams == null || windows == null) return;
-        updateDisplayBounds();
-        int size = phoneMicParams.width;
-        int x = faceParams.x >= displayWidth / 2 ?
-            faceParams.x - size - dp(5) :
-            faceParams.x + faceParams.width + dp(5);
-        phoneMicParams.x = Math.max(dp(4), Math.min(x, displayWidth - size - dp(4)));
-        phoneMicParams.y = Math.max(dp(32), Math.min(
-            faceParams.y + faceParams.height / 2 - size / 2,
-            displayHeight - size - dp(40)));
-        if (phoneMic != null) {
-            try { windows.updateViewLayout(phoneMic, phoneMicParams); }
-            catch (Exception ignored) { }
-        }
-    }
-
-    private void removePhoneMic() {
-        if (phoneMic != null && windows != null) {
-            try { windows.removeView(phoneMic); }
-            catch (Exception ignored) { }
-        }
-        phoneMic = null;
-        phoneMicParams = null;
+        if (windows == null || closing || face == null) return;
+        face.setContentDescription(JarvisPhoneMode.isActive()
+            ? "8-бітний телефон: коротко натисни для виходу, утримуй щоб говорити."
+            : "8-бітне обличчя Джарвіса: натисни, щоб говорити.");
+        face.invalidate();
     }
 
     private void abortPhoneSpeech() {
+        if (headsetRoute != null) headsetRoute.end();
         recording = false;
         listening = false;
         stopRequested = false;
@@ -599,6 +546,7 @@ public final class FloatingJarvisService extends Service {
     }
 
     private void sendPendingSpeech() {
+        if (headsetRoute != null) headsetRoute.end();
         cancelPendingSend();
         cancelCorrectionRestart();
         cancelSpeechTiming();
@@ -892,6 +840,7 @@ public final class FloatingJarvisService extends Service {
             listening = true;
             recognizerSessionActive = true;
             setFace("listening");
+            if (headsetRoute != null) headsetRoute.begin();
             recognizer.startListening(i);
             android.util.Log.i("JARVIS_FLOATING_QA", "mic_tap_started=true");
         } catch (Exception exception) {
@@ -1416,6 +1365,7 @@ public final class FloatingJarvisService extends Service {
         cancelPendingSend();
         cancelCorrectionRestart();
         cancelSpeechTiming();
+        if (headsetRoute != null) headsetRoute.end();
         if (sequences != null) sequences.cancel();
         if (spotifyPlayback != null) spotifyPlayback.cancel();
         if (screenModeStartedHere) ScreenControlAccessibilityService.stop();
@@ -1428,7 +1378,6 @@ public final class FloatingJarvisService extends Service {
         JarvisLiveTranscript.setCorrectionHandler(TRANSCRIPT_OWNER, null);
         JarvisLiveTranscript.unsubscribe(transcriptListener);
         JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-        removePhoneMic();
         if (face != null && windows != null) {
             try { windows.removeView(face); } catch (Exception ignored) { }
             face = null;
