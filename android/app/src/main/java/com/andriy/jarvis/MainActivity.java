@@ -47,6 +47,7 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.text.InputType;
@@ -169,7 +170,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (isWatchDevice) watchPhoneLink = new JarvisWearPhoneLink(this);
         isCompact = getResources().getConfiguration().smallestScreenWidthDp < 360;
         voiceEnabled = getPreferences(MODE_PRIVATE).getBoolean("voiceEnabled", true);
-        autoWakeEnabled = getPreferences(MODE_PRIVATE).getBoolean("autoWakeEnabled", true);
+        // Watch microphone is user-activated by face/stem key, not an always-on listener.
+        autoWakeEnabled = !isWatchDevice &&
+            getPreferences(MODE_PRIVATE).getBoolean("autoWakeEnabled", true);
         supportsOnDeviceRecognizer = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             SpeechRecognizer.isOnDeviceRecognitionAvailable(this);
         loadNotes();
