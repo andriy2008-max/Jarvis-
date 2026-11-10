@@ -19,6 +19,18 @@ public final class ScreenControlTestTarget extends Activity {
         namedButton.setText("Тестова кнопка");
         namedButton.setOnClickListener(v -> namedButton.setText("Знайдено"));
         content.addView(namedButton);
+
+        // Icon-only control; no visible "Пошук" label.
+        // Android's accessibility description is in English as in many apps.
+        Button searchIcon = new Button(this);
+        searchIcon.setText("🔎");
+        searchIcon.setContentDescription("Search");
+        searchIcon.setOnClickListener(v -> {
+            searchIcon.setText("Знайдено");
+            searchIcon.setContentDescription("Відкрито");
+        });
+        content.addView(searchIcon);
+
         for (int i = 0; i < 32; i++) {
             TextView row = new TextView(this);
             row.setText("Тестовий рядок " + i);
