@@ -11,11 +11,14 @@ public final class JarvisWearProtocol {
     public static final String ENTER = "enter";
     public static final String EXIT = "exit";
     public static final String COMMAND = "command";
+    public static final String SPOTIFY = "spotify";
+    public static final int SPOTIFY_ACK_TIMEOUT_MS = 145000;
 
     private JarvisWearProtocol() {}
 
     public static boolean validAction(String action) {
-        return ENTER.equals(action) || EXIT.equals(action) || COMMAND.equals(action);
+        return ENTER.equals(action) || EXIT.equals(action) || COMMAND.equals(action) ||
+            SPOTIFY.equals(action);
     }
 
     public static boolean validCommand(String command) {
