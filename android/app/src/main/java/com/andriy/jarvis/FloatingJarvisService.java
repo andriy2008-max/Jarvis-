@@ -82,6 +82,15 @@ public final class FloatingJarvisService extends Service {
     private boolean correctingWord;
     private Runnable pendingSend;
     private Runnable correctionRestart;
+    private final JarvisVoicePause speechPause = new JarvisVoicePause();
+    private Runnable silenceCheck;
+    private Runnable recognitionRestart;
+    private Runnable autoStopFallback;
+    private boolean stopRequested;
+    private boolean autoSilenceStop;
+    private boolean recognizerSessionActive;
+    private int recognizerFailures;
+    private String currentTtsId;
     private TextToSpeech tts;
     private OfflineVoicePackManager packs;
     private OfflineSpeechClient offline;
@@ -364,18 +373,102 @@ public final class FloatingJarvisService extends Service {
         }
     }
 
-    private void queueSpeechCommand() {
-        cancelPendingSend();
-        JarvisLiveTranscript.update(TRANSCRIPT_OWNER, speechDraft.toString(), false,
-            SystemClock.uptimeMillis());
-        setFace("thinking");
-        pendingSend = this::sendPendingSpeech;
-        ui.postDelayed(pendingSend, 5000L);
+    private int speechPauseSeconds() {
+        return JarvisVoicePause.seconds(getSharedPreferences(JarvisVoicePause.PREFS,
+            MODE_PRIVATE).getInt(JarvisVoicePause.KEY_SECONDS,
+                JarvisVoicePause.DEFAULT_SECONDS));
+    }
+
+    private void cancelSpeechTiming() {
+        if (silenceCheck != null) {
+            ui.removeCallbacks(silenceCheck);
+            silenceCheck = null;
+        }
+        if (recognitionRestart != null) {
+            ui.removeCallbacks(recognitionRestart);
+            recognitionRestart = null;
+        }
+        if (autoStopFallback != null) {
+            ui.removeCallbacks(autoStopFallback);
+            autoStopFallback = null;
+        }
+    }
+
+    private void observeWords(String text) {
+        if (recording && !stopRequested &&
+            speechPause.sawWords(text, SystemClock.uptimeMillis()))
+            scheduleSilenceCheck();
+    }
+
+    private void scheduleSilenceCheck() {
+        if (silenceCheck != null) ui.removeCallbacks(silenceCheck);
+        silenceCheck = null;
+        if (closing || !recording || stopRequested || !speechPause.armed()) return;
+        long left = speechPause.remainingMs(SystemClock.uptimeMillis(), speechPauseSeconds());
+        silenceCheck = () -> {
+            silenceCheck = null;
+            if (!recording || stopRequested || closing) return;
+            if (!speechPause.expired(SystemClock.uptimeMillis(), speechPauseSeconds())) {
+                scheduleSilenceCheck();
+                return;
+            }
+            stopRequested = true;
+            autoSilenceStop = true;
+            if (recognitionRestart != null) {
+                ui.removeCallbacks(recognitionRestart);
+                recognitionRestart = null;
+            }
+            setFace("thinking");
+            if (recognizerSessionActive) {
+                if (listening && recognizer != null) {
+                    listening = false;
+                    try { recognizer.stopListening(); }
+                    catch (Exception ignored) { sendPendingSpeech(); return; }
+                }
+                autoStopFallback = () -> {
+                    autoStopFallback = null;
+                    if (recording && autoSilenceStop) {
+                        if (!partialSpeech.isEmpty()) {
+                            String result = JarvisTranscriptCorrection.join(
+                                speechDraft.toString(), partialSpeech);
+                            speechDraft.setLength(0);
+                            speechDraft.append(result);
+                        }
+                        if (recognizer != null) {
+                            try { recognizer.cancel(); } catch (Exception ignored) {}
+                        }
+                        sendPendingSpeech();
+                    }
+                };
+                ui.postDelayed(autoStopFallback, 1700L);
+            } else {
+                sendPendingSpeech();
+            }
+        };
+        ui.postDelayed(silenceCheck, Math.max(25L, left));
+    }
+
+    private void restartAfterRecognizer(long delayMs) {
+        if (closing || !recording || stopRequested) return;
+        if (recognitionRestart != null) ui.removeCallbacks(recognitionRestart);
+        recognitionRestart = () -> {
+            recognitionRestart = null;
+            if (!closing && recording && !recognizerSessionActive && !stopRequested)
+                beginFloatingListening(true);
+        };
+        ui.postDelayed(recognitionRestart, delayMs);
     }
 
     private void sendPendingSpeech() {
         cancelPendingSend();
         cancelCorrectionRestart();
+        cancelSpeechTiming();
+        recording = false;
+        listening = false;
+        recognizerSessionActive = false;
+        stopRequested = false;
+        autoSilenceStop = false;
+        speechPause.reset("");
         String command = speechDraft.toString().trim();
         speechDraft.setLength(0);
         partialSpeech = "";
@@ -397,6 +490,10 @@ public final class FloatingJarvisService extends Service {
         String restored = JarvisTranscriptCorrection.removeLastWord(current);
         cancelPendingSend();
         cancelCorrectionRestart();
+        cancelSpeechTiming();
+        speechPause.reset(restored);
+        stopRequested = false;
+        autoSilenceStop = false;
         speechDraft.setLength(0);
         speechDraft.append(restored);
         partialSpeech = "";
@@ -410,6 +507,7 @@ public final class FloatingJarvisService extends Service {
         }
         recording = false;
         listening = false;
+        recognizerSessionActive = false;
         JarvisLiveTranscript.update(TRANSCRIPT_OWNER, restored, false,
             SystemClock.uptimeMillis());
         setFace("listening");
@@ -436,14 +534,31 @@ public final class FloatingJarvisService extends Service {
             return;
         }
         if (recording) {
+            stopRequested = true;
+            autoSilenceStop = false;
+            cancelSpeechTiming();
             if (recognizer != null && listening) {
                 listening = false;
                 setFace("thinking");
-                recognizer.stopListening();
+                try { recognizer.stopListening(); }
+                catch (Exception ignored) { sendPendingSpeech(); }
+            } else if (!recognizerSessionActive) {
+                if (!partialSpeech.isEmpty()) {
+                    String combined = JarvisTranscriptCorrection.join(
+                        speechDraft.toString(), partialSpeech);
+                    speechDraft.setLength(0);
+                    speechDraft.append(combined);
+                }
+                sendPendingSpeech();
             }
             return;
         }
         cancelCorrectionRestart();
+        cancelSpeechTiming();
+        stopRequested = false;
+        autoSilenceStop = false;
+        speechPause.reset(correctingWord ? speechDraft.toString() : "");
+        recognizerFailures = 0;
         beginFloatingListening(correctingWord);
     }
 
