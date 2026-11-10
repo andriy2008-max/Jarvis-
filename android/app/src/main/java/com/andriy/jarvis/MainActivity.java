@@ -57,6 +57,7 @@ import java.util.List;
 
 public final class MainActivity extends Activity implements RecognitionListener {
     private static final int REQUEST_MICROPHONE = 101;
+    private static final int REQUEST_TIMER_NOTIFICATIONS = 103;
     private static final int BG = Color.rgb(8, 14, 29);
     private static final int PANEL = Color.rgb(17, 27, 48);
     private static final int BORDER = Color.rgb(38, 57, 87);
@@ -68,9 +69,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private static final int RED = Color.rgb(255, 124, 145);
 
     private final ArrayList<String> notes = new ArrayList<>();
-    private final Handler timerHandler = new Handler(Looper.getMainLooper());
-    private Runnable timerCallback;
-    private long timerDeadlineMs = 0L;
+    // The timer is scheduled with AlarmManager and survives closing this activity.
+    private int pendingTimerSeconds;
 
     private SpeechRecognizer recognizer;
     private boolean recognizerUsesOnDevice;
@@ -116,6 +116,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         super.onCreate(state);
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
+        if (state != null) pendingTimerSeconds = state.getInt("pending_timer_seconds", 0);
         isWatchDevice = getPackageManager().hasSystemFeature(PackageManager.FEATURE_WATCH);
         isCompact = getResources().getConfiguration().smallestScreenWidthDp < 360;
         voiceEnabled = getPreferences(MODE_PRIVATE).getBoolean("voiceEnabled", true);
@@ -188,6 +189,17 @@ public final class MainActivity extends Activity implements RecognitionListener 
         autoWakePausedForErrors = false;
         autoWakeErrors = 0;
         scheduleAutoWake(650L);
+        if (TimerScheduler.consumeCompletion(this)) {
+            appendDialogue("Джарвіс", "Час вийшов! Фоновий таймер завершився.");
+            setStatus("Час вийшов! Таймер завершено.");
+        }
+        resumePendingTimerIfAllowed();
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle out) {
+        out.putInt("pending_timer_seconds", pendingTimerSeconds);
+        super.onSaveInstanceState(out);
     }
 
     @Override
@@ -333,7 +345,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
         topbar.addView(brand);
 
-        TextView version = makeText("● V 0.1.7", isCompact ? 11 : 12, GREEN, Gravity.CENTER, false);
+        TextView version = makeText("● V 0.1.9", isCompact ? 11 : 12, GREEN, Gravity.CENTER, false);
         version.setBackground(roundedFill(Color.TRANSPARENT, Color.rgb(43, 131, 108), 99));
         version.setPadding(dp(10), dp(6), dp(10), dp(6));
         if (!isWatchDevice) topbar.addView(version);
@@ -561,7 +573,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         noteHintParams.topMargin = dp(12);
         notesPanel.addView(noteHint, noteHintParams);
 
-        TextView footer = makeText("JARVIS 0.1.7 • Вільна розмова із ШІ після підключення сервера. Активація «Джарвіс» доступна лише у відкритій програмі за підтримки локального розпізнавання Android.",
+        TextView footer = makeText("JARVIS 0.1.9 • Вільна розмова із ШІ після підключення сервера. Активація «Джарвіс» доступна лише у відкритій програмі за підтримки локального розпізнавання Android.",
             isCompact ? 11 : 12, Color.rgb(127, 154, 184), Gravity.CENTER, false);
         footer.setLineSpacing(0f, 1.25f);
         LinearLayout.LayoutParams footerParams = new LinearLayout.LayoutParams(-1, -2);
@@ -1050,7 +1062,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
     @Override
     public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(code, permissions, results);
-        if (code == REQUEST_MICROPHONE) {
+        if (code == REQUEST_TIMER_NOTIFICATIONS) {
+            if (results.length == 0 || results[0] != PackageManager.PERMISSION_GRANTED) {
+                setStatus("Сповіщення таймера заборонені. Вібрація та сигнал можуть працювати, але повідомлення не з'явиться.");
+            }
+        } else if (code == REQUEST_MICROPHONE) {
             if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
                 beginListening();
             } else {
@@ -1388,41 +1404,68 @@ public final class MainActivity extends Activity implements RecognitionListener 
         return remainder + " с";
     }
 
-    private void cancelTimerInternal() {
-        if (timerCallback != null) timerHandler.removeCallbacks(timerCallback);
-        timerCallback = null;
-        timerDeadlineMs = 0L;
+
+    private void maybeRequestTimerNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED) return;
+        if (!getPreferences(MODE_PRIVATE).getBoolean("askedTimerNotifications", false)) {
+            getPreferences(MODE_PRIVATE).edit().putBoolean("askedTimerNotifications", true).apply();
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                REQUEST_TIMER_NOTIFICATIONS);
+        }
+    }
+
+    private void openExactAlarmSettings() {
+        try {
+            Intent settings = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                Uri.parse("package:" + getPackageName()));
+            startActivity(settings);
+        } catch (Exception error) {
+            try {
+                startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:" + getPackageName())));
+            } catch (Exception ignored) {
+                setStatus("Не вдалося відкрити налаштування. Увімкни «Будильники й нагадування» вручну.");
+            }
+        }
+    }
+
+    /** Called after the user returns from the exact alarm permission screen. */
+    private void resumePendingTimerIfAllowed() {
+        if (pendingTimerSeconds <= 0 || !TimerScheduler.canScheduleExact(this)) return;
+        int seconds = pendingTimerSeconds;
+        pendingTimerSeconds = 0;
+        String message = startTimer(seconds);
+        appendDialogue("Джарвіс", message);
+        setStatus(message);
     }
 
     private String startTimer(int seconds) {
-        if (seconds <= 0) return "Можна встановити таймер від 1 секунди до 3 годин.";
-        cancelTimerInternal();
-        timerDeadlineMs = SystemClock.elapsedRealtime() + seconds * 1000L;
-        timerCallback = () -> {
-            timerCallback = null;
-            timerDeadlineMs = 0L;
-            String finished = "Час вийшов! Таймер завершено.";
-            appendDialogue("Джарвіс", finished);
-            setStatus(finished);
-            if (voiceEnabled && tts != null) {
-                tts.speak(finished, TextToSpeech.QUEUE_FLUSH, null,
-                    "jarvis-timer-" + SystemClock.uptimeMillis());
-            }
-        };
-        timerHandler.postDelayed(timerCallback, seconds * 1000L);
-        return "Таймер на " + timerLabel(seconds) + " запущено. Він працює, поки застосунок активний.";
+        if (!TimerRules.valid(seconds))
+            return "Можна встановити таймер від 1 секунди до 3 годин.";
+        if (!TimerScheduler.canScheduleExact(this)) {
+            pendingTimerSeconds = seconds;
+            openExactAlarmSettings();
+            return "Для точного таймера у фоні дозволь «Будильники й нагадування». Після дозволу таймер запуститься автоматично.";
+        }
+        boolean started = TimerScheduler.start(this, seconds);
+        if (!started) return "Не вдалося запустити системний таймер. Перевір дозвіл на будильники.";
+        maybeRequestTimerNotificationPermission();
+        return "Таймер на " + timerLabel(seconds) +
+            " запущено. Він працює у фоні; після завершення — сильна вібрація і сигнал гучності дзвінка.";
     }
 
     private String cancelTimer() {
-        if (timerCallback == null) return "Активного таймера немає.";
-        cancelTimerInternal();
-        return "Таймер скасовано.";
+        boolean cancelled = TimerScheduler.cancel(this);
+        pendingTimerSeconds = 0;
+        return cancelled ? "Таймер скасовано." : "Активного таймера немає.";
     }
 
     private String timerRemaining() {
-        if (timerCallback == null) return "Активного таймера немає.";
-        long remaining = Math.max(0L,
-            (timerDeadlineMs - SystemClock.elapsedRealtime() + 999L) / 1000L);
+        long remaining = TimerScheduler.remainingSeconds(this);
+        if (remaining < 0) return "Активного таймера немає.";
+        if (remaining == 0) return "Час таймера вийшов; очікую системне сповіщення.";
         return "До завершення таймера: " + timerLabel(remaining) + ".";
     }
 
@@ -1737,7 +1780,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     protected void onDestroy() {
         cancelAutoWakeSchedule();
         wakeConversation.end();
-        cancelTimerInternal();
+        // Never cancel AlarmManager timers when Android destroys the UI.
         if (deviceActions != null) deviceActions.close();
         if (aiChatClient != null) aiChatClient.close();
         if (recognizer != null) recognizer.destroy();

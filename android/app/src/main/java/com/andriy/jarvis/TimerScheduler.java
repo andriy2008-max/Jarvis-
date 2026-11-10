@@ -87,11 +87,11 @@ public final class TimerScheduler {
         boolean active = prefs(c).getLong(ID, 0L) != 0L;
         cancelScheduled(c);
         prefs(c).edit().remove(ID).remove(END).remove(FINISHED).commit();
-        c.stopService(new Intent(c, TimerAlertService.class));
+        boolean ringing = c.stopService(new Intent(c, TimerAlertService.class));
         NotificationManager notifications =
             (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
         if (notifications != null) notifications.cancel(ALERT_NOTIFICATION);
-        return active;
+        return active || ringing;
     }
 
     public static synchronized long remainingSeconds(Context context) {
