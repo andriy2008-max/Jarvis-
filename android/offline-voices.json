@@ -1,17 +1,18 @@
 {
   "schema": 1,
-  "ready": false,
+  "ready": true,
   "format": "jarvis-espnet-onnx-v1",
   "voices": [
     "dmytro",
     "lada"
   ],
-  "url": "",
-  "sha256": "",
-  "notes": "Real Dmytro/Lada VITS passed Android 11/15 x86_64 emulator offline and same-package update tests. Physical ARM64 phone + signed stable release + public HTTPS pack delivery are still unverified. Do NOT mark ready or publish the draft pack.",
+  "url": "https://github.com/andriy2008-max/Jarvis-/releases/download/jarvis-offline-voices-v6-experimental/jarvis-uktts-v6-onnx.zip",
+  "sha256": "12fdd6521ae864f5eafac2d5a205d32f299ba65229800dafbd647b4a3ff8e0d5",
+  "notes": "Experimental verified Android 11/15 emulator voices, not certified on a physical ARM64 phone. Manual opt-in only via Jarvis offline voice settings; requires ~300MB+ free for ZIP and extraction. MIT model license acknowledged. Does not certify stable release.",
   "emulator_android_api_levels_passed": [
     30,
     35
   ],
-  "phone_arm64_verified": false
+  "phone_arm64_verified": false,
+  "channel": "android-qa-prerelease"
 }
