@@ -33,6 +33,7 @@ public final class SpotifyPlaybackController {
     private long stageStart;
     private int scrolled;
     private boolean active;
+    private JarvisPhoneModeManager.Lease temporaryControl;
 
     public SpotifyPlaybackController(Context context) {
         this.context = context;
@@ -47,23 +48,29 @@ public final class SpotifyPlaybackController {
                 "Spotify вже виконує попередню команду. Скажи «Скасуй Spotify».");
             return;
         }
-        if (kind != SpotifyMusicCommands.Kind.OPEN &&
-            !ScreenControlAccessibilityService.isSessionActive()) {
-            if (callback != null) callback.onFinished(false,
-                "Для вибору музики в Spotify увімкни «Керування екраном» у Джарвісі " +
-                "та надай дозвіл Спеціальних можливостей Android. Тоді повтори команду.");
-            return;
-        }
+        // Check Spotify installation BEFORE activating any Accessibility session.
         Intent launch = context.getPackageManager().getLaunchIntentForPackage(PACKAGE);
         if (launch == null) {
             if (callback != null) callback.onFinished(false,
                 "Не знайшов Spotify на телефоні. Спочатку встанови його та увійди в акаунт.");
             return;
         }
+        JarvisPhoneModeManager.Lease lease = null;
+        if (kind != SpotifyMusicCommands.Kind.OPEN) {
+            // An explicit voice request grants permission to use the
+            // ALREADY user-enabled Android Accessibility service for this task.
+            // A manual/watch session is borrowed and NEVER closed by this task.
+            lease = JarvisPhoneModeManager.acquireForCommand(context);
+            if (!lease.granted) {
+                if (callback != null) callback.onFinished(false, lease.message);
+                return;
+            }
+        }
         try {
             launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             context.startActivity(launch);
         } catch (Exception error) {
+            JarvisPhoneModeManager.releaseForCommand(lease);
             if (callback != null) callback.onFinished(false,
                 "Android не дозволив відкрити Spotify.");
             return;
@@ -72,10 +79,11 @@ public final class SpotifyPlaybackController {
             if (callback != null) callback.onFinished(true, "Відкриваю Spotify.");
             return;
         }
+        temporaryControl = lease;
         requested = kind;
         listener = callback;
         active = true;
-        move(Stage.WAIT_APP, "Очікую відкриття Spotify...");
+        move(Stage.WAIT_APP, "Режим «Телефон»: очікую відкриття Spotify...");
         handler.post(poll);
     }
 
@@ -197,6 +205,11 @@ public final class SpotifyPlaybackController {
         Listener cb = listener;
         listener = null;
         stage = null;
+        JarvisPhoneModeManager.Lease lease = temporaryControl;
+        temporaryControl = null;
+        // Always restore Jarvis' normal face, even on errors/cancellation.
+        // User-started or watch-owned sessions remain active.
+        JarvisPhoneModeManager.releaseForCommand(lease);
         if (cb != null) cb.onFinished(success, summary);
     }
 }
