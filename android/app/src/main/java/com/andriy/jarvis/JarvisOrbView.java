@@ -20,7 +20,7 @@ public final class JarvisOrbView extends View {
     private boolean transcribing;
     private long showRecognizedUntilMs;
     private final TextPaint transcriptPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
-    private final int cyan = Color.rgb(114, 235, 255);
+    private int accent = Color.rgb(114, 235, 255);
     private final int green = Color.rgb(107, 232, 191);
 
     public JarvisOrbView(Context context) {
@@ -28,6 +28,16 @@ public final class JarvisOrbView extends View {
         setContentDescription("Плаваюче 8-бітне обличчя Джарвіса. Натисни, щоб говорити.");
         setClickable(true);
         setFocusable(true);
+    }
+
+    /** User-selected color, applied immediately without rebuilding the overlay. */
+    public void setAccentStyle(int style) {
+        switch (style) {
+            case 1: accent = Color.rgb(99, 248, 197); break; // turquoise
+            case 2: accent = Color.rgb(197, 152, 255); break; // violet
+            default: accent = Color.rgb(114, 235, 255); break; // classic blue
+        }
+        invalidate();
     }
 
     public void setState(String state) {
@@ -125,7 +135,7 @@ public final class JarvisOrbView extends View {
         canvas.drawCircle(cx, cy, orb, paint);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(2.5f * dp);
-        paint.setColor("listening".equals(expression) ? green : cyan);
+        paint.setColor("listening".equals(expression) ? green : accent);
         canvas.drawCircle(cx, cy, orb, paint);
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(Color.rgb(217, 254, 255));
