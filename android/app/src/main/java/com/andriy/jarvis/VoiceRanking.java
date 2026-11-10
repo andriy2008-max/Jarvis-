@@ -16,7 +16,7 @@ public final class VoiceRanking {
         if (name == null) return false;
         String n = name.toLowerCase(Locale.ROOT);
         // Android engines are not required to label gender in the voice name.
-        return n.matches(".*(?:^|[\\\\W_])" + token + "(?:[\\\\W_]|$).*");
+        return ("-" + n.replaceAll("[^\\p{L}]+", "-") + "-").contains("-" + token + "-");
     }
 
     public static boolean labeledMale(String voiceName) {
