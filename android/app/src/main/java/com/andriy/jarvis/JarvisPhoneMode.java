@@ -22,6 +22,7 @@ public final class JarvisPhoneMode {
         String normalized = spoken.trim()
             .toLowerCase(java.util.Locale.forLanguageTag("uk-UA"))
             .replaceAll("[.,!?;:—]+$", "").trim()
+            .replaceAll("[,;:—]+", " ")
             .replaceAll("\\s+", " ");
         if (normalized.equals("телефон") || normalized.equals("режим телефон") ||
             normalized.equals("режим телефона") ||
