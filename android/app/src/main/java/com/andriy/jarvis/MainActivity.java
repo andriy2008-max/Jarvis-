@@ -1443,19 +1443,46 @@ public final class MainActivity extends Activity implements RecognitionListener 
         });
         face.setOnTouchListener(new View.OnTouchListener() {
             float startX, startY;
+            boolean held;
+            Runnable holdAction;
+            private void cancelHold() {
+                if (holdAction != null) wakeHandler.removeCallbacks(holdAction);
+                holdAction = null;
+            }
             @Override public boolean onTouch(View view, MotionEvent event) {
                 switch (event.getActionMasked()) {
                     case MotionEvent.ACTION_DOWN:
                         startX = event.getX();
                         startY = event.getY();
+                        held = false;
+                        cancelHold();
+                        if (isWatchDevice && JarvisPhoneMode.isActive()) {
+                            // Samsung may reserve its hardware stem button.
+                            // Hold the phone icon to speak; tap still exits.
+                            holdAction = () -> {
+                                if (JarvisPhoneMode.isActive() && foreground) {
+                                    held = true;
+                                    toggleListening();
+                                }
+                            };
+                            wakeHandler.postDelayed(holdAction,
+                                android.view.ViewConfiguration.getLongPressTimeout());
+                        }
+                        return true;
+                    case MotionEvent.ACTION_MOVE:
+                        if (Math.hypot(event.getX() - startX,
+                            event.getY() - startY) > dp(18)) cancelHold();
                         return true;
                     case MotionEvent.ACTION_UP:
+                        cancelHold();
+                        if (held) return true;
                         if (JarvisTranscriptCorrection.isLeftSwipe(
                             event.getX() - startX, event.getY() - startY, dp(38))) {
                             JarvisLiveTranscript.requestCorrection();
                         } else view.performClick();
                         return true;
                     case MotionEvent.ACTION_CANCEL:
+                        cancelHold();
                         return true;
                     default:
                         return true;
