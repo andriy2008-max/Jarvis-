@@ -72,7 +72,8 @@ public final class OfflineVoicesInstrumentedTest {
             assertEquals(44, in.read(hdr));
             assertEquals("RIFF", new String(hdr, 0, 4, "US-ASCII"));
             assertEquals("WAVE", new String(hdr, 8, 4, "US-ASCII"));
-            assertEquals(0, hdr[20] == 1 ? 0 : 1); // 16-bit PCM
+            assertEquals(1, hdr[20] & 0xff); // little-endian PCM format
+            assertEquals(0, hdr[21] & 0xff);
             int hz = (hdr[24] & 0xff) | ((hdr[25] & 0xff) << 8) |
                 ((hdr[26] & 0xff) << 16) | ((hdr[27] & 0xff) << 24);
             assertEquals(22050, hz);
@@ -90,12 +91,15 @@ public final class OfflineVoicesInstrumentedTest {
             }
             assertTrue(voice + " appears silent", sum > samples * 30L);
         }
-        try (MediaPlayer player = new MediaPlayer()) {
+        MediaPlayer player = new MediaPlayer();
+        try {
             player.setDataSource(file.getAbsolutePath());
             player.prepare();
             assertTrue("Android cannot decode generated WAV", player.getDuration() > 0);
             player.start();
             player.stop();
+        } finally {
+            player.release();
         }
     }
 
