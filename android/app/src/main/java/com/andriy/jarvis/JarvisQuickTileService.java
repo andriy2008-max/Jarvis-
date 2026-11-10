@@ -23,6 +23,7 @@ public final class JarvisQuickTileService extends TileService {
 
     @Override public void onClick() {
         super.onClick();
+        android.util.Log.i("JARVIS_FLOATING_QA", "tile_clicked=true");
         if (isLocked()) {
             unlockAndRun(this::openBubble);
         } else {
@@ -31,6 +32,7 @@ public final class JarvisQuickTileService extends TileService {
     }
 
     private void openBubble() {
+        android.util.Log.i("JARVIS_FLOATING_QA", "tile_open_requested=true");
         Intent intent = new Intent(this, JarvisBubbleLauncherActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
             Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
