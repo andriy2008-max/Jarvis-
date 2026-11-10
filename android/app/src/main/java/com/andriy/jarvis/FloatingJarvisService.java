@@ -71,7 +71,7 @@ public final class FloatingJarvisService extends Service {
     private android.widget.Button phoneMic;
     private WindowManager.LayoutParams phoneMicParams;
     private final Runnable phoneModeListener = () -> ui.post(() -> {
-        if (!closing) refreshPhoneModeUi();
+        if (!FloatingJarvisService.this.closing) refreshPhoneModeUi();
     });
     private int displayWidth;
     private int displayHeight;
