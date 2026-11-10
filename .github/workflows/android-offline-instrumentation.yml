@@ -2,14 +2,7 @@ name: Android real offline voices instrumentation (test only)
 
 # Builds temporary debug + test packages; NEVER signs/releases the user-facing APK.
 on:
-  push:
-    paths:
-      - '.github/workflows/android-offline-instrumentation.yml'
-      - 'android/app/src/androidTest/**'
-      - 'android/app/src/main/java/com/andriy/jarvis/OfflineOnnxSynthesizer.java'
-      - 'android/app/src/main/java/com/andriy/jarvis/UkrainianVoiceText.java'
-      - 'android/app/src/main/java/com/andriy/jarvis/OfflineVoicePackManager.java'
-      - 'android/app/build.gradle'
+  # Manually triggered only after an explicit user instruction. No APK jobs on push.
   workflow_dispatch:
 
 permissions:
