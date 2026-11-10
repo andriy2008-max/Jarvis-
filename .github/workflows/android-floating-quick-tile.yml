@@ -57,14 +57,21 @@ jobs:
             adb shell pm grant com.andriy.jarvis.preview android.permission.RECORD_AUDIO
             adb shell input keyevent 82
             adb logcat -c
+            # Tile must enter SystemUI's listening state before click-tile works.
+            adb shell cmd statusbar expand-settings
             adb shell cmd statusbar add-tile com.andriy.jarvis.preview/com.andriy.jarvis.JarvisQuickTileService
-            sleep 3
+            sleep 4
             adb shell cmd statusbar click-tile com.andriy.jarvis.preview/com.andriy.jarvis.JarvisQuickTileService
-            sleep 6
+            sleep 7
             adb logcat -d -s JARVIS_FLOATING_QA:I AndroidRuntime:E '*:S' > /tmp/jarvis-tile.log
             cat /tmp/jarvis-tile.log
+            adb shell dumpsys activity activities | grep -i -E 'jarvis|Resumed' | head -25 || true
+            adb shell dumpsys activity services | grep -i -E 'Jarvis|Floating' | head -25 || true
+            adb logcat -d -s ActivityTaskManager:I SystemUI:W AndroidRuntime:E '*:S' | tail -35 || true
+            grep -Fq 'JARVIS_FLOATING_QA: tile_clicked=true' /tmp/jarvis-tile.log
             grep -Fq 'JARVIS_FLOATING_QA: orb_shown=true' /tmp/jarvis-tile.log
             # A second tile tap must not open the large MainActivity or duplicate the orb.
+            adb shell cmd statusbar expand-settings
             adb shell cmd statusbar click-tile com.andriy.jarvis.preview/com.andriy.jarvis.JarvisQuickTileService
             sleep 3
             adb logcat -d -s JARVIS_FLOATING_QA:I '*:S' | grep -F 'orb_shown=true'
