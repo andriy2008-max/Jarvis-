@@ -88,6 +88,33 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         return "Керування екраном зупинено.";
     }
 
+    /**
+     * Read only the currently visible app identity for a user-requested
+     * sequential command. No screen text is transmitted or persisted.
+     */
+    public static String visibleExternalPackage() {
+        ScreenControlAccessibilityService service = connected.get();
+        if (service == null || !service.sessionActive) return null;
+        AccessibilityNodeInfo root = service.currentExternalRoot();
+        if (root == null || root.getPackageName() == null) return null;
+        return root.getPackageName().toString();
+    }
+
+    public static boolean focusedEditableIn(String packageName) {
+        ScreenControlAccessibilityService service = connected.get();
+        if (service == null || !service.sessionActive || packageName == null)
+            return false;
+        AccessibilityNodeInfo root = service.currentExternalRoot();
+        if (root == null || root.getPackageName() == null ||
+            !packageName.equals(root.getPackageName().toString())) return false;
+        AccessibilityNodeInfo focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+        if (focused == null || !focused.isEditable() || !focused.isFocused() ||
+            !focused.isVisibleToUser() || !focused.isEnabled() ||
+            focused.isPassword() || isSensitiveInputType(focused.getInputType()) ||
+            isSensitiveFieldLabel(focused)) return false;
+        return packageName.contentEquals(focused.getPackageName());
+    }
+
     public static String perform(ScreenControlCommands.Action action) {
         ScreenControlAccessibilityService s = connected.get();
         if (s == null)
