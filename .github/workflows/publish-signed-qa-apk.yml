@@ -2,9 +2,7 @@ name: Publish signed Jarvis QA APK for phone download
 
 # Only the signed QA APK; NOT a stable release. Run once on workflow creation.
 on:
-  push:
-    paths:
-      - '.github/workflows/publish-signed-qa-apk.yml'
+  # Manually triggered only after an explicit user instruction. No APK jobs on push.
   workflow_dispatch:
 
 permissions:
