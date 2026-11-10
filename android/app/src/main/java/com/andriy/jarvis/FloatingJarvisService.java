@@ -157,6 +157,8 @@ public final class FloatingJarvisService extends Service {
         windows = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         if (windows == null) throw new IllegalStateException("No WindowManager");
         face = new JarvisOrbView(this);
+        face.setAccentStyle(getSharedPreferences(ORB_PREFS, MODE_PRIVATE)
+            .getInt("accent_style", 0));
         face.setOnClickListener(v -> {
             android.util.Log.i("JARVIS_FLOATING_QA", "face_tapped=true");
             toggleListening();
@@ -280,6 +282,8 @@ public final class FloatingJarvisService extends Service {
 
     private void resizeFace() {
         if (face == null || faceParams == null || windows == null) return;
+        face.setAccentStyle(getSharedPreferences(ORB_PREFS, MODE_PRIVATE)
+            .getInt("accent_style", 0));
         updateDisplayBounds();
         int diameter = dp(JarvisOrbPlacement.supportedSize(
             getSharedPreferences(ORB_PREFS, MODE_PRIVATE).getInt("diameter_dp", 112)));
