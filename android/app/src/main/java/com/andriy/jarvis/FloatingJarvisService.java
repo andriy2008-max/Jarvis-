@@ -77,6 +77,7 @@ public final class FloatingJarvisService extends Service {
     private OfflineSpeechClient offline;
     private NeuralSpeechClient neural;
     private AiChatClient ai;
+    private JarvisSequenceExecutor sequences;
 
     public static boolean isShowing() { return showing; }
 
@@ -86,6 +87,7 @@ public final class FloatingJarvisService extends Service {
         offline = new OfflineSpeechClient(this, packs);
         neural = new NeuralSpeechClient(this);
         ai = new AiChatClient(this);
+        sequences = new JarvisSequenceExecutor(this);
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS && tts != null) {
                 tts.setLanguage(Locale.forLanguageTag("uk-UA"));
@@ -317,6 +319,10 @@ public final class FloatingJarvisService extends Service {
 
     private void toggleListening() {
         if (closing) return;
+        if (sequences != null && sequences.isRunning()) {
+            sequences.cancel();
+            return;
+        }
         if (aiBusy) {
             message("Джарвіс ще опрацьовує попередню команду.");
             return;
@@ -415,6 +421,26 @@ public final class FloatingJarvisService extends Service {
 
     private void executeCommand(String raw) {
         if (closing) return;
+
+        JarvisCommandSequence.Plan plan = JarvisCommandSequence.parse(raw);
+        if (plan != null && (!plan.valid() || plan.multiple() ||
+            ScreenControlAccessibilityService.isSessionActive())) {
+            if (!plan.valid()) {
+                reply(plan.error);
+                return;
+            }
+            // Every multi-step screen workflow is gated by an explicit
+            // Accessibility consent session; no hidden background control.
+            sequences.start(plan, new JarvisSequenceExecutor.Listener() {
+                @Override public void onProgress(int step, int total, String description) {
+                    if (!closing) message("Крок " + step + "/" + total + ": " + description);
+                }
+                @Override public void onFinished(boolean success, String summary) {
+                    if (!closing) reply(summary);
+                }
+            });
+            return;
+        }
         String normalized = CommandPatterns.normalize(raw);
         String speech = CommandPatterns.spokenText(raw);
         if (speech != null) {
@@ -706,6 +732,7 @@ public final class FloatingJarvisService extends Service {
         android.util.Log.i("JARVIS_FLOATING_QA", "orb_closed=true");
         recording = false;
         listening = false;
+        if (sequences != null) sequences.cancel();
         if (screenModeStartedHere) ScreenControlAccessibilityService.stop();
         if (recognizer != null) {
             try { recognizer.cancel(); recognizer.destroy(); }
