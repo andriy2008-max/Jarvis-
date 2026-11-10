@@ -24,6 +24,8 @@
     <uses-feature android:name="android.hardware.microphone" android:required="true" />
     <uses-feature android:name="android.hardware.type.watch" android:required="false" />
     <queries>
+        <!-- Spotify: user-requested app launch and verified accessibility controls. -->
+        <package android:name="com.spotify.music" />
         <intent><action android:name="android.speech.RecognitionService" /></intent>
         <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
         <!-- Query launcher-visible activities only, without QUERY_ALL_PACKAGES. -->
