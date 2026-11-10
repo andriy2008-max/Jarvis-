@@ -16,7 +16,11 @@ public final class SpotifyUiLabels {
 
     public static boolean matches(Target t, String raw) {
         String s = normalize(raw);
-        if (s.isEmpty()) return false;
+        if (s.isEmpty() || s.startsWith("remove ") ||
+            s.startsWith("delete ") || s.startsWith("unlike ") ||
+            s.startsWith("add to ") || s.startsWith("видалити ") ||
+            s.startsWith("прибрати ") || s.startsWith("удалить "))
+            return false;
         switch (t) {
             case LIBRARY:
                 return containsAny(s, "your library", "my library", "library", "моя бібліотека",
