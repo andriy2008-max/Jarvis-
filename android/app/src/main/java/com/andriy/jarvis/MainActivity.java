@@ -759,84 +759,41 @@ public final class MainActivity extends Activity implements RecognitionListener 
         appendDialogue("Джарвіс", "Система запущена. Я готовий до перших команд. Спробуй запитати, що я вмію.");
     }
 
-    /** A compact Wear OS view. All commands and AI processing are shared with the phone. */
+    /**
+     * Wear OS is a single full-screen animated pixel face. No visible text
+     * input, menus, lists or mic buttons. Face tap controls recording; hardware
+     * stem key also toggles it. Swipe left removes the last recognized word.
+     * Internal output views remain detached so shared conversation/AI code can
+     * deliver speech without maintaining a second, incompatible watch engine.
+     */
     private void buildWatchInterface() {
-        ScrollView root = new ScrollView(this);
-        root.setFillViewport(true);
-        root.setBackgroundColor(BG);
-        LinearLayout body = new LinearLayout(this);
-        body.setPadding(dp(14), dp(10), dp(14), dp(18));
-        body.setOrientation(LinearLayout.VERTICAL);
-        body.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.addView(body, new ScrollView.LayoutParams(-1, -2));
-
-        TextView heading = makeText("J.A.R.V.I.S.", 13, CYAN, Gravity.CENTER, true);
-        heading.setLetterSpacing(0.14f);
-        body.addView(heading, new LinearLayout.LayoutParams(-1, -2));
-
+        getWindow().getDecorView().setSystemUiVisibility(
+            View.SYSTEM_UI_FLAG_FULLSCREEN |
+            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+        getWindow().setStatusBarColor(BG);
+        getWindow().setNavigationBarColor(BG);
         face = new PixelFace();
         attachFaceSwipe();
-        int diameter = Math.min(dp(132), Math.max(dp(104),
-            getResources().getDisplayMetrics().widthPixels - dp(38)));
-        LinearLayout.LayoutParams faceParams = new LinearLayout.LayoutParams(diameter, diameter);
-        faceParams.topMargin = dp(3);
-        body.addView(face, faceParams);
+        face.setBackgroundColor(BG);
+        face.setContentDescription(
+            "Джарвіс. Натисни обличчя для голосової команди; свайп вліво скасовує слово.");
+        setContentView(face, new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
 
-        status = makeText("Скажи «Джарвіс»", 12, WHITE, Gravity.CENTER, false);
-        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(-1, -2);
-        statusParams.topMargin = dp(3);
-        body.addView(status, statusParams);
-
+        // Controller views are NEVER added to the watch screen.
+        status = makeText("", 12, WHITE, Gravity.CENTER, false);
         microphone = primaryButton("🎙 Говорити", this::toggleListening);
-        microphone.setMinHeight(dp(45));
-        LinearLayout.LayoutParams micParams = new LinearLayout.LayoutParams(-1, dp(48));
-        micParams.topMargin = dp(7);
-        body.addView(microphone, micParams);
-
-        wakeToggle = makeWakeToggle();
-        wakeToggle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
-        body.addView(wakeToggle, new LinearLayout.LayoutParams(-1, -2));
-
-        LinearLayout controls = new LinearLayout(this);
-        controls.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams controlsParams = new LinearLayout.LayoutParams(-1, -2);
-        controlsParams.topMargin = dp(5);
-        body.addView(controls, controlsParams);
-        Button textButton = secondaryButton("⌨️", this::showWatchTextInput);
-        textButton.setContentDescription("Ввести текстову команду");
-        controls.addView(textButton, new LinearLayout.LayoutParams(0, dp(42), 1f));
-        Button menuButton = secondaryButton("⚙️", this::showWatchActions);
-        menuButton.setContentDescription("Налаштування і команди");
-        LinearLayout.LayoutParams menuParams = new LinearLayout.LayoutParams(0, dp(42), 1f);
-        menuParams.leftMargin = dp(6);
-        controls.addView(menuButton, menuParams);
-
-        voiceToggle = new CheckBox(this);
-        voiceToggle.setText("Голосові відповіді");
-        voiceToggle.setTextColor(MUTED);
-        voiceToggle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
-        voiceToggle.setChecked(voiceEnabled);
-        voiceToggle.setOnCheckedChangeListener((button, selected) -> {
-            voiceEnabled = selected;
-            getPreferences(MODE_PRIVATE).edit().putBoolean("voiceEnabled", selected).apply();
-            if (!selected) stopSpeaking();
-        });
-        body.addView(voiceToggle, new LinearLayout.LayoutParams(-1, -2));
-        speechPauseButton = secondaryButton("", this::showSpeechPauseSettings);
-        refreshSpeechPauseLabel();
-        body.addView(speechPauseButton, new LinearLayout.LayoutParams(-1, dp(40)));
-
-        feedScroll = new ScrollView(this);
-        feedScroll.setFillViewport(true);
-        LinearLayout.LayoutParams feedParams = new LinearLayout.LayoutParams(-1, dp(124));
-        feedParams.topMargin = dp(5);
-        body.addView(feedScroll, feedParams);
         feedMessages = new LinearLayout(this);
         feedMessages.setOrientation(LinearLayout.VERTICAL);
-        feedScroll.addView(feedMessages, new ScrollView.LayoutParams(-1, -2));
-
-        setContentView(root);
-        appendDialogue("Джарвіс", "Готовий. Натисни кнопку або скажи моє ім'я.");
+        feedScroll = new ScrollView(this);
+        feedScroll.addView(feedMessages);
+        appendDialogue("Джарвіс",
+            "Натисни обличчя або бокову кнопку. Після кожного слова таймер тиші оновиться.");
     }
 
 
@@ -1465,7 +1422,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
         face.setContentDescription(
             "Обличчя Джарвіса. Свайп вліво по словах — прибрати останнє й вимовити заново.");
         face.setOnClickListener(v -> {
-            if (JarvisPhoneMode.isActive()) exitPhoneMode();
+            if (isWatchDevice) {
+                if (JarvisPhoneMode.isActive()) exitPhoneMode();
+                else toggleListening();
+            } else if (JarvisPhoneMode.isActive()) exitPhoneMode();
         });
         face.setOnTouchListener(new View.OnTouchListener() {
             float startX, startY;
