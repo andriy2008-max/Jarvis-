@@ -247,7 +247,7 @@ public final class OfflineOnnxSynthesizer implements AutoCloseable {
         float[][][] encH = new float[][][] {h};
         float[][][] pceh = (float[][][]) run(
             sessions.get("predecoder_0.onnx"),
-            Map.of("enc_h", encH), "pre_compute_enc_h")[0];
+            oneInput("enc_h", encH), "pre_compute_enc_h")[0];
 
         float[][] mask = new float[1][length];
         float[][] att = new float[1][length];
@@ -309,7 +309,7 @@ public final class OfflineOnnxSynthesizer implements AutoCloseable {
         for (int i = 0; i < frames; i++)
             for (int d = 0; d < odim; d++) postnetInput[0][d][i] = melFrames.get(i)[d];
         float[][] features = (float[][]) run(
-            sessions.get("postdecoder.onnx"), Map.of("x", postnetInput), "out")[0];
+            sessions.get("postdecoder.onnx"), oneInput("x", postnetInput), "out")[0];
         if (features.length != frames)
             throw new Exception("Неправильна кількість мел-кадрів.");
         for (int i = 0; i < frames; i++) {
@@ -319,13 +319,19 @@ public final class OfflineOnnxSynthesizer implements AutoCloseable {
             }
         }
         Object wav = run(sessions.get("HiFiGANVocoder.onnx"),
-            Map.of("c", features), "wav")[0];
+            oneInput("c", features), "wav")[0];
         float[] audio = flatten(wav);
         if (audio.length < 50 || audio.length > MAX_SAMPLES)
             throw new Exception("Неправильна довжина WAV.");
         for (float f : audio)
             if (!Float.isFinite(f)) throw new Exception("Модель повернула некоректний WAV.");
         return audio;
+    }
+
+    private static Map<String, Object> oneInput(String key, Object value) {
+        Map<String, Object> single = new LinkedHashMap<>();
+        single.put(key, value);
+        return single;
     }
 
     private Object[] run(OrtSession session, Map<String, Object> values,
