@@ -69,6 +69,19 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             : "Не вдалося показати плаваючу кнопку. Режим вимкнено.";
     }
 
+    /**
+     * Starts a user-requested accessibility session controlled by the separate
+     * Quick Settings orb. No second floating microphone is displayed.
+     * The user must first grant Accessibility in Android system settings.
+     */
+    public static String startFromBubble() {
+        ScreenControlAccessibilityService service = connected.get();
+        if (service == null)
+            return "Увімкни Джарвіс — керування екраном у Спеціальних можливостях Android.";
+        service.sessionActive = true;
+        return "Керування екраном активне в плаваючому Джарвісі.";
+    }
+
     public static String stop() {
         ScreenControlAccessibilityService s = connected.get();
         if (s != null) s.stopSession();
