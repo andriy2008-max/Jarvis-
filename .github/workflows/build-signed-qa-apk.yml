@@ -3,9 +3,7 @@ name: Signed Jarvis 0.1.14 phone QA APK (not stable release)
 # Signed with the SAME certificate and package ID as existing stable Jarvis.
 # Uploads a private GitHub Actions artifact only. NO public APK release.
 on:
-  push:
-    paths:
-      - '.github/workflows/build-signed-qa-apk.yml'
+  # Manually triggered only after an explicit user instruction. No APK jobs on push.
   workflow_dispatch:
 
 permissions:
