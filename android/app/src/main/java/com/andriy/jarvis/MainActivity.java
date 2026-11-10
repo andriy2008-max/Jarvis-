@@ -143,6 +143,18 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private boolean speaking = false;
     private boolean isCompact = false;
     private boolean isWatchDevice = false;
+    private final Runnable phoneModeListener = () -> runOnUiThread(() -> {
+        if (isFinishing() || isDestroyed()) return;
+        if (face != null) {
+            face.setContentDescription(JarvisPhoneMode.isActive()
+                ? "8-бітний телефон. Натисни, щоб повернути Джарвіса."
+                : "8-бітне обличчя Джарвіса");
+            face.invalidate();
+        }
+        setStatus(JarvisPhoneMode.isActive()
+            ? "Режим «Телефон»: Натисни, Зажми, Свайпни…"
+            : "Звичайний режим Джарвіса");
+    });
     private boolean voiceEnabled = true;
     private boolean ttsReady;
 
@@ -166,6 +178,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         offlinePacks = new OfflineVoicePackManager(this);
         offlineSpeech = new OfflineSpeechClient(this, offlinePacks);
         buildInterface();
+        JarvisPhoneMode.subscribe(phoneModeListener);
         deviceActions = new DeviceActions(this);
 
         tts = new TextToSpeech(this, result -> {
@@ -1451,6 +1464,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
         face.setClickable(true);
         face.setContentDescription(
             "Обличчя Джарвіса. Свайп вліво по словах — прибрати останнє й вимовити заново.");
+        face.setOnClickListener(v -> {
+            if (JarvisPhoneMode.isActive()) {
+                String result = JarvisPhoneModeManager.exit();
+                setStatus(result);
+                appendDialogue("Джарвіс", result);
+            }
+        });
         face.setOnTouchListener(new View.OnTouchListener() {
             float startX, startY;
             @Override public boolean onTouch(View view, MotionEvent event) {
@@ -1844,6 +1864,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
         WakeConversation.Decision decision = wakeConversation.accept(
             transcript, SystemClock.elapsedRealtime(), true);
+        if (JarvisPhoneMode.isActive() &&
+            JarvisPhoneMode.transition(transcript) == JarvisPhoneMode.Transition.EXIT) {
+            processCommand(transcript);
+            scheduleAutoWake(550L);
+            return;
+        }
         if (decision.kind == WakeConversation.Kind.COMMAND) {
             face.setState("thinking");
             processCommand(JarvisSearchRouting.addressedToJarvis(transcript)
@@ -2136,6 +2162,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
         JarvisLiveTranscript.update(TRANSCRIPT_OWNER, matches.get(0), true,
             SystemClock.uptimeMillis());
+        if (JarvisPhoneMode.isActive() &&
+            JarvisPhoneMode.transition(matches.get(0)) == JarvisPhoneMode.Transition.EXIT) {
+            processCommand(matches.get(0));
+            scheduleAutoWake(450L);
+            return;
+        }
         WakeConversation.Decision decision = wakeConversation.accept(
             matches.get(0), SystemClock.elapsedRealtime(), false);
         if (decision.kind == WakeConversation.Kind.ARMED) {
@@ -2787,6 +2819,23 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void processCommand(String raw) {
         if (raw == null || raw.trim().isEmpty()) return;
+        JarvisPhoneMode.Transition modeTransition = JarvisPhoneMode.transition(raw);
+        if (modeTransition == JarvisPhoneMode.Transition.ENTER) {
+            String result = JarvisPhoneModeManager.enter(this, false);
+            appendDialogue("Джарвіс", result);
+            setStatus(result);
+            if (!ScreenControlAccessibilityService.isConnected() &&
+                getResources().getBoolean(R.bool.screen_control_available))
+                showScreenControlConsent();
+            return;
+        }
+        if (modeTransition == JarvisPhoneMode.Transition.EXIT &&
+            JarvisPhoneMode.isActive()) {
+            String result = JarvisPhoneModeManager.exit();
+            appendDialogue("Джарвіс", result);
+            setStatus(result);
+            return;
+        }
         if (spotifyPlayback != null && spotifyPlayback.isRunning()) {
             String action = CommandPatterns.normalize(raw);
             if (action.equals("скасуй spotify") ||
@@ -3105,6 +3154,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     protected void onDestroy() {
+        JarvisPhoneMode.unsubscribe(phoneModeListener);
         JarvisLiveTranscript.setCorrectionHandler(TRANSCRIPT_OWNER, null);
         JarvisLiveTranscript.unsubscribe(transcriptListener);
         cancelPendingWakeCommand();
@@ -3213,6 +3263,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
             canvas.drawCircle(cx, cy, orb, paint);
 
             paint.setStyle(Paint.Style.FILL);
+            if (JarvisPhoneMode.isActive()) {
+                JarvisPixelPhone.draw(canvas, paint, cx, cy, orb * .076f);
+                postInvalidateDelayed(380L);
+                return;
+            }
             if (transcriptVisible() && !"speaking".equals(expression)) {
                 drawTranscript(canvas, cx, cy, orb);
                 postInvalidateDelayed(180);
