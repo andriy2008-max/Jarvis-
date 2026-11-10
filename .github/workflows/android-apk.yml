@@ -51,6 +51,7 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/WakeConversation.java \
             android/app/src/main/java/com/andriy/jarvis/TimerRules.java \
             android/app/src/main/java/com/andriy/jarvis/VoiceRanking.java \
+            android/app/src/main/java/com/andriy/jarvis/NeuralSpeechPolicy.java \
             android/app/src/test/java/com/andriy/jarvis/CommandPatternsTest.java \
             android/app/src/test/java/com/andriy/jarvis/AssistantIntentsTest.java \
             android/app/src/test/java/com/andriy/jarvis/AppNameMatcherTest.java \
@@ -58,8 +59,9 @@ jobs:
             android/app/src/test/java/com/andriy/jarvis/AiChatPolicyTest.java \
             android/app/src/test/java/com/andriy/jarvis/WakeConversationTest.java \
             android/app/src/test/java/com/andriy/jarvis/TimerRulesTest.java \
-            android/app/src/test/java/com/andriy/jarvis/VoiceRankingTest.java
-          for test in CommandPatternsTest AssistantIntentsTest AppNameMatcherTest DeviceCommandsTest AiChatPolicyTest WakeConversationTest TimerRulesTest VoiceRankingTest; do
+            android/app/src/test/java/com/andriy/jarvis/VoiceRankingTest.java \
+            android/app/src/test/java/com/andriy/jarvis/NeuralSpeechPolicyTest.java
+          for test in CommandPatternsTest AssistantIntentsTest AppNameMatcherTest DeviceCommandsTest AiChatPolicyTest WakeConversationTest TimerRulesTest VoiceRankingTest NeuralSpeechPolicyTest; do
             java -cp android/build/parser-tests "com.andriy.jarvis.$test"
           done
       - name: Restore stable signing keystore (stable only)
