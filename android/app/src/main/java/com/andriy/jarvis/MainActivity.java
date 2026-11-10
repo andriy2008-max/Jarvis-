@@ -549,6 +549,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
             LinearLayout.LayoutParams floatParams = new LinearLayout.LayoutParams(-1, -2);
             floatParams.topMargin = dp(6);
             chatPanel.addView(floatingButton, floatParams);
+
+            Button customizeFaceButton = secondaryButton(
+                "🎨 Змінити розмір і колір плаваючого обличчя",
+                this::showFloatingFaceOptions);
+            LinearLayout.LayoutParams customizeParams =
+                new LinearLayout.LayoutParams(-1, -2);
+            customizeParams.topMargin = dp(6);
+            chatPanel.addView(customizeFaceButton, customizeParams);
         }
 
         // Web quick-command chips, in responsive two-column rows.
@@ -1087,6 +1095,45 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         }
                     }
                 }).create();
+        showDialogWithoutWake(dialog);
+    }
+
+    private void showFloatingFaceOptions() {
+        String[] choices = {
+            "Мале обличчя — 96 dp",
+            "Звичайне обличчя — 112 dp",
+            "Велике обличчя — 144 dp (краще видно слова)",
+            "Колір — класичний блакитний",
+            "Колір — бірюзовий",
+            "Колір — фіолетовий"
+        };
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Налаштування плаваючого Джарвіса")
+            .setMessage("Перетягуй обличчя пальцем на будь-яке місце екрана. " +
+                "Коротке натискання — слухати, довге — закрити. " +
+                "Під час розпізнавання на обличчі показуватимуться почуті слова.")
+            .setItems(choices, (d, index) -> {
+                android.content.SharedPreferences.Editor editor =
+                    getSharedPreferences("jarvis_orb", MODE_PRIVATE).edit();
+                if (index <= 2) {
+                    int[] diameters = {96, 112, 144};
+                    editor.putInt("diameter_dp", diameters[index]);
+                } else {
+                    editor.putInt("accent_style", index - 3);
+                }
+                editor.apply();
+                if (FloatingJarvisService.isShowing()) {
+                    Intent resize = new Intent(this, FloatingJarvisService.class);
+                    resize.setAction(FloatingJarvisService.ACTION_RESIZE);
+                    try { startService(resize); }
+                    catch (Exception ignored) {
+                        // Preference is saved and used the next time the orb opens.
+                    }
+                }
+                setStatus("Зовнішній вигляд плаваючого Джарвіса оновлено.");
+            })
+            .setNegativeButton("Скасувати", null)
+            .create();
         showDialogWithoutWake(dialog);
     }
 
