@@ -433,6 +433,192 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             "Кнопку знайдено, але застосунок не дозволив її натиснути.";
     }
 
+    /** Dedicated, allowlisted Spotify UI interaction for explicit music commands.
+     * Never guesses arbitrary icon coordinates and never touches other apps.
+     */
+    public enum SpotifyStep { WAIT, CLICKED, ALREADY, BLOCKED }
+
+    public static SpotifyStep spotifyControl(SpotifyUiLabels.Target target,
+                                              SpotifyUiLabels.Target playlist) {
+        ScreenControlAccessibilityService service = connected.get();
+        if (service == null || !service.sessionActive) return SpotifyStep.BLOCKED;
+        return service.tapSpotifyControl(target, playlist);
+    }
+
+    public static boolean spotifyVisible() {
+        ScreenControlAccessibilityService s = connected.get();
+        return s != null && s.sessionActive && s.currentSpotifyRoot() != null;
+    }
+
+    public static boolean spotifyScrollLibrary() {
+        ScreenControlAccessibilityService s = connected.get();
+        if (s == null || !s.sessionActive) return false;
+        AccessibilityNodeInfo root = s.currentSpotifyRoot();
+        if (root == null) return false;
+        ArrayDeque<AccessibilityNodeInfo> queue = new ArrayDeque<>();
+        queue.add(root);
+        int scanned = 0;
+        while (!queue.isEmpty() && ++scanned < MAX_SCAN) {
+            AccessibilityNodeInfo n = queue.removeFirst();
+            if (!n.isVisibleToUser()) continue;
+            if (n.isScrollable() && n.isEnabled() &&
+                n.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)) return true;
+            for (int i = 0; i < n.getChildCount(); i++) {
+                AccessibilityNodeInfo child = n.getChild(i);
+                if (child != null) queue.addLast(child);
+            }
+        }
+        return false;
+    }
+
+    private AccessibilityNodeInfo currentSpotifyRoot() {
+        AccessibilityNodeInfo root = currentExternalRoot();
+        return root != null && root.getPackageName() != null &&
+            "com.spotify.music".contentEquals(root.getPackageName()) ? root : null;
+    }
+
+    private static boolean spotifyTextMatches(SpotifyUiLabels.Target target,
+                                               AccessibilityNodeInfo node) {
+        if (node == null) return false;
+        return SpotifyUiLabels.matches(target, asString(node.getText())) ||
+            SpotifyUiLabels.matches(target, asString(node.getContentDescription())) ||
+            SpotifyUiLabels.matches(target, asString(node.getViewIdResourceName()));
+    }
+
+    private static boolean spotifyHasTitle(AccessibilityNodeInfo root,
+                                            SpotifyUiLabels.Target playlist) {
+        ArrayDeque<AccessibilityNodeInfo> scan = new ArrayDeque<>();
+        scan.add(root);
+        int steps = 0;
+        while (!scan.isEmpty() && ++steps < MAX_SCAN) {
+            AccessibilityNodeInfo n = scan.removeFirst();
+            if (!n.isVisibleToUser()) continue;
+            if (spotifyTextMatches(playlist,n)) return true;
+            for (int i = 0; i < n.getChildCount(); i++) {
+                AccessibilityNodeInfo child = n.getChild(i);
+                if (child != null) scan.addLast(child);
+            }
+        }
+        return false;
+    }
+
+    private static final class SpotifyChoice {
+        final AccessibilityNodeInfo node;
+        final String description;
+        final Rect bounds;
+        final int score;
+        SpotifyChoice(AccessibilityNodeInfo node, String description,
+                      Rect bounds, int score) {
+            this.node = node; this.description = description;
+            this.bounds = bounds; this.score = score;
+        }
+    }
+
+    private SpotifyStep tapSpotifyControl(SpotifyUiLabels.Target target,
+                                           SpotifyUiLabels.Target playlist) {
+        AccessibilityNodeInfo root = currentSpotifyRoot();
+        if (root == null) return SpotifyStep.WAIT;
+        // Never press shuffle/play on an unrelated screen even within Spotify.
+        if ((target == SpotifyUiLabels.Target.SHUFFLE ||
+             target == SpotifyUiLabels.Target.PLAY ||
+             target == SpotifyUiLabels.Target.RAP_FILTER) &&
+             (playlist == null || !spotifyHasTitle(root, playlist)))
+            return SpotifyStep.WAIT;
+
+        ArrayDeque<AccessibilityNodeInfo> queue = new ArrayDeque<>();
+        queue.add(root);
+        ArrayList<SpotifyChoice> matches = new ArrayList<>();
+        java.util.HashSet<String> seen = new java.util.HashSet<>();
+        Rect rootBounds = new Rect();
+        root.getBoundsInScreen(rootBounds);
+        int scanned = 0;
+
+        // The playlist's giant green Play and Shuffle are in the same toolbar
+        // row; this rejects buttons in the mini-player and on individual songs.
+        Rect shuffleBounds = null;
+        ArrayList<SpotifyChoice> possibleShuffle = new ArrayList<>();
+        while (!queue.isEmpty() && ++scanned <= MAX_SCAN) {
+            AccessibilityNodeInfo n = queue.removeFirst();
+            if (!n.isVisibleToUser() || n.isPassword()) continue;
+            AccessibilityNodeInfo control = clickable(n);
+            if (control != null && control.isEnabled()) {
+                Rect r = new Rect();
+                control.getBoundsInScreen(r);
+                if (r.width() > 0 && r.height() > 0) {
+                    String name = asString(n.getText()) + " " +
+                        asString(n.getContentDescription()) + " " +
+                        asString(n.getViewIdResourceName());
+                    String selfDesc = asString(n.getContentDescription());
+                    if (spotifyTextMatches(SpotifyUiLabels.Target.SHUFFLE, n))
+                        possibleShuffle.add(new SpotifyChoice(control,
+                            selfDesc + " " + asString(control.getContentDescription()),r,100));
+                    if (spotifyTextMatches(target,n)) {
+                        // Don't target a control under Spotify's bottom mini player.
+                        int score = 100;
+                        if (target == SpotifyUiLabels.Target.LIBRARY)
+                            score += r.centerY() / 15;
+                        if (target == SpotifyUiLabels.Target.PLAY) {
+                            if (r.centerX() <= rootBounds.centerX() ||
+                                r.centerY() > rootBounds.bottom - Math.max(65,rootBounds.height()/8))
+                                score = 0;
+                            else score += Math.min(80,r.width()/3);
+                        }
+                        String key=r.toShortString();
+                        if (score > 0 && seen.add(key) && !ScreenControlCommands.isSensitiveLabel(name))
+                            matches.add(new SpotifyChoice(control,selfDesc,r,score));
+                    }
+                }
+            }
+            for (int i = 0; i < n.getChildCount(); i++) {
+                AccessibilityNodeInfo child = n.getChild(i);
+                if (child != null) queue.addLast(child);
+            }
+        }
+        if (scanned > MAX_SCAN) return SpotifyStep.WAIT;
+        if (target == SpotifyUiLabels.Target.PLAY) {
+            // Prefer the visible green playlist Play adjacent to Shuffle.
+            for (SpotifyChoice c : possibleShuffle) {
+                if (shuffleBounds == null || c.bounds.width() < shuffleBounds.width())
+                    shuffleBounds = c.bounds;
+            }
+            if (shuffleBounds != null) {
+                final Rect shuffle = shuffleBounds;
+                matches.removeIf(c -> c.bounds.centerX() <= shuffle.centerX() ||
+                    Math.abs(c.bounds.centerY()-shuffle.centerY()) > Math.max(
+                        shuffle.height()*2,rootBounds.height()/7));
+            } else if (matches.size() > 1) {
+                // An ambiguous Play can be a single-track or mini-player button.
+                return SpotifyStep.WAIT;
+            }
+        }
+        if (matches.isEmpty()) return SpotifyStep.WAIT;
+        // For Library choose the bottom tab, which is the last control.
+        SpotifyChoice best = null;
+        for (SpotifyChoice choice : matches) {
+            if (best == null || choice.score > best.score) best = choice;
+            else if (choice.score == best.score && target != SpotifyUiLabels.Target.LIBRARY)
+                return SpotifyStep.WAIT;
+        }
+        if (best == null || !sessionActive) return SpotifyStep.WAIT;
+        AccessibilityNodeInfo current = currentSpotifyRoot();
+        if (current == null || !best.node.isEnabled() ||
+            !best.node.isVisibleToUser() || !best.node.isClickable() ||
+            best.node.isPassword()) return SpotifyStep.WAIT;
+
+        if (target == SpotifyUiLabels.Target.SHUFFLE) {
+            if (SpotifyUiLabels.shuffleOn(best.description,
+                best.node.isSelected(), best.node.isChecked()))
+                return SpotifyStep.ALREADY;
+        }
+        if ((target == SpotifyUiLabels.Target.LIBRARY ||
+             target == SpotifyUiLabels.Target.RAP_FILTER) &&
+             (best.node.isSelected() || best.node.isChecked()))
+            return SpotifyStep.ALREADY;
+
+        return best.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
+    }
+
     /**
      * Insert the user's EXACT dictated phrase into the one currently focused
      * editable input in the external app. Never auto-focus another field, touch
