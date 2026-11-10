@@ -60,16 +60,20 @@ jobs:
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
             adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             # CI-only equivalent of user's manual Accessibility settings toggle.
+            # Start target application before enabling service so its process is ready.
+            adb shell am start -n com.andriy.jarvis.preview/com.andriy.jarvis.MainActivity
             adb shell settings put secure enabled_accessibility_services com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlAccessibilityService
             adb shell settings put secure accessibility_enabled 1
             adb shell settings get secure enabled_accessibility_services
             adb shell settings get secure accessibility_enabled
+            adb shell sleep 4
             adb shell dumpsys accessibility | grep -i -E 'jarvis|ScreenControl' | head -30 || true
             adb shell am start -n com.andriy.jarvis.preview.test/com.andriy.jarvis.ScreenControlTestTarget
             adb shell am instrument -w -r -e class com.andriy.jarvis.ScreenControlInstrumentedTest com.andriy.jarvis.preview.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/screen-control-test.log
-            grep -q 'OK (1 test)' /tmp/screen-control-test.log
+            # Always collect diagnostics before evaluating the test exit status.
             adb shell dumpsys accessibility | grep -i -E 'jarvis|ScreenControl' | head -40 || true
-            adb logcat -d -s AccessibilityManagerService:E AndroidRuntime:E '*:S'
+            adb logcat -d -s AccessibilityManagerService:D ActivityManager:E AndroidRuntime:E '*:S'
+            grep -q 'OK (1 test)' /tmp/screen-control-test.log
       - name: Report test failure
         if: failure()
         run: |
