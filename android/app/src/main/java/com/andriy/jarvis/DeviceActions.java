@@ -73,7 +73,9 @@ public final class DeviceActions {
                 } catch (RuntimeException failure) {
                     return "Android не дозволив відкрити налаштування екрана.";
                 }
-            default: return "Команда не підтримується на цьому пристрої.";
+            default:
+                String response = SystemToggleActions.perform(activity, command);
+                return response != null ? response : "Команда не підтримується на цьому пристрої.";
         }
     }
 
