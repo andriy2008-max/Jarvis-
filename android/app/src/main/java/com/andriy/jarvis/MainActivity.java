@@ -2412,6 +2412,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     /** Fetch real world news from RSS, never trust AI memory for current events. */
     private void readWorldNews() {
+        if (aiChatClient != null && aiChatClient.isConfigured()) {
+            askAiDetailed("Знайди найсвіжіші важливі світові новини. Коротко поясни кожну з джерелами.", "web", null);
+            return;
+        }
         if (newsBusy) {
             appendDialogue("Джарвіс", "Я вже шукаю новини.");
             return;
@@ -2440,6 +2444,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
     /** Researches an information query on the web; uses connected AI only to
      * synthesize attributed snippets, never for ungrounded live facts. */
     private void searchInformationWithVoice(String query) {
+        if (aiChatClient != null && aiChatClient.isConfigured()) {
+            askAiDetailed(query, "web", null);
+            return;
+        }
         if (webSearchBusy || aiBusy) {
             appendDialogue("Джарвіс", "Я ще шукаю відповідь на попереднє запитання.");
             return;
@@ -2644,36 +2652,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     /** Unrecognized conversation goes to AI; local phone commands never give AI device control. */
     private void askAi(String question) {
-        if (aiChatClient == null || !aiChatClient.isConfigured()) {
-            String info = "Для вільної розмови підключи особистий ШІ-сервер. Натисни «ШІ — підключення». Ключ OpenAI у телефон вводити не потрібно.";
-            appendDialogue("Джарвіс", info);
-            setStatus("ШІ не підключений");
-            showAiSettings();
-            return;
-        }
-        if (aiBusy) {
-            appendDialogue("Джарвіс", "Я ще відповідаю на попереднє запитання.");
-            return;
-        }
-        aiBusy = true;
-        processing = true;
-        face.setState("thinking");
-        setStatus("Джарвіс думає...");
-        aiChatClient.send(question, (answer, error) -> {
-            aiBusy = false;
-            processing = false;
-            if (isFinishing() || isDestroyed()) return;
-            String response = error == null ? answer : error;
-            if (response == null || response.isEmpty()) response = "Не вдалося отримати відповідь від ШІ.";
-            appendDialogue("Джарвіс", response);
-            setStatus(error == null ? "Відповідь ШІ готова" : "Не вдалося звернутися до ШІ");
-            if (error == null && voiceEnabled) {
-                speakReply(response);
-            } else {
-                face.setState("idle");
-                resumeAfterReply();
-            }
-        });
+        askAiDetailed(question, "chat", null);
     }
 
     private void clearAiConversation() {
@@ -2804,6 +2783,22 @@ public final class MainActivity extends Activity implements RecognitionListener 
         ScreenControlCommands.Action screenCommand = ScreenControlCommands.parse(raw);
         boolean silentReply = false;
         String reply;
+
+        if (command.startsWith("створи зображення") ||
+            command.startsWith("згенеруй зображення") ||
+            command.startsWith("намалюй ") ||
+            command.startsWith("зроби картинку ")) {
+            String prompt = command.replaceFirst(
+                "^(?:створи|згенеруй)\\s+зображення\\s*|^намалюй\\s+|^зроби\\s+картинку\\s+", "").trim();
+            if (prompt.isEmpty()) setStatus("Назви, яке зображення потрібно створити.");
+            else askAiDetailed(prompt, "image", null);
+            return;
+        }
+        if (command.equals("проаналізуй фото") || command.equals("аналіз фото") ||
+            command.equals("проаналізуй документ") || command.equals("прочитай документ")) {
+            chooseAiAttachment();
+            return;
+        }
 
         if (directSpeech != null) {
             if (directSpeech.isEmpty()) {
