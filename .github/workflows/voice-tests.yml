@@ -39,6 +39,11 @@ on:
       - 'android/app/src/main/java/com/andriy/jarvis/ScreenTargetMatcher.java'
       - 'android/app/src/test/java/com/andriy/jarvis/ScreenTargetMatcherTest.java'
       - 'android/app/src/main/java/com/andriy/jarvis/ScreenControlAccessibilityService.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/SpotifyMusicCommands.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/SpotifyUiLabels.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/SpotifyPlaybackController.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/SpotifyMusicCommandsTest.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/SpotifyUiLabelsTest.java'
       - 'android/app/src/test/java/com/andriy/jarvis/ScreenControlCommandsTest.java'
       - 'android/app/src/main/AndroidManifest.xml'
       - 'android/app/src/main/res/xml/jarvis_screen_accessibility.xml'
@@ -100,6 +105,8 @@ jobs:
           mkdir -p /tmp/jarvis-voice-tests
           javac -encoding UTF-8 -d /tmp/jarvis-voice-tests \
             android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java \
+            android/app/src/main/java/com/andriy/jarvis/SpotifyMusicCommands.java \
+            android/app/src/main/java/com/andriy/jarvis/SpotifyUiLabels.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisSearchRouting.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisVoicePause.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisWavEnvelope.java \
@@ -121,6 +128,8 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/OfflineVoicePackRules.java \
             android/app/src/main/java/com/andriy/jarvis/UkrainianVoiceText.java \
             android/app/src/test/java/com/andriy/jarvis/CommandPatternsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/SpotifyMusicCommandsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/SpotifyUiLabelsTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisSearchRoutingTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisVoicePauseTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisWavEnvelopeTest.java \
@@ -141,6 +150,8 @@ jobs:
             android/app/src/test/java/com/andriy/jarvis/OfflineVoicePackRulesTest.java \
             android/app/src/test/java/com/andriy/jarvis/UkrainianVoiceTextTest.java
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.CommandPatternsTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyMusicCommandsTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyUiLabelsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisSearchRoutingTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisVoicePauseTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisWavEnvelopeTest
