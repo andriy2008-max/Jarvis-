@@ -4,13 +4,22 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.Typeface;
 import android.os.SystemClock;
+import android.text.Layout;
+import android.text.StaticLayout;
+import android.text.TextPaint;
 import android.view.View;
 
 /** Tiny standalone drawing of the same 8-bit Jarvis face as the main screen. */
 public final class JarvisOrbView extends View {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private String expression = "idle";
+    private String recognizedText = "";
+    private boolean transcribing;
+    private long showRecognizedUntilMs;
+    private final TextPaint transcriptPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final int cyan = Color.rgb(114, 235, 255);
     private final int green = Color.rgb(107, 232, 191);
 
@@ -24,6 +33,76 @@ public final class JarvisOrbView extends View {
     public void setState(String state) {
         expression = state == null ? "idle" : state;
         invalidate();
+    }
+
+    /** Replace the animated facial expression with heard words during listening. */
+    public void beginTranscript() {
+        transcribing = true;
+        recognizedText = "";
+        showRecognizedUntilMs = 0L;
+        invalidate();
+    }
+
+    /** Only a short in-memory tail of the voice recognizer's hypothesis is shown. */
+    public void updateTranscript(String text, boolean isFinal) {
+        recognizedText = JarvisOrbTranscript.visibleTail(text);
+        transcribing = !isFinal;
+        showRecognizedUntilMs = isFinal
+            ? SystemClock.uptimeMillis() + 3500L : 0L;
+        invalidate();
+    }
+
+    /** Erase speech immediately on a new recording, error, or closing the orb. */
+    public void clearTranscript() {
+        recognizedText = "";
+        transcribing = false;
+        showRecognizedUntilMs = 0L;
+        invalidate();
+    }
+
+    private boolean transcriptVisible() {
+        return transcribing ||
+            (!recognizedText.isEmpty() &&
+                SystemClock.uptimeMillis() < showRecognizedUntilMs);
+    }
+
+    private void drawRecognizedText(Canvas canvas, float cx, float cy, float radius) {
+        String text = recognizedText.isEmpty() ? "Слухаю…" : recognizedText;
+        float sp = getResources().getDisplayMetrics().scaledDensity;
+        transcriptPaint.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+        transcriptPaint.setTextSize(Math.min(14f * sp,
+            Math.max(10f * sp, radius * .28f)));
+        transcriptPaint.setColor(Color.rgb(224, 253, 255));
+        transcriptPaint.setStyle(Paint.Style.FILL);
+
+        int lineWidth = Math.max(1, Math.round(radius * 1.48f));
+        String visible = text;
+        StaticLayout layout;
+        // Keep the latest words visible even when the recognition result is
+        // too long for the small circle. Do not send speech data to any server.
+        while (true) {
+            layout = StaticLayout.Builder.obtain(visible, 0, visible.length(),
+                    transcriptPaint, lineWidth)
+                .setAlignment(Layout.Alignment.ALIGN_CENTER)
+                .setIncludePad(false)
+                .build();
+            if (layout.getLineCount() <= 4 || visible.length() <= 12) break;
+            int nextWord = visible.indexOf(' ');
+            if (nextWord > 0 && nextWord < visible.length() - 1)
+                visible = "…" + visible.substring(nextWord + 1);
+            else {
+                int start = visible.offsetByCodePoints(0,
+                    Math.min(3, visible.codePointCount(0, visible.length()) - 1));
+                visible = "…" + visible.substring(start);
+            }
+        }
+        Path clip = new Path();
+        clip.addCircle(cx, cy, radius * .93f, Path.Direction.CW);
+        canvas.save();
+        canvas.clipPath(clip);
+        canvas.translate(cx - lineWidth / 2f, cy - layout.getHeight() / 2f);
+        layout.draw(canvas);
+        canvas.restore();
     }
 
     @Override protected void onDraw(Canvas canvas) {
@@ -52,6 +131,11 @@ public final class JarvisOrbView extends View {
         paint.setColor(Color.rgb(217, 254, 255));
         float pixel = orb * .076f;
         float ox = cx - 8 * pixel, oy = cy - 8 * pixel;
+        if (transcriptVisible()) {
+            drawRecognizedText(canvas, cx, cy, orb);
+            postInvalidateDelayed(180);
+            return;
+        }
         boolean blink = SystemClock.uptimeMillis() % 5200 > 4880;
         if (blink) {
             drawPixel(canvas, ox, oy, pixel, 3, 6, 3, 1);
