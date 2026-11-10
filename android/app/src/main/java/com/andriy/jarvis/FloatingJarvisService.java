@@ -119,6 +119,26 @@ public final class FloatingJarvisService extends Service {
                 tts.setPitch(.92f);
                 tts.setSpeechRate(.94f);
                 ttsReady = true;
+                tts.setOnUtteranceProgressListener(
+                    new android.speech.tts.UtteranceProgressListener() {
+                        @Override public void onStart(String id) {
+                            ui.post(() -> {
+                                if (!closing && id != null && id.equals(currentTtsId)) {
+                                    JarvisSpeechMouth.startSystemTts();
+                                    setFace("speaking");
+                                }
+                            });
+                        }
+                        @Override public void onRangeStart(String id, int start, int end, int frame) {
+                            if (id != null && id.equals(currentTtsId))
+                                JarvisSpeechMouth.systemWord(end - start);
+                        }
+                        @Override public void onDone(String id) { finishTts(id); }
+                        @Override public void onError(String id) { finishTts(id); }
+                        @Override public void onStop(String id, boolean interrupted) {
+                            finishTts(id);
+                        }
+                    });
             }
         });
     }
@@ -1089,6 +1109,16 @@ public final class FloatingJarvisService extends Service {
             .getString("jarvisVoiceProfile", VoiceRanking.DMYTRO));
     }
 
+    private void finishTts(String id) {
+        ui.post(() -> {
+            if (!closing && id != null && id.equals(currentTtsId)) {
+                currentTtsId = null;
+                JarvisSpeechMouth.stopSystemTts();
+                setFace("idle");
+            }
+        });
+    }
+
     private void reply(String text) {
         if (closing || text == null || text.isEmpty()) { setFace("idle"); return; }
         // Keep a visible response even when TTS is switched off.
@@ -1097,7 +1127,7 @@ public final class FloatingJarvisService extends Service {
             .getBoolean("voiceEnabled", true);
         if (!enabled) { setFace("idle"); return; }
         stopSpeech();
-        setFace("speaking");
+        setFace("thinking");
         if (offline != null && offline.isInstalled()) {
             if (offline.speak(text, selectedVoice(), new NeuralSpeechClient.Listener() {
                 @Override public void onStart() { setFace("speaking"); }
@@ -1121,16 +1151,21 @@ public final class FloatingJarvisService extends Service {
 
     private void speakSystem(String text) {
         if (ttsReady && tts != null) {
-            setFace("speaking");
-            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null,
-                "jarvis-orb-" + SystemClock.uptimeMillis());
-            ui.postDelayed(() -> setFace("idle"), Math.min(10000, 800 + text.length() * 65L));
+            setFace("thinking");
+            currentTtsId = "jarvis-orb-" + SystemClock.uptimeMillis();
+            if (tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, currentTtsId)
+                != TextToSpeech.SUCCESS) {
+                currentTtsId = null;
+                setFace("idle");
+            }
         } else {
             setFace("idle");
         }
     }
 
     private void stopSpeech() {
+        currentTtsId = null;
+        JarvisSpeechMouth.stopSystemTts();
         if (offline != null) offline.stop();
         if (neural != null) neural.stop();
         if (tts != null) tts.stop();
@@ -1146,6 +1181,7 @@ public final class FloatingJarvisService extends Service {
         listening = false;
         cancelPendingSend();
         cancelCorrectionRestart();
+        cancelSpeechTiming();
         if (sequences != null) sequences.cancel();
         if (screenModeStartedHere) ScreenControlAccessibilityService.stop();
         if (recognizer != null) {
