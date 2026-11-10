@@ -98,11 +98,15 @@ public final class NeuralSpeechClient {
             return true;
         }
         String url = endpoint();
+        // Capture the matching encrypted token now. Reconfiguration must never send a new
+        // credential to a previously configured host queued on the executor.
+        String encryptedToken = prefs.getString("token_encrypted", "");
         String name = VoiceRanking.profile(voice);
         io.execute(() -> {
             File audio = null;
             try {
-                String token = decrypt(prefs.getString("token_encrypted", ""));
+                if (!active(current)) return;
+                String token = decrypt(encryptedToken);
                 audio = download(url, token, text, name);
                 if (!active(current)) { audio.delete(); return; }
                 final File result = audio;
