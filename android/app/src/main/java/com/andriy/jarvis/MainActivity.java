@@ -263,14 +263,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this);
                 recognizerUsesOnDevice = true;
             }
-            if (recognizer != null) recognizer.setRecognitionListener(this);
+            if (recognizer != null) recognizer.setRecognitionListener(ownedRecognizerListener(recognizer));
             else setStatus("Розпізнавання мовлення не встановлено. Текстові команди працюють.");
         } catch (Exception error) {
             supportsOnDeviceRecognizer = false;
             if (SpeechRecognizer.isRecognitionAvailable(this)) {
                 recognizer = SpeechRecognizer.createSpeechRecognizer(this);
                 recognizerUsesOnDevice = false;
-                recognizer.setRecognitionListener(this);
+                recognizer.setRecognitionListener(ownedRecognizerListener(recognizer));
             } else setStatus("Розпізнавання мовлення недоступне.");
         }
         if (wakeToggle != null) {
@@ -1707,7 +1707,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 wakeHandler.postDelayed(() -> {
                     if (foreground && shakeCommandCapture && !manualCapture)
                         toggleListening();
-                }, 350L);
+                }, 900L);
             }
         });
         if (!started) {
@@ -1802,6 +1802,57 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
 
 
+
+    /** Ignore late callbacks from SpeechRecognizer instances that were replaced
+     * after Android reported server disconnect (error 11).
+     */
+    private RecognitionListener ownedRecognizerListener(SpeechRecognizer instance) {
+        return new RecognitionListener() {
+            private boolean owns() { return recognizer == instance; }
+            @Override public void onReadyForSpeech(Bundle b) {
+                if (owns()) MainActivity.this.onReadyForSpeech(b);
+            }
+            @Override public void onBeginningOfSpeech() {
+                if (owns()) MainActivity.this.onBeginningOfSpeech();
+            }
+            @Override public void onRmsChanged(float rms) {
+                if (owns()) MainActivity.this.onRmsChanged(rms);
+            }
+            @Override public void onBufferReceived(byte[] b) {
+                if (owns()) MainActivity.this.onBufferReceived(b);
+            }
+            @Override public void onEndOfSpeech() {
+                if (owns()) MainActivity.this.onEndOfSpeech();
+            }
+            @Override public void onError(int error) {
+                if (owns()) MainActivity.this.onError(error);
+            }
+            @Override public void onResults(Bundle b) {
+                if (owns()) MainActivity.this.onResults(b);
+            }
+            @Override public void onPartialResults(Bundle b) {
+                if (owns()) MainActivity.this.onPartialResults(b);
+            }
+            @Override public void onEvent(int eventType, Bundle b) {
+                if (owns()) MainActivity.this.onEvent(eventType,b);
+            }
+        };
+    }
+
+    /** Once the recognition service disconnects, Android may keep returning
+     * error 11 from the old binder. Always discard it before retrying.
+     */
+    private void retireDisconnectedRecognizer() {
+        SpeechRecognizer previous = recognizer;
+        recognizer = null;
+        recognizerSessionActive = false;
+        listening = false;
+        autoWakeListening = false;
+        if (previous != null) {
+            try { previous.destroy(); } catch (RuntimeException ignored) {}
+        }
+    }
+
     /** Switch between the general user-initiated recognizer (may use network)
      * and the locally running wake listener. On-device availability does not
      * guarantee that an offline Ukrainian language pack has been installed. */
@@ -1836,7 +1887,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (recognizer != null) recognizer.destroy();
             recognizer = next;
             recognizerUsesOnDevice = nextIsOnDevice;
-            recognizer.setRecognitionListener(this);
+            recognizer.setRecognitionListener(ownedRecognizerListener(recognizer));
         }
     }
 
@@ -1933,8 +1984,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
             }
             return;
         }
+        if (recognizer == null) selectRecognizerForMode(true);
         if (recognizer == null) {
-            setStatus("Сервіс розпізнавання відсутній. Спробуй текстову команду.");
+            setStatus("Сервіс розпізнавання відсутній. Перевір голосовий ввід Android.");
             return;
         }
         if (processing || aiBusy) {
@@ -2118,9 +2170,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
             recognizerSessionActive = false;
             listening = false;
             autoWakeListening = false;
+            retireDisconnectedRecognizer();
             if (manualCapture && manualCycleFailures++ < 3) {
-                setStatus("Перезапускаю мікрофон...");
-                scheduleManualRestart(900L);
+                setStatus("Перепідключаю службу розпізнавання Android...");
+                scheduleManualRestart(1700L);
             } else {
                 manualCapture = false;
                 resetListening("Не вдалося запустити розпізнавання. Перевір мікрофон Android.");
@@ -2238,30 +2291,28 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 resetListening("Надай дозвіл на мікрофон у налаштуваннях Android.");
                 return;
             }
-            boolean noSpeech = error == SpeechRecognizer.ERROR_NO_MATCH ||
-                error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT;
+            boolean noSpeech = JarvisSpeechErrorPolicy.isSilent(error);
             if (noSpeech) manualCycleFailures = 0;
             else manualCycleFailures++;
-            if (manualCycleFailures > 5) {
-                if (manualTranscript.length() == 0)
-                    JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-                else JarvisLiveTranscript.update(TRANSCRIPT_OWNER,
-                    manualTranscript.toString(), true, SystemClock.uptimeMillis());
+            if (JarvisSpeechErrorPolicy.rebuildRecognizer(error))
+                retireDisconnectedRecognizer();
+            if (JarvisSpeechErrorPolicy.needsConfiguration(error) ||
+                manualCycleFailures >= (error == SpeechRecognizer.ERROR_TOO_MANY_REQUESTS ? 2 : 3)) {
                 cancelSilenceCheck();
-                manualCapture = false;
-                resetListening("Розпізнавання зупинилося через повторні помилки (" + error + ").");
+                cancelManualRestart();
                 if (manualTranscript.length() > 0) {
-                    // Never silently lose successfully recognized words.
-                    if (shakeCommandCapture) {
-                        finishManualCapture();
-                    } else {
-                        final String partial = manualTranscript.toString();
-                        manualTranscript.setLength(0);
-                        processCommand(partial);
-                    }
+                    // Preserve recognized words rather than discarding the command
+                    // when the provider disconnects in the middle of speech.
+                    finishManualCapture();
                 } else {
+                    manualCapture = false;
+                    manualStopRequested = false;
                     shakeCommandCapture = false;
                     shakeAiPromptNext = false;
+                    JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+                    resetListening(JarvisSpeechErrorPolicy.explanation(error) +
+                        " Перевір «Голосовий ввід» у налаштуваннях Android, " +
+                        "обнови службу розпізнавання та спробуй знову.");
                 }
                 return;
             }
@@ -2270,13 +2321,17 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     manualTranscript.toString(), false, SystemClock.uptimeMillis());
             microphone.setText("■ Завершити та надіслати");
             face.setState("listening");
-            setStatus(speechPause.armed()
-                ? "Чекаю " + speechPauseSeconds() + " с тиші після слова."
-                : "Чекаю першого слова...");
-            scheduleManualRestart(noSpeech ? 450L : 1100L);
+            setStatus(error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED
+                ? "Відновлюю підключення до служби розпізнавання Android (11)..."
+                : speechPause.armed()
+                    ? "Чекаю " + speechPauseSeconds() + " с тиші після слова."
+                    : "Чекаю першого слова...");
+            scheduleManualRestart(JarvisSpeechErrorPolicy.backoffMs(error, manualCycleFailures));
             return;
         }
         wakeHypothesis = "";
+        if (JarvisSpeechErrorPolicy.rebuildRecognizer(error))
+            retireDisconnectedRecognizer();
         JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
         resetListening("Очікую «Джарвіс»");
         if (error == SpeechRecognizer.ERROR_NO_MATCH ||
@@ -2290,8 +2345,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             }
         }
         if (!autoWakePausedForErrors) scheduleAutoWake(
-            error == SpeechRecognizer.ERROR_NO_MATCH ||
-            error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ? 650L : 1800L);
+            JarvisSpeechErrorPolicy.backoffMs(error, Math.max(1,autoWakeErrors)));
     }
 
     @Override
