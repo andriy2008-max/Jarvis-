@@ -758,6 +758,15 @@ public final class FloatingJarvisService extends Service {
                             else observeWords(combined);
                         }
                         partialSpeech = "";
+                        if (JarvisSpeechErrorPolicy.rebuildRecognizer(error)) {
+                            // The Android recognition binder is dead; the next segment
+                            // must use a fresh instance, not retry the same connection.
+                            SpeechRecognizer dead = recognizer;
+                            recognizer = null;
+                            if (dead != null) {
+                                try { dead.destroy(); } catch (RuntimeException ignored) {}
+                            }
+                        }
                         if (stopRequested) {
                             if (autoSilenceStop && !speechPause.expired(
                                 SystemClock.uptimeMillis(), speechPauseSeconds())) {
@@ -779,11 +788,11 @@ public final class FloatingJarvisService extends Service {
                             message("Дозволь доступ до мікрофона в налаштуваннях.");
                             return;
                         }
-                        boolean noSpeech = error == SpeechRecognizer.ERROR_NO_MATCH ||
-                            error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT;
+                        boolean noSpeech = JarvisSpeechErrorPolicy.isSilent(error);
                         if (noSpeech) recognizerFailures = 0;
                         else recognizerFailures++;
-                        if (recognizerFailures > 5) {
+                        if (JarvisSpeechErrorPolicy.needsConfiguration(error) ||
+                            recognizerFailures >= (error == SpeechRecognizer.ERROR_TOO_MANY_REQUESTS ? 2 : 3)) {
                             if (speechDraft.length() > 0) {
                                 sendPendingSpeech();
                             } else {
@@ -791,14 +800,16 @@ public final class FloatingJarvisService extends Service {
                                 cancelSpeechTiming();
                                 speechPause.reset("");
                                 setFace("idle");
-                                message("Сервіс мікрофона зупинився через помилки. Натисни ще раз.");
+                                message(JarvisSpeechErrorPolicy.explanation(error) +
+                                    " Перевір службу голосового вводу Android і натисни ще раз.");
                             }
                             return;
                         }
                         JarvisLiveTranscript.update(TRANSCRIPT_OWNER,
                             speechDraft.toString(), false, SystemClock.uptimeMillis());
                         setFace("listening");
-                        restartAfterRecognizer(noSpeech ? 350L : 1000L);
+                        restartAfterRecognizer(JarvisSpeechErrorPolicy.backoffMs(error,
+                            recognizerFailures));
                     }
                     @Override public void onResults(Bundle results) {
                         if (!active()) return;
@@ -886,8 +897,13 @@ public final class FloatingJarvisService extends Service {
         } catch (Exception exception) {
             recognizerSessionActive = false;
             listening = false;
-            if (recording && recognizerFailures++ < 5) {
-                restartAfterRecognizer(700L);
+            SpeechRecognizer dead = recognizer;
+            recognizer = null;
+            if (dead != null) {
+                try { dead.destroy(); } catch (RuntimeException ignored) {}
+            }
+            if (recording && recognizerFailures++ < 3) {
+                restartAfterRecognizer(1700L);
             } else {
                 recording = false;
                 cancelSpeechTiming();
