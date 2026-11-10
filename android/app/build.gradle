@@ -58,6 +58,7 @@ android {
 // CPU ONNX runtime is included in the small APK; actual voice models download once.
 dependencies {
     implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.20.0'
+    implementation 'com.google.android.gms:play-services-wearable:20.0.1'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test:runner:1.6.2'
 }
