@@ -1,9 +1,7 @@
 name: Verify stable Jarvis 0.1.8 updates in place to signed 0.1.14 QA
 
 on:
-  push:
-    paths:
-      - '.github/workflows/android-inplace-upgrade-qa.yml'
+  # Manually triggered only after an explicit user instruction. No APK jobs on push.
   workflow_dispatch:
 
 permissions:
