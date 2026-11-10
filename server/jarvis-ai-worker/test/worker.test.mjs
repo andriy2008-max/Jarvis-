@@ -22,6 +22,8 @@ test('strict messages, roles, modes, file validation',()=>{
   assert.equal(validateInput({message:'x',history:Array.from({length:15},()=>({role:'user',content:'x'}))}),null);
   assert.equal(validateInput({message:''}),null);
   assert.equal(validateInput({message:'x',mode:'shell'}),null);
+  assert.equal(validateInput({message:'x',effort:'hidden_system_override'}),null);
+  assert.equal(validateInput({message:'Порахуй',mode:'analysis'}).length,1);
   assert.equal(validateInput({message:'x',mode:'web',attachment:{name:'image.jpg',mime:'image/jpeg',data:'aGVsbG8='}}),null);
   assert.equal(validateInput({message:'x',attachment:{name:'../../secrets.jpg',mime:'image/jpeg',data:'aGVsbG8='}}),null);
   assert.equal(validAttachment({name:'image.jpg',mime:'image/jpeg',data:'aGVsbG8='}),true);
@@ -45,13 +47,18 @@ test('AI payload modes are limited to allowed hosted tools',()=>{
   const plain=createPayload({message:'hello'},[{role:'user',content:'hello'}],env);
   assert.equal(plain.store,false);
   assert.equal(plain.tools,undefined);
-  assert.equal(plain.max_output_tokens,1800);
+  assert.equal(plain.max_output_tokens,4000);
+  assert.equal(plain.reasoning.effort,'medium');
   const web=createPayload({mode:'web'},[],env);
   assert.equal(web.tools[0].type,'web_search');
   assert.equal(web.tool_choice,'required');
   const image=createPayload({mode:'image'},[],env);
   assert.equal(image.tools[0].type,'image_generation');
   assert.deepEqual(image.tool_choice,{type:'image_generation'});
+  const analysis=createPayload({mode:'analysis',effort:'high'},[],env);
+  assert.equal(analysis.tools[0].type,'code_interpreter');
+  assert.equal(analysis.tools[0].container.type,'auto');
+  assert.equal(analysis.reasoning.effort,'high');
 });
 
 test('extracts assistant text, citations and images',()=>{
