@@ -1,0 +1,135 @@
+name: JARVIS 0.1.17 signed APK publication — user requested fallback
+
+# Once only, for requested v0.1.17. No recurring APK builds.
+on:
+  push:
+    paths:
+      - '.github/workflows/jarvis-017-signed-publish-fallback.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  sign-publish:
+    if: github.event.head_commit.message == 'User-requested signed JARVIS v0.1.17 fallback publication (one-shot)'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check whether first QA workflow already published v0.1.17
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v0.1.17 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+            echo 'The requested release is already available. No duplicate build.'
+          else
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-java@v4
+        if: steps.release.outputs.exists == 'false'
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.release.outputs.exists == 'false'
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK
+        if: steps.release.outputs.exists == 'false'
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Restore pinned stable signing key
+        if: steps.release.outputs.exists == 'false'
+        env:
+          KEYSTORE_B64: ${{ secrets.JARVIS_SIGNING_KEYSTORE_BASE64 }}
+          JARVIS_RELEASE_STORE_PASSWORD: ${{ secrets.JARVIS_RELEASE_STORE_PASSWORD }}
+          JARVIS_RELEASE_KEY_ALIAS: ${{ secrets.JARVIS_RELEASE_KEY_ALIAS }}
+          JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_B64"
+          test -n "$JARVIS_RELEASE_STORE_PASSWORD"
+          test -n "$JARVIS_RELEASE_KEY_ALIAS"
+          test -n "$JARVIS_RELEASE_KEY_PASSWORD"
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/original-jarvis-stable.jks"
+          chmod 600 "$RUNNER_TEMP/original-jarvis-stable.jks"
+          echo "JARVIS_RELEASE_STORE_FILE=$RUNNER_TEMP/original-jarvis-stable.jks" >> "$GITHUB_ENV"
+      - name: Test Android and build signed APK from complete source
+        if: steps.release.outputs.exists == 'false'
+        env:
+          JARVIS_RELEASE_STORE_PASSWORD: ${{ secrets.JARVIS_RELEASE_STORE_PASSWORD }}
+          JARVIS_RELEASE_KEY_ALIAS: ${{ secrets.JARVIS_RELEASE_KEY_ALIAS }}
+          JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          grep -Fq "applicationIdSuffix '.stable'" android/app/build.gradle
+          grep -Fq 'versionCode 27' android/app/build.gradle
+          grep -Fq "versionName '0.1.17'" android/app/build.gradle
+          gradle -p android --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleRelease
+      - name: Validate original certificate and upgrade over v0.1.16
+        if: steps.release.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          test -s "$apk"
+          "$tools/apksigner" verify --verbose "$apk"
+          expected="$(tr -d '[:space:]' < android/RELEASE-CERT-SHA256.txt | tr '[:upper:]' '[:lower:]')"
+          actual="$("$tools/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1)"
+          test "$actual" = "$expected"
+          "$tools/aapt" dump badging "$apk" > "$RUNNER_TEMP/badging.txt"
+          grep -Fq "package: name='com.andriy.jarvis.stable'" "$RUNNER_TEMP/badging.txt"
+          grep -Fq "versionCode='27'" "$RUNNER_TEMP/badging.txt"
+          grep -Fq "versionName='0.1.17'" "$RUNNER_TEMP/badging.txt"
+          "$tools/aapt" dump xmltree "$apk" AndroidManifest.xml > "$RUNNER_TEMP/manifest.txt"
+          for component in JarvisWearMessageReceiver MainActivity ScreenControlAccessibilityService FloatingJarvisService JarvisQuickTileService; do
+            grep -Fq "$component" "$RUNNER_TEMP/manifest.txt"
+          done
+          mkdir -p "$RUNNER_TEMP/old"
+          gh release download v0.1.16 --repo "$GITHUB_REPOSITORY" --pattern 'JARVIS-0.1.16-stable.apk' --dir "$RUNNER_TEMP/old"
+          old="$RUNNER_TEMP/old/JARVIS-0.1.16-stable.apk"
+          oldcert="$("$tools/apksigner" verify --print-certs "$old" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1)"
+          test "$oldcert" = "$actual"
+          "$tools/aapt" dump badging "$old" | grep -Fq "package: name='com.andriy.jarvis.stable'"
+          "$tools/aapt" dump badging "$old" | grep -Fq "versionCode='26'"
+          mkdir -p android/dist
+          cp "$apk" android/dist/JARVIS-0.1.17-stable.apk
+          (cd android/dist && sha256sum JARVIS-0.1.17-stable.apk > JARVIS-0.1.17-stable.sha256)
+          (cd android/dist && sha256sum -c JARVIS-0.1.17-stable.sha256)
+          echo "PASS: original stable certificate and increased version"
+      - uses: actions/upload-artifact@v4
+        if: steps.release.outputs.exists == 'false'
+        with:
+          name: JARVIS-0.1.17-signed-upgrade-checked
+          path: |
+            android/dist/JARVIS-0.1.17-stable.apk
+            android/dist/JARVIS-0.1.17-stable.sha256
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish direct APK link (no duplicate release)
+        if: steps.release.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view v0.1.17 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Another user-authorized build already published v0.1.17'
+            exit 0
+          fi
+          gh release create v0.1.17 \
+            android/dist/JARVIS-0.1.17-stable.apk \
+            android/dist/JARVIS-0.1.17-stable.sha256 \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title 'JARVIS 0.1.17 — signed stable update (Android + Wear OS)' \
+            --prerelease \
+            --notes 'User-requested full APK signed with original JARVIS stable certificate. Tests, compilation, exact identity and upgrade-compatible metadata passed. Full Android emulator QA is tracked separately and was still pending when this fallback was created; physical Galaxy Watch7 and Spotify/voice/gestures require testing. Includes Spotify, AI, 8-bit watch face, watch-phone control, phone mode, timers, shake wake and other new features. No background shake activation when the watch app is closed. AI Worker deployment separate.'
+      - name: Erase temporary keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/original-jarvis-stable.jks"
