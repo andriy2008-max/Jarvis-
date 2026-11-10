@@ -9,6 +9,8 @@ on:
       - 'android/app/src/main/java/com/andriy/jarvis/NeuralSpeechClient.java'
       - 'android/app/src/main/java/com/andriy/jarvis/OfflineVoicePackRules.java'
       - 'android/app/src/main/java/com/andriy/jarvis/OfflineVoicePackManager.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/OfflineOnnxSynthesizer.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/OfflineSpeechClient.java'
       - 'android/app/src/test/java/com/andriy/jarvis/OfflineVoicePackRulesTest.java'
       - 'tools/voice-export/**'
       - 'android/app/src/main/java/com/andriy/jarvis/MainActivity.java'
