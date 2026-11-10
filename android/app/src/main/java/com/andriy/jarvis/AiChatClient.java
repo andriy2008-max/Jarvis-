@@ -193,34 +193,72 @@ public final class AiChatClient {
         return o;
     }
 
-    private static String post(String endpoint, String clientToken, JSONObject request) throws Exception {
+    private static AiResponse post(String endpoint, String clientToken,
+                                   JSONObject request) throws Exception {
         HttpURLConnection conn = null;
         try {
             conn = (HttpURLConnection) new URL(endpoint).openConnection();
             conn.setRequestMethod("POST");
-            conn.setConnectTimeout(12000);
-            conn.setReadTimeout(35000);
+            conn.setConnectTimeout(15000);
+            // Image editing and web searches can take longer than text chat.
+            conn.setReadTimeout("image".equals(request.optString("mode")) ? 120000 : 65000);
             conn.setDoOutput(true);
-            conn.setInstanceFollowRedirects(false); // Prevent leaking access tokens to redirected hosts.
+            conn.setInstanceFollowRedirects(false);
             conn.setRequestProperty("Authorization", "Bearer " + clientToken);
             conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
             conn.setRequestProperty("Accept", "application/json");
-            byte[] body = request.toString().getBytes(StandardCharsets.UTF_8);
-            try (OutputStream output = conn.getOutputStream()) { output.write(body); }
+            byte[] data = request.toString().getBytes(StandardCharsets.UTF_8);
+            if (data.length > 5 * 1024 * 1024)
+                throw new Exception("Обраний файл завеликий для ШІ.");
+            conn.setFixedLengthStreamingMode(data.length);
+            try (OutputStream output = conn.getOutputStream()) { output.write(data); }
             int status = conn.getResponseCode();
-            if (status == 401 || status == 403) throw new Exception("Неправильний код доступу до ШІ-сервера.");
-            if (status == 429) throw new Exception("Ліміт ШІ тимчасово вичерпано. Спробуй пізніше.");
-            if (status < 200 || status >= 300) throw new Exception("ШІ-сервер відповів помилкою HTTP " + status + ".");
+            if (status == 401 || status == 403)
+                throw new Exception("Неправильний код доступу до ШІ-сервера.");
+            if (status == 429)
+                throw new Exception("Ліміт ШІ тимчасово вичерпано. Перевір витрати API.");
+            if (status < 200 || status >= 300) {
+                if (status == 400) throw new Exception(
+                    "Сервер не прийняв фото або документ. Перевір, чи оновлено Worker.");
+                if (status == 413) throw new Exception("Файл завеликий для сервера.");
+                if (status == 502) throw new Exception(
+                    "Модель або інструмент ШІ недоступний. Перевір налаштування API.");
+                throw new Exception("ШІ-сервер відповів помилкою HTTP " + status + ".");
+            }
             try (InputStream input = conn.getInputStream()) {
-                JSONObject reply = new JSONObject(readLimited(input));
-                String answer = reply.optString("reply", "").trim();
-                if (answer.isEmpty()) throw new Exception("ШІ повернув порожню відповідь.");
-                return answer.length() > 6000 ? answer.substring(0, 6000) : answer;
+                JSONObject result = new JSONObject(readLimited(input));
+                String response = result.optString("reply", "").trim();
+                if (response.isEmpty()) throw new Exception("ШІ повернув порожню відповідь.");
+                JSONArray citations = result.optJSONArray("sources");
+                StringBuilder links = new StringBuilder();
+                if (citations != null) {
+                    for (int i = 0; i < Math.min(8,citations.length()); i++) {
+                        JSONObject source = citations.optJSONObject(i);
+                        if (source == null) continue;
+                        String title = source.optString("title", "").trim();
+                        String link = source.optString("url", "");
+                        if (!link.startsWith("https://") || link.length() > 2000) continue;
+                        links.append(title.isEmpty() ? "Джерело" : title)
+                            .append("\n").append(link).append("\n");
+                    }
+                }
+                byte[] image = null;
+                String encoded = result.optString("image_base64", "");
+                if (!encoded.isEmpty()) {
+                    if (encoded.length() > 11 * 1024 * 1024)
+                        throw new Exception("Створене зображення завелике.");
+                    image = Base64.decode(encoded, Base64.DEFAULT);
+                    if (image.length > 9 * 1024 * 1024)
+                        throw new Exception("Зображення перевищує ліміт.");
+                }
+                return new AiResponse(
+                    response.length() > 6000 ? response.substring(0, 6000) : response,
+                    links.toString().trim(), image);
             }
         } catch (java.net.SocketTimeoutException exception) {
-            throw new Exception("ШІ не відповів вчасно. Перевір інтернет і повтори.");
+            throw new Exception("ШІ не відповів вчасно. Перевір інтернет або повтори запит.");
         } catch (java.io.IOException exception) {
-            throw new Exception("Не вдалося з'єднатися з ШІ-сервером. Перевір інтернет і HTTPS-адресу.");
+            throw new Exception("Не вдалося зв'язатися з ШІ-сервером. Перевір HTTPS та інтернет.");
         } finally {
             if (conn != null) conn.disconnect();
         }
