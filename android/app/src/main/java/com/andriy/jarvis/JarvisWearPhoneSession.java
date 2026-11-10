@@ -27,6 +27,9 @@ public final class JarvisWearPhoneSession {
     private static Runnable expiry;
     private static JarvisSequenceExecutor sequences;
     private static SpotifyPlaybackController spotify;
+    // One user-initiated remote Spotify task at a time, tied to its watch node.
+    private static String automaticSpotifyNode = "";
+    private static boolean automaticSpotifyBusy;
 
     private JarvisWearPhoneSession() {}
 
@@ -44,6 +47,44 @@ public final class JarvisWearPhoneSession {
         }
         if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_WATCH)) {
             out.reply(false,"Ця команда призначена для телефона.","",true); return;
+        }
+        // A watch voice command can temporarily use the phone's already
+        // user-approved Accessibility service without entering manual Phone mode.
+        if (JarvisWearProtocol.SPOTIFY.equals(action)) {
+            if (!JarvisWearProtocol.validCommand(command)) {
+                out.reply(false,"Невірна голосова команда Spotify.","",false);
+                return;
+            }
+            SpotifyMusicCommands.Kind music = SpotifyMusicCommands.parse(command);
+            if (music == null) {
+                out.reply(false,"Команда не належить до Spotify.","",false);
+                return;
+            }
+            if (automaticSpotifyBusy) {
+                out.reply(false,"Spotify вже виконує команду з годинника.","",false);
+                return;
+            }
+            automaticSpotifyBusy = true;
+            automaticSpotifyNode = sourceNode;
+            if (spotify == null) spotify = new SpotifyPlaybackController(context);
+            spotify.start(music,new SpotifyPlaybackController.Listener() {
+                @Override public void onProgress(String progress) { }
+                @Override public void onFinished(boolean ok, String detail) {
+                    automaticSpotifyBusy = false;
+                    automaticSpotifyNode = "";
+                    out.reply(ok, detail,"",false);
+                }
+            });
+            return;
+        }
+        if (JarvisWearProtocol.CANCEL_SPOTIFY.equals(action)) {
+            if (!automaticSpotifyBusy || !sourceNode.equals(automaticSpotifyNode)) {
+                out.reply(false,"Немає твоєї активної команди Spotify.","",false);
+                return;
+            }
+            if (spotify != null) spotify.cancel();
+            out.reply(true,"Скасував керування Spotify.","",false);
+            return;
         }
         if (JarvisWearProtocol.ENTER.equals(action)) {
             if (!ScreenControlAccessibilityService.isConnected()) {
