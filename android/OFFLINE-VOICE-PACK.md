@@ -50,7 +50,7 @@ A **0.1.14 signed QA APK** with `versionCode=24` and application ID `com.andriy.
 - Original *stable public* release remains 0.1.8. The signed QA artifact is **not** a new stable GitHub release.
 - The QA APK has a **same-certificate stable package ID** to update the existing program rather than creating the `.preview` app.
 - GitHub Actions did not allow creating a new public APK release (`403: Resource not accessible by integration`), so the temporary artifact and the direct signed APK supplied in the conversation are the available test downloads.
-- A separate Android 11/15 system package-manager test verifies upgrading the real 0.1.8 stable APK to this QA build: [upgrade test](https://github.com/andriy2008-max/Jarvis-/actions/runs/42800938799).
+- **PASS on Android 11 and Android 15:** the real, originally signed v0.1.8 stable APK was installed, then **updated in place via `adb install -r`** to the pinned-certificate 0.1.14 signed QA APK without uninstalling or changing `com.andriy.jarvis.stable`. Both emulator jobs passed: [signed in-place upgrade test](https://github.com/andriy2008-max/Jarvis-/actions/runs/42800938799). This confirms package-manager/signing compatibility, not every user's device or data state.
 
 ## Screen control: separate Android feature
 
@@ -63,7 +63,7 @@ Unlabeled graphic-only icons without any accessibility metadata still require **
 ## Still NOT complete
 
 - Physical ARM64 Android QA: performance, battery, audio quality, background playback and pronunciation of difficult Ukrainian words/number forms.
-- User verification that signed 0.1.14 upgrades the exact already-installed APK and preserves their settings/data, and that the voice pack downloads reliably on their own network.
+- User verification that signed 0.1.14 upgrades the exact already-installed APK **and preserves their own settings/data**, and that the voice pack downloads reliably on their network. The signed emulator upgrade is already proven.
 - Manual accessibility permission and microphone recognition behavior on a physical device; system prompts and restrictions differ by OS/vendor.
 - Wear OS RAM/performance testing: the 145MB model may be too large for some watches.
 - Stable rollout only after explicit phone QA approval, final version bump and comprehensive regression tests (including background timer).
