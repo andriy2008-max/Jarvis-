@@ -79,6 +79,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private TextToSpeech tts;
     private NeuralSpeechClient neuralSpeech;
     private OfflineVoicePackManager offlinePacks;
+    private OfflineSpeechClient offlineSpeech;
     private String activeTtsId;
     private DeviceActions deviceActions;
     private final WakeConversation wakeConversation = new WakeConversation();
@@ -133,6 +134,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         aiChatClient = new AiChatClient(this);
         neuralSpeech = new NeuralSpeechClient(this);
         offlinePacks = new OfflineVoicePackManager(this);
+        offlineSpeech = new OfflineSpeechClient(this, offlinePacks);
         buildInterface();
         deviceActions = new DeviceActions(this);
 
@@ -762,21 +764,37 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (statusCode != TextToSpeech.SUCCESS) endSpeaking();
     }
 
-    /** Use the real Dmytro/Lada model when configured; otherwise Android TTS fallback. */
+    /** Prefer fully-local two-speaker ONNX, then private TTS server, then Android TTS. */
     private void speakReply(String text) {
         if (!voiceEnabled || text == null || text.trim().isEmpty()) {
             endSpeaking();
             return;
         }
         stopSpeaking();
+        if (offlineSpeech != null && offlineSpeech.isInstalled()) {
+            markSpeaking();
+            if (offlineSpeech.speak(text, selectedVoiceProfile(), new NeuralSpeechClient.Listener() {
+                @Override public void onStart() { markSpeaking(); }
+                @Override public void onDone() { endSpeaking(); }
+                @Override public void onFailure(String error) {
+                    if (!voiceEnabled || isFinishing() || isDestroyed()) return;
+                    setStatus("Офлайн-модель не запустилася (" + error + "). Спробую резервне озвучення.");
+                    speakRemoteOrSystem(text);
+                }
+            })) return;
+        }
+        speakRemoteOrSystem(text);
+    }
+
+    private void speakRemoteOrSystem(String text) {
         if (neuralSpeech != null && neuralSpeech.isConfigured()) {
-            markSpeaking(); // Suppress microphone reactivation while the model is generating.
+            markSpeaking();
             if (neuralSpeech.speak(text, selectedVoiceProfile(), new NeuralSpeechClient.Listener() {
                 @Override public void onStart() { markSpeaking(); }
                 @Override public void onDone() { endSpeaking(); }
                 @Override public void onFailure(String error) {
                     if (!voiceEnabled || isFinishing() || isDestroyed()) return;
-                    setStatus("Нейроголос недоступний (" + error + "). Озвучує Android TTS.");
+                    setStatus("TTS-сервер недоступний (" + error + "). Озвучує Android.");
                     speakSystemVoice(text);
                 }
             })) return;
@@ -829,7 +847,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         String profile = VoiceRanking.profile(requested);
         getPreferences(MODE_PRIVATE).edit().putString("jarvisVoiceProfile", profile).apply();
         applyPreferredVoice();
-        if ((neuralSpeech != null && neuralSpeech.isConfigured()) ||
+        if ((offlineSpeech != null && offlineSpeech.isInstalled()) ||
+            (neuralSpeech != null && neuralSpeech.isConfigured()) ||
             (ttsReady && voiceForProfile(ukrainianVoices(), profile) != null)) {
             setStatus("Обрано голос " + profileLabel(profile) + ". Перевіряю звучання.");
             previewCurrentVoice();
@@ -843,8 +862,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         boolean modelConfigured = neuralSpeech != null && neuralSpeech.isConfigured();
         boolean offlineSaved = offlinePacks != null && offlinePacks.hasInstalledFiles();
         String[] labels = {
-            "Дмитро — чоловічий · " + (modelConfigured ? "сервер налаштовано" : hasDmytro ? "системний голос" : offlineSaved ? "файли офлайн збережені, рушій не готовий" : "не підключений"),
-            "Лада — жіночий · " + (modelConfigured ? "сервер налаштовано" : hasLada ? "системний голос" : offlineSaved ? "файли офлайн збережені, рушій не готовий" : "не підключений")
+            "Дмитро — чоловічий · " + (offlineSaved ? "локальна ONNX-модель (експериментально)" : modelConfigured ? "сервер налаштовано" : hasDmytro ? "системний голос" : "ще не підключений"),
+            "Лада — жіночий · " + (offlineSaved ? "локальна ONNX-модель (експериментально)" : modelConfigured ? "сервер налаштовано" : hasLada ? "системний голос" : "ще не підключений")
         };
         int checked = VoiceRanking.LADA.equals(selectedVoiceProfile()) ? 1 : 0;
         AlertDialog dialog = new AlertDialog.Builder(this)
@@ -858,7 +877,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         showDialogWithoutWake(dialog);
     }
 
-    /** Prototype installer: models are checked/persisted, local ONNX inference is NOT active yet. */
+    /** Verified ONNX pack installer; inference is experimental until tested on device. */
     private void showOfflineVoiceSettings() {
         if (offlinePacks == null) return;
         LinearLayout form = new LinearLayout(this);
@@ -866,7 +885,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         form.setPadding(dp(18), dp(8), dp(18), dp(8));
 
         String state = offlinePacks.hasInstalledFiles()
-            ? "Пакет збережено. Офлайн-озвучення ще не активоване: очікується перевірка конвертації ONNX на Android."
+            ? "ONNX-пакет збережено. Офлайн-синтез увімкнеться під час наступної відповіді; потрібна перевірка реального звучання на пристрої."
             : "Пакет ще не встановлено. Потрібен конвертований ONNX ZIP, не оригінальний model.pth.";
         TextView description = makeText(
             state + "\nОбидва голоси використовують одну модель. Для безпечного встановлення потрібне " +
@@ -887,7 +906,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         form.addView(sha, new LinearLayout.LayoutParams(-1, -2));
 
         TextView progress = makeText(
-            "Перевіреного ONNX-релізу поки немає. Це підготовлений механізм завантаження, а не готовий голосовий рушій.",
+            "Офлайн-рушій додано, але перевіреного пакета моделі та тесту на телефоні поки немає.",
             12, MUTED, Gravity.START, false);
         form.addView(progress, new LinearLayout.LayoutParams(-1, -2));
 
@@ -1796,6 +1815,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void stopSpeaking() {
         activeTtsId = null;
+        if (offlineSpeech != null) offlineSpeech.stop();
         if (neuralSpeech != null) neuralSpeech.stop();
         if (tts != null) tts.stop();
         speaking = false;
@@ -2107,6 +2127,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (deviceActions != null) deviceActions.close();
         if (aiChatClient != null) aiChatClient.close();
         if (recognizer != null) recognizer.destroy();
+        if (offlineSpeech != null) offlineSpeech.close();
         if (offlinePacks != null) offlinePacks.close();
         if (neuralSpeech != null) neuralSpeech.close();
         if (tts != null) {
