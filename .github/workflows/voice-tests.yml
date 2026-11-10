@@ -68,6 +68,7 @@ jobs:
           javac -encoding UTF-8 -d /tmp/jarvis-voice-tests \
             android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisOrbTranscript.java \
+            android/app/src/main/java/com/andriy/jarvis/JarvisLiveTranscript.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisOrbPlacement.java \
             android/app/src/main/java/com/andriy/jarvis/ScreenControlCommands.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisCommandSequence.java \
@@ -81,6 +82,7 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/UkrainianVoiceText.java \
             android/app/src/test/java/com/andriy/jarvis/CommandPatternsTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisOrbTranscriptTest.java \
+            android/app/src/test/java/com/andriy/jarvis/JarvisLiveTranscriptTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisOrbPlacementTest.java \
             android/app/src/test/java/com/andriy/jarvis/ScreenControlCommandsTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisCommandSequenceTest.java \
@@ -92,6 +94,7 @@ jobs:
             android/app/src/test/java/com/andriy/jarvis/UkrainianVoiceTextTest.java
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.CommandPatternsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisOrbTranscriptTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisLiveTranscriptTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisOrbPlacementTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.ScreenControlCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisCommandSequenceTest
