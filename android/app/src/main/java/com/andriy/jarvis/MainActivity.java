@@ -2494,6 +2494,154 @@ public final class MainActivity extends Activity implements RecognitionListener 
         });
     }
 
+    private void askAiFromInput(String mode) {
+        if (input == null || input.getText().toString().trim().isEmpty()) {
+            setStatus("Напиши запит у полі перед натисканням кнопки ШІ.");
+            return;
+        }
+        String question = input.getText().toString().trim();
+        input.setText("");
+        appendDialogue("Ти", question);
+        askAiDetailed(question, mode, null);
+    }
+
+    /** User grants access to ONE chosen document or picture through Android. */
+    private void chooseAiAttachment() {
+        if (aiChatClient == null || !aiChatClient.isConfigured()) {
+            showAiSettings();
+            return;
+        }
+        Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        picker.addCategory(Intent.CATEGORY_OPENABLE);
+        picker.setType("*/*");
+        picker.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
+            "image/jpeg", "image/png", "image/webp", "application/pdf",
+            "text/plain", "text/markdown", "text/csv", "application/json",
+            "application/xml", "text/html", "application/rtf",
+            "application/msword", "application/vnd.ms-excel",
+            "application/vnd.ms-powerpoint",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        });
+        try { startActivityForResult(picker, REQUEST_AI_ATTACHMENT); }
+        catch (Exception error) {
+            setStatus("На пристрої немає системного переглядача документів.");
+        }
+    }
+
+    @Override protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request != REQUEST_AI_ATTACHMENT || result != RESULT_OK ||
+            data == null || data.getData() == null) return;
+        Uri attachment = data.getData();
+        boolean picture = getContentResolver().getType(attachment) != null &&
+            getContentResolver().getType(attachment).startsWith("image/");
+        EditText prompt = new EditText(this);
+        prompt.setSingleLine(false);
+        prompt.setMinLines(2);
+        prompt.setText(input != null && !input.getText().toString().trim().isEmpty()
+            ? input.getText().toString().trim()
+            : picture ? "Проаналізуй це фото та опиши, що на ньому."
+                      : "Прочитай документ, виділи головне та поясни.");
+        LinearLayout wrapper = new LinearLayout(this);
+        wrapper.setPadding(dp(16), dp(4), dp(16), dp(4));
+        wrapper.addView(prompt, new LinearLayout.LayoutParams(-1, -2));
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+            .setTitle(picture ? "Фото для ШІ" : "Документ для ШІ")
+            .setMessage("Лише вибраний файл передається через твій ШІ-сервер до OpenAI. Максимум 2,7 МБ для документів; фотографії зменшуються за потреби. Застосовуються тарифи API.")
+            .setView(wrapper)
+            .setNegativeButton("Скасувати", null)
+            .setPositiveButton("Проаналізувати", (d, which) -> {
+                String question = prompt.getText().toString().trim();
+                appendDialogue("Ти", "📎 " + question);
+                askAiDetailed(question, "chat", attachment);
+            });
+        if (picture) builder.setNeutralButton("Редагувати фото", (d, which) -> {
+            String question = prompt.getText().toString().trim();
+            appendDialogue("Ти", "🎨 " + question);
+            askAiDetailed(question, "image", attachment);
+        });
+        showDialogWithoutWake(builder.create());
+    }
+
+    private void showGeneratedImage(byte[] data) {
+        if (data == null || feedMessages == null) return;
+        android.graphics.Bitmap image = android.graphics.BitmapFactory.decodeByteArray(
+            data, 0, data.length);
+        if (image == null) {
+            appendDialogue("Джарвіс", "Зображення повернулося, але Android не може його показати.");
+            return;
+        }
+        LinearLayout preview = new LinearLayout(this);
+        preview.setOrientation(LinearLayout.VERTICAL);
+        preview.setPadding(dp(8), dp(8), dp(8), dp(8));
+        preview.setBackground(roundedFill(PANEL, BORDER, 12));
+        LinearLayout.LayoutParams outer = new LinearLayout.LayoutParams(-1, -2);
+        outer.bottomMargin = dp(10);
+        feedMessages.addView(preview, outer);
+        android.widget.ImageView photo = new android.widget.ImageView(this);
+        photo.setImageBitmap(image);
+        photo.setAdjustViewBounds(true);
+        photo.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        photo.setContentDescription("Зображення, створене ШІ Джарвіса");
+        preview.addView(photo, new LinearLayout.LayoutParams(-1, dp(isWatchDevice ? 160 : 260)));
+        Button save = secondaryButton("💾 Зберегти зображення", () -> {
+            setStatus("Зберігаю зображення...");
+            new Thread(() -> {
+                String result;
+                try { result = JarvisGeneratedImageStore.save(this, data); }
+                catch (Exception e) {
+                    result = e.getMessage() == null ? "Помилка збереження." : e.getMessage();
+                }
+                final String message = result;
+                runOnUiThread(() -> {
+                    if (!isFinishing() && !isDestroyed()) setStatus(message);
+                });
+            }, "Jarvis-image-save").start();
+        });
+        preview.addView(save, new LinearLayout.LayoutParams(-1, dp(45)));
+        while (feedMessages.getChildCount() > 40) feedMessages.removeViewAt(0);
+        feedScroll.post(() -> feedScroll.fullScroll(View.FOCUS_DOWN));
+    }
+
+    private void askAiDetailed(String question, String mode, Uri chosenFile) {
+        if (aiChatClient == null || !aiChatClient.isConfigured()) {
+            appendDialogue("Джарвіс", "Спочатку підключи особистий ШІ-сервер.");
+            showAiSettings();
+            return;
+        }
+        if (aiBusy || question == null || question.trim().isEmpty()) {
+            setStatus(aiBusy ? "Джарвіс ще опрацьовує попередній запит."
+                : "Спочатку напиши запит.");
+            return;
+        }
+        aiBusy = true;
+        processing = true;
+        if (face != null) face.setState("thinking");
+        setStatus("ШІ опрацьовує " + ("image".equals(mode) ? "зображення..." :
+            "web".equals(mode) ? "пошук..." : "запит..."));
+        aiChatClient.sendDetailed(question, mode, chosenFile, (response, error) -> {
+            aiBusy = false;
+            processing = false;
+            if (isFinishing() || isDestroyed()) return;
+            String text = error == null && response != null ? response.reply : error;
+            if (text == null || text.trim().isEmpty())
+                text = "ШІ не повернув відповіді.";
+            appendDialogue("Джарвіс", text);
+            if (response != null && response.sources != null && !response.sources.isEmpty())
+                appendDialogue("Джерела", response.sources);
+            if (response != null && response.image != null)
+                showGeneratedImage(response.image);
+            setStatus(error == null ? "Відповідь ШІ готова" : "Помилка ШІ");
+            if (voiceEnabled && error == null) speakReply(text);
+            else {
+                if (face != null) face.setState("idle");
+                resumeAfterReply();
+            }
+        });
+    }
+
     /** Unrecognized conversation goes to AI; local phone commands never give AI device control. */
     private void askAi(String question) {
         if (aiChatClient == null || !aiChatClient.isConfigured()) {
