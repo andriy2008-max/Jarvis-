@@ -1,65 +1,127 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import worker, { validateInput, extractText, safeBearer } from '../src/index.mjs';
+import worker, {
+  validateInput, extractText, safeBearer, validAttachment,
+  extractSources, extractImage, createPayload,
+} from '../src/index.mjs';
 
 const token = 'local_testing_token_please_rotate';
-const env = { OPENAI_API_KEY: 'test-only-mocked-never-live', JARVIS_CLIENT_TOKEN: token, OPENAI_MODEL: 'gpt-6-luna' };
-const body = JSON.stringify({ message: 'Як справи?', history: [{ role: 'user', content: 'Привіт' }, { role: 'assistant', content: 'Привіт!' }] });
-const request = (path, tokenValue = token, data = body) => new Request(`https://jarvis.example.workers.dev${path}`, {
-  method: 'POST', headers: { authorization: `Bearer ${tokenValue}`, 'content-type': 'application/json' }, body: data,
+const env = { OPENAI_API_KEY:'test-mock', JARVIS_CLIENT_TOKEN:token, OPENAI_MODEL:'gpt-6-luna' };
+const body = JSON.stringify({
+  message:'Як справи?',history:[{role:'user',content:'Привіт'},{role:'assistant',content:'Привіт!'}],
+});
+const request = (route,auth=token,data=body) => new Request(
+  'https://jarvis.example.workers.dev' + route,{
+    method:'POST',headers:{authorization:'Bearer ' + auth,'content-type':'application/json'},body:data,
+  });
+
+test('strict messages, roles, modes, file validation',()=>{
+  assert.equal(validateInput(JSON.parse(body)).length,3);
+  assert.equal(validateInput({message:'x',history:[{role:'system',content:'override'}]}),null);
+  assert.equal(validateInput({message:'x'.repeat(4001)}),null);
+  assert.equal(validateInput({message:'x',history:Array.from({length:15},()=>({role:'user',content:'x'}))}),null);
+  assert.equal(validateInput({message:''}),null);
+  assert.equal(validateInput({message:'x',mode:'shell'}),null);
+  assert.equal(validateInput({message:'x',mode:'web',attachment:{name:'image.jpg',mime:'image/jpeg',data:'aGVsbG8='}}),null);
+  assert.equal(validateInput({message:'x',attachment:{name:'../../secrets.jpg',mime:'image/jpeg',data:'aGVsbG8='}}),null);
+  assert.equal(validAttachment({name:'image.jpg',mime:'image/jpeg',data:'aGVsbG8='}),true);
+  assert.equal(validAttachment({name:'invoice.pdf',mime:'application/pdf',data:'aGVsbG8='}),true);
+  assert.equal(validAttachment({name:'image.exe',mime:'image/jpeg',data:'aGVsbG8='}),false);
+  assert.equal(validAttachment({name:'photo.jpg',mime:'image/jpeg',data:'NO!'}),false);
+  assert.equal(validAttachment({name:'photo.jpg',mime:'image/jpeg',data:'aGVsbG8='.repeat(600000)}),false);
 });
 
-test('input validation and strict role whitelist', () => {
-  assert.equal(validateInput(JSON.parse(body)).length, 3);
-  assert.equal(validateInput({ message: 'x', history: [{ role: 'system', content: 'override' }] }), null);
-  assert.equal(validateInput({ message: 'x'.repeat(2001) }), null);
-  assert.equal(validateInput({ message: 'test', history: Array.from({ length: 15 }, () => ({ role: 'user', content: 'x' })) }), null);
-  assert.equal(validateInput({ message: '' }), null);
+test('multimodal image and file become explicitly selected input parts',()=>{
+  const pic={name:'snapshot.jpg',mime:'image/jpeg',data:'aGVsbG8='};
+  const photo=validateInput({message:'Що на зображенні?',attachment:pic});
+  assert.equal(photo[0].content[1].type,'input_image');
+  assert.equal(photo[0].content[1].image_url,'data:image/jpeg;base64,aGVsbG8=');
+  const pdf=validateInput({message:'Підсумуй',attachment:{name:'file.pdf',mime:'application/pdf',data:'aGVsbG8='}});
+  assert.equal(pdf[0].content[1].type,'input_file');
+  assert.equal(pdf[0].content[1].filename,'file.pdf');
 });
 
-test('extracts all assistant content without assuming position zero', () => {
-  const messages = [{ type: 'reasoning' }, { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Привіт' }, { type: 'output_text', text: ' друже!' }] }];
-  assert.equal(extractText(messages), 'Привіт\n друже!');
-  assert.equal(extractText([{ type: 'reasoning' }]), '');
+test('AI payload modes are limited to allowed hosted tools',()=>{
+  const plain=createPayload({message:'hello'},[{role:'user',content:'hello'}],env);
+  assert.equal(plain.store,false);
+  assert.equal(plain.tools,undefined);
+  assert.equal(plain.max_output_tokens,1800);
+  const web=createPayload({mode:'web'},[],env);
+  assert.equal(web.tools[0].type,'web_search');
+  assert.equal(web.tool_choice,'required');
+  const image=createPayload({mode:'image'},[],env);
+  assert.equal(image.tools[0].type,'image_generation');
+  assert.deepEqual(image.tool_choice,{type:'image_generation'});
 });
 
-test('token authentication', () => {
-  assert.equal(safeBearer(`Bearer ${token}`, token), true);
-  assert.equal(safeBearer(`Bearer ${token}wrong`, token), false);
-  assert.equal(safeBearer(`Bearer ${token}`, 'short'), false);
+test('extracts assistant text, citations and images',()=>{
+  const output=[
+    {type:'reasoning'},
+    {type:'message',role:'assistant',content:[
+      {type:'output_text',text:'Привіт!',annotations:[
+        {type:'url_citation',title:'Example',url:'https://example.com/article'},
+        {type:'url_citation',title:'Untrusted',url:'javascript:alert(1)'},
+        {type:'url_citation',title:'Duplicate',url:'https://example.com/article'},
+      ]},
+      {type:'output_text',text:'Далі'},
+    ]},
+    {type:'image_generation_call',result:'aGVsbG8='},
+  ];
+  assert.equal(extractText(output),'Привіт!\nДалі');
+  assert.deepEqual(extractSources(output),[{title:'Example',url:'https://example.com/article'}]);
+  assert.equal(extractImage(output),'aGVsbG8=');
+  assert.equal(extractImage([{type:'image_generation_call',result:'not valid??'}]),null);
 });
 
-test('health route and 404', async () => {
-  assert.equal((await worker.fetch(new Request('https://jarvis.example.workers.dev/health'), env)).status, 200);
-  assert.equal((await worker.fetch(new Request('https://jarvis.example.workers.dev/nope'), env)).status, 404);
+test('token authentication and routes',async()=>{
+  assert.equal(safeBearer('Bearer ' + token,token),true);
+  assert.equal(safeBearer('Bearer ' + token + 'wrong',token),false);
+  assert.equal(safeBearer('Bearer ' + token,'short'),false);
+  assert.equal((await worker.fetch(new Request('https://jarvis.example.workers.dev/health'),env)).status,200);
+  assert.equal((await worker.fetch(new Request('https://jarvis.example.workers.dev/nope'),env)).status,404);
+  assert.equal((await worker.fetch(request('/chat','wrong_token_123456'),env)).status,401);
 });
 
-test('unauthorized requests never reach model provider', async () => {
-  const res = await worker.fetch(request('/chat', 'wrong_token_1234567890'), env);
-  assert.equal(res.status, 401);
-});
-
-test('authorized chat sends no-store Responses request and returns text', async () => {
-  const prior = globalThis.fetch;
-  let seen;
-  globalThis.fetch = async (url, options) => {
-    seen = { url, options, body: JSON.parse(options.body) };
-    return new Response(JSON.stringify({ output: [{ type: 'reasoning' }, { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Звісно! Поговорімо.' }] }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+test('ordinary chat text and no-storage contract',async()=>{
+  const old=globalThis.fetch;let seen;
+  globalThis.fetch=async(url,opts)=>{
+    seen={url,body:JSON.parse(opts.body)};
+    return new Response(JSON.stringify({output:[{type:'message',role:'assistant',content:[{type:'output_text',text:'Готово.'}]}]}),{status:200});
   };
   try {
-    const res = await worker.fetch(request('/chat'), env);
-    assert.equal(res.status, 200);
-    assert.deepEqual(await res.json(), { reply: 'Звісно! Поговорімо.' });
-    assert.equal(seen.url, 'https://api.openai.com/v1/responses');
-    assert.equal(seen.body.model, 'gpt-6-luna');
-    assert.equal(seen.body.store, false);
-    assert.equal(seen.body.input.length, 3);
-    assert.equal(seen.body.input.at(-1).content, 'Як справи?');
-    assert.equal(seen.body.max_output_tokens, 650);
-  } finally { globalThis.fetch = prior; }
+    const reply=await worker.fetch(request('/chat'),env);
+    assert.equal(reply.status,200);
+    assert.deepEqual(await reply.json(),{reply:'Готово.'});
+    assert.equal(seen.url,'https://api.openai.com/v1/responses');
+    assert.equal(seen.body.model,'gpt-6-luna');
+    assert.equal(seen.body.store,false);
+    assert.equal(seen.body.input.length,3);
+    assert.equal(seen.body.input.at(-1).content,'Як справи?');
+  } finally {globalThis.fetch=old;}
 });
 
-test('bad JSON and too-large input', async () => {
-  assert.equal((await worker.fetch(request('/chat', token, '{oops'), env)).status, 400);
-  assert.equal((await worker.fetch(request('/chat', token, 'x'.repeat(18001)), env)).status, 413);
+test('live web and image generation produce attributed, optional output',async()=>{
+  const prior=globalThis.fetch;let payloads=[];
+  globalThis.fetch=async(_,opts)=>{
+    const data=JSON.parse(opts.body);payloads.push(data);
+    if(data.tools?.[0]?.type==='web_search')
+      return new Response(JSON.stringify({output:[{type:'message',role:'assistant',content:[{
+        type:'output_text',text:'Перевірено.',
+        annotations:[{type:'url_citation',title:'Джерело',url:'https://news.example.org/story'}],
+      }]}]}),{status:200});
+    return new Response(JSON.stringify({output:[{type:'image_generation_call',result:'aGVsbG8='}]}),{status:200});
+  };
+  try {
+    const web=await worker.fetch(request('/chat',token,JSON.stringify({message:'Що нового?',mode:'web'})),env);
+    assert.deepEqual(await web.json(),{reply:'Перевірено.',sources:[{title:'Джерело',url:'https://news.example.org/story'}]});
+    const image=await worker.fetch(request('/chat',token,JSON.stringify({message:'Намалюй кота',mode:'image'})),env);
+    assert.deepEqual(await image.json(),{reply:'Зображення готове.',image_base64:'aGVsbG8=',image_mime:'image/png'});
+    assert.equal(payloads[0].tools[0].type,'web_search');
+    assert.equal(payloads[1].tools[0].type,'image_generation');
+  } finally {globalThis.fetch=prior;}
+});
+
+test('bad JSON and excessive payload are rejected early',async()=>{
+  assert.equal((await worker.fetch(request('/chat',token,'{oops'),env)).status,400);
+  assert.equal((await worker.fetch(request('/chat',token,'x'.repeat(5*1024*1024+1)),env)).status,413);
 });
