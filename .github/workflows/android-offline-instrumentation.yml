@@ -5,6 +5,11 @@ on:
   push:
     paths:
       - '.github/workflows/android-offline-instrumentation.yml'
+      - 'android/app/src/androidTest/**'
+      - 'android/app/src/main/java/com/andriy/jarvis/OfflineOnnxSynthesizer.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/UkrainianVoiceText.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/OfflineVoicePackManager.java'
+      - 'android/app/build.gradle'
   workflow_dispatch:
 
 permissions:
