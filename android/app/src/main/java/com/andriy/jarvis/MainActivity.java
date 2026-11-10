@@ -1999,9 +1999,46 @@ public final class MainActivity extends Activity implements RecognitionListener 
         processing = false;
         microphone.setText(isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Джарвісом");
         if (transcript.isEmpty()) {
+            if (shakeCommandCapture) {
+                shakeCommandCapture = false;
+                shakeAiPromptNext = false;
+            }
             face.setState("idle");
             setStatus("Запис порожній. Спробуй говорити після натискання.");
             scheduleAutoWake(550L);
+            return;
+        }
+        if (shakeCommandCapture) {
+            shakeCommandCapture = false;
+            wakeConversation.end();
+            if (shakeAiPromptNext) {
+                shakeAiPromptNext = false;
+                // The second standalone "Джарвіс" explicitly opened AI mode.
+                // This next dictated phrase is now an AI request.
+                face.setState("thinking");
+                askAi(transcript);
+                return;
+            }
+            if (JarvisShakeGate.isWakeOnly(transcript)) {
+                shakeAiPromptNext = true;
+                face.setState("listening");
+                setStatus("ШІ активовано. Слухаю запитання.");
+                wakeHandler.postDelayed(() -> {
+                    if (foreground && shakeAiPromptNext && !manualCapture) {
+                        shakeCommandCapture = true;
+                        toggleListening();
+                    }
+                }, 350L);
+                return;
+            }
+            // Only explicit SECOND "Джарвіс" routes a post-shake
+            // request into AI. Normal commands run locally or in browser.
+            shakeLocalOnly = !JarvisShakeGate.aiRequested(transcript);
+            try {
+                processCommand(transcript);
+            } finally {
+                shakeLocalOnly = false;
+            }
             return;
         }
         WakeConversation.Decision decision = wakeConversation.accept(
@@ -2188,6 +2225,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
                 cancelSilenceCheck();
                 manualCapture = false;
+                shakeCommandCapture = false;
+                shakeAiPromptNext = false;
                 resetListening("Надай дозвіл на мікрофон у налаштуваннях Android.");
                 return;
             }
@@ -2204,10 +2243,17 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 manualCapture = false;
                 resetListening("Розпізнавання зупинилося через повторні помилки (" + error + ").");
                 if (manualTranscript.length() > 0) {
-                    // Never silently lose a successfully transcribed earlier segment.
-                    final String partial = manualTranscript.toString();
-                    manualTranscript.setLength(0);
-                    processCommand(partial);
+                    // Never silently lose successfully recognized words.
+                    if (shakeCommandCapture) {
+                        finishManualCapture();
+                    } else {
+                        final String partial = manualTranscript.toString();
+                        manualTranscript.setLength(0);
+                        processCommand(partial);
+                    }
+                } else {
+                    shakeCommandCapture = false;
+                    shakeAiPromptNext = false;
                 }
                 return;
             }
@@ -3074,6 +3120,21 @@ public final class MainActivity extends Activity implements RecognitionListener 
         appendDialogue("Ти", raw.trim());
         String command = CommandPatterns.normalize(raw);
         if (command.isEmpty()) return;
+        if (shakeLocalOnly &&
+            (command.startsWith("обчисли через python") ||
+             command.startsWith("перевір через python") ||
+             command.startsWith("проаналізуй дані") ||
+             command.startsWith("створи зображення") ||
+             command.startsWith("згенеруй зображення") ||
+             command.startsWith("намалюй ") ||
+             command.startsWith("зроби картинку ") ||
+             command.equals("проаналізуй фото") ||
+             command.equals("аналіз фото") ||
+             command.equals("проаналізуй документ") ||
+             command.equals("прочитай документ"))) {
+            setStatus("Для ШІ після струшування двічі скажи «Джарвіс».");
+            return;
+        }
         SpotifyMusicCommands.Kind musicRequest = SpotifyMusicCommands.parse(raw);
         if (musicRequest != null) {
             startSpotifyMusic(musicRequest);
@@ -3318,15 +3379,22 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     + "» у меню встановлених застосунків. Назви її так, як під іконкою на телефоні.";
             }
         } else if (command.startsWith("привіт")) {
-            askAi(raw);
-            return;
+            if (shakeLocalOnly) reply = "Привіт! Для розмови з ШІ скажи «Джарвіс» ще раз після струшування.";
+            else {
+                askAi(raw);
+                return;
+            }
         } else if (command.contains("що ти вмієш") || command.equals("допомога") || command.equals("команди")) {
             reply = "Я вмію: свіжі світові новини з озвученням, команди телефону, нотатки, таймери, будильники, запуск програм, музику, гучність, ліхтарик, керування екраном після ручного дозволу, озвучення будь-якої фрази командою «Скажи...» та розмову з ШІ (після підключення сервера). Спробуй: скажи Привіт, як справи?";
         } else if (command.contains("дякую")) {
             reply = "Завжди радий допомогти.";
         } else {
-            askAi(raw);
-            return;
+            if (shakeLocalOnly) {
+                reply = "Не розпізнав локальну команду. Для запитань до ШІ повторно скажи «Джарвіс».";
+            } else {
+                askAi(raw);
+                return;
+            }
         }
 
         appendDialogue("Джарвіс", reply);
