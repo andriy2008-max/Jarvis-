@@ -278,9 +278,11 @@ public final class OfflineOnnxSynthesizer implements AutoCloseable {
             if (decoder.getInputNames().contains("last_att_mask"))
                 args.put("last_att_mask", new float[length]);
 
-            Object[] decoded = run(decoder, args, "out", "prob",
-                "prev_att_w", "prev_out", "c_list_0", "z_list_0",
-                "c_list_1", "z_list_1");
+            ArrayList<String> outputs = new ArrayList<>(Arrays.asList(
+                "out", "prob", "prev_att_w", "prev_out"));
+            for (int i = 0; i < dlayers; i++) outputs.add("c_list_" + i);
+            for (int i = 0; i < dlayers; i++) outputs.add("z_list_" + i);
+            Object[] decoded = run(decoder, args, outputs.toArray(new String[0]));
             float[][][] out = (float[][][]) decoded[0];
             float[] probs = flatten(decoded[1]);
             float[][] lastAtt = (float[][]) decoded[2];
@@ -295,12 +297,8 @@ public final class OfflineOnnxSynthesizer implements AutoCloseable {
                 att = lastAtt;
             }
             for (int i = 0; i < dlayers; i++) {
-                String cs = "c_list_" + i, zs = "z_list_" + i;
-                // Prefer generic lookup for checkpoints with >2 decoder layers.
-                if (i < 2) {
-                    cstates[i] = (float[][]) decoded[4 + i * 0]; // replaced below by named lookup
-                    zstates[i] = (float[][]) decoded[5 + i * 0];
-                }
+                cstates[i] = (float[][]) decoded[4 + i];
+                zstates[i] = (float[][]) decoded[4 + dlayers + i];
             }
             // Terminate at predicted stop token only after minimum duration.
             boolean stop = false;
@@ -343,8 +341,8 @@ public final class OfflineOnnxSynthesizer implements AutoCloseable {
             try (OrtSession.Result result = session.run(tensors)) {
                 Object[] outputs = new Object[wanted.length];
                 for (int i = 0; i < wanted.length; i++) {
-                    OnnxValue v = result.get(wanted[i]).orElseThrow(
-                        () -> new OrtException("Відсутній ONNX вихід: " + wanted[i]));
+                    OnnxValue v = result.get(wanted[i]).orElse(null);
+                    if (v == null) throw new OrtException("Відсутній ONNX вихід: " + wanted[i]);
                     outputs[i] = v.getValue();
                 }
                 return outputs;
