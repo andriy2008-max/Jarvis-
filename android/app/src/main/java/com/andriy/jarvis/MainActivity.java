@@ -77,6 +77,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private SpeechRecognizer recognizer;
     private boolean recognizerUsesOnDevice;
     private TextToSpeech tts;
+    private NeuralSpeechClient neuralSpeech;
+    private String activeTtsId;
     private DeviceActions deviceActions;
     private final WakeConversation wakeConversation = new WakeConversation();
     private final Handler wakeHandler = new Handler(Looper.getMainLooper());
@@ -128,6 +130,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             SpeechRecognizer.isOnDeviceRecognitionAvailable(this);
         loadNotes();
         aiChatClient = new AiChatClient(this);
+        neuralSpeech = new NeuralSpeechClient(this);
         buildInterface();
         deviceActions = new DeviceActions(this);
 
@@ -446,8 +449,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             voiceEnabled = checked;
             getPreferences(MODE_PRIVATE).edit().putBoolean("voiceEnabled", checked).apply();
             if (!checked) {
-                speaking = false;
-                if (tts != null) tts.stop();
+                stopSpeaking();
                 if (face != null) face.setState(listening ? "listening" : processing ? "thinking" : "idle");
             }
         });
@@ -653,7 +655,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         voiceToggle.setOnCheckedChangeListener((button, selected) -> {
             voiceEnabled = selected;
             getPreferences(MODE_PRIVATE).edit().putBoolean("voiceEnabled", selected).apply();
-            if (!selected && tts != null) tts.stop();
+            if (!selected) stopSpeaking();
         });
         body.addView(voiceToggle, new LinearLayout.LayoutParams(-1, -2));
 
@@ -736,18 +738,60 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
     }
 
-    private void previewCurrentVoice() {
+    /** Pause wake recognition while either voice engine is producing audio. */
+    private void markSpeaking() {
+        speaking = true;
+        cancelAutoWakeSchedule();
+        if (autoWakeListening && recognizer != null) {
+            recognizer.cancel();
+            listening = false;
+            recognizerSessionActive = false;
+            autoWakeListening = false;
+        }
+        if (face != null) face.setState("speaking");
+    }
+
+    private void speakSystemVoice(String text) {
+        if (!voiceEnabled) { endSpeaking(); return; }
         if (!ttsReady || tts == null) {
-            setStatus("Синтез мовлення ще не готовий.");
+            setStatus("Немає доступного синтезатора мовлення.");
+            endSpeaking();
             return;
         }
+        markSpeaking();
+        activeTtsId = "jarvis-system-" + SystemClock.uptimeMillis();
+        int statusCode = tts.speak(text, TextToSpeech.QUEUE_FLUSH, new Bundle(), activeTtsId);
+        if (statusCode != TextToSpeech.SUCCESS) endSpeaking();
+    }
+
+    /** Use the real Dmytro/Lada model when configured; otherwise Android TTS fallback. */
+    private void speakReply(String text) {
+        if (!voiceEnabled || text == null || text.trim().isEmpty()) {
+            endSpeaking();
+            return;
+        }
+        stopSpeaking();
+        if (neuralSpeech != null && neuralSpeech.isConfigured()) {
+            markSpeaking(); // Suppress microphone reactivation while the model is generating.
+            if (neuralSpeech.speak(text, selectedVoiceProfile(), new NeuralSpeechClient.Listener() {
+                @Override public void onStart() { markSpeaking(); }
+                @Override public void onDone() { endSpeaking(); }
+                @Override public void onFailure(String error) {
+                    if (!voiceEnabled || isFinishing() || isDestroyed()) return;
+                    setStatus("Нейроголос недоступний (" + error + "). Озвучує Android TTS.");
+                    speakSystemVoice(text);
+                }
+            })) return;
+        }
+        speakSystemVoice(text);
+    }
+
+    private void previewCurrentVoice() {
         if (!voiceEnabled) {
             setStatus("Спочатку ввімкни голосові відповіді.");
             return;
         }
-        tts.stop();
-        tts.speak("Привіт! Я Джарвіс. Готовий допомогти тобі.",
-            TextToSpeech.QUEUE_FLUSH, new Bundle(), "jarvis-voice-demo-" + SystemClock.uptimeMillis());
+        speakReply("Привіт! Я Джарвіс. Готовий допомогти тобі.");
     }
 
     private void openSystemVoiceSettings() {
@@ -1236,10 +1280,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (feedback != null) {
                 appendDialogue("Джарвіс", feedback);
                 setStatus(feedback);
-                if (tts != null && voiceEnabled) {
-                    tts.speak(feedback, TextToSpeech.QUEUE_FLUSH, new Bundle(),
-                        "jarvis-torch-" + SystemClock.uptimeMillis());
-                }
+                if (voiceEnabled) speakReply(feedback);
             }
         }
     }
@@ -1641,6 +1682,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private void stopSpeaking() {
+        activeTtsId = null;
+        if (neuralSpeech != null) neuralSpeech.stop();
         if (tts != null) tts.stop();
         speaking = false;
         if (face != null) face.setState(listening ? "listening" : "idle");
@@ -1672,9 +1715,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (response == null || response.isEmpty()) response = "Не вдалося отримати відповідь від ШІ.";
             appendDialogue("Джарвіс", response);
             setStatus(error == null ? "Відповідь ШІ готова" : "Не вдалося звернутися до ШІ");
-            if (error == null && voiceEnabled && tts != null) {
-                tts.speak(response, TextToSpeech.QUEUE_FLUSH, new Bundle(),
-                    "jarvis-ai-" + SystemClock.uptimeMillis());
+            if (error == null && voiceEnabled) {
+                speakReply(response);
             } else {
                 face.setState("idle");
                 resumeAfterReply();
@@ -1912,9 +1954,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
         appendDialogue("Джарвіс", reply);
         setStatus("Відповідь готова");
-        if (!silentReply && tts != null && voiceEnabled) {
-            tts.speak(reply, TextToSpeech.QUEUE_FLUSH, new Bundle(),
-                "jarvis-" + SystemClock.uptimeMillis());
+        if (!silentReply && voiceEnabled) {
+            speakReply(reply);
         } else if (!listening && !processing) {
             face.setState("idle");
             resumeAfterReply();
@@ -1953,6 +1994,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (deviceActions != null) deviceActions.close();
         if (aiChatClient != null) aiChatClient.close();
         if (recognizer != null) recognizer.destroy();
+        if (neuralSpeech != null) neuralSpeech.close();
         if (tts != null) {
             tts.stop();
             tts.shutdown();
