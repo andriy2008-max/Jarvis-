@@ -43,6 +43,20 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+        <!-- Explicitly opt-in UI navigation, enabled only by the user in Android settings. -->
+        <service
+            android:name=".ScreenControlAccessibilityService"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:label="Джарвіс — керування екраном">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/jarvis_screen_accessibility" />
+        </service>
         <service
             android:name=".TimerAlertService"
             android:enabled="true"
