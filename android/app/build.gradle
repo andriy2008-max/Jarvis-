@@ -19,6 +19,7 @@ android {
         targetSdk 35
         versionCode 23
         versionName '0.1.13'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
     signingConfigs {
@@ -57,6 +58,8 @@ android {
 // CPU ONNX runtime is included in the small APK; actual voice models download once.
 dependencies {
     implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.20.0'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
 }
 
 // Never complete an unsigned release build inadvertently.
