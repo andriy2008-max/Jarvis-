@@ -5,6 +5,7 @@ import android.media.AudioAttributes;
 import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 import java.io.File;
 import java.util.concurrent.ExecutorService;
@@ -37,12 +38,15 @@ public final class OfflineSpeechClient {
         final String speaker = VoiceRanking.profile(voice);
         executor.execute(() -> {
             File wav = null;
+            final long startedAt = SystemClock.elapsedRealtime();
             try {
                 if (!active(id)) return;
                 // Model initialization and synthesis are CPU-intensive; both run in background.
                 try (OfflineOnnxSynthesizer synth = new OfflineOnnxSynthesizer(directory)) {
                     wav = synth.synthesize(text, speaker, audioCache, () -> {
                         if (!active(id)) throw new java.util.concurrent.CancellationException();
+                        if (SystemClock.elapsedRealtime() - startedAt > 65000L)
+                            throw new Exception("Офлайн-озвучення надто повільне на цьому пристрої.");
                     });
                 }
                 if (!active(id)) { wav.delete(); return; }
