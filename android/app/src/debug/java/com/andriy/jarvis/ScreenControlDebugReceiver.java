@@ -39,6 +39,7 @@ public final class ScreenControlDebugReceiver extends BroadcastReceiver {
                         ScreenControlAccessibilityService.isSessionActive() + " result=" + result);
                     return;
                 case "click":
+                case "type":
                 case "scroll_down":
                 case "blocked":
                     ScreenControlCommands.Action action;
@@ -55,6 +56,7 @@ public final class ScreenControlDebugReceiver extends BroadcastReceiver {
                         " qa_success=" + result.startsWith("Знайшов потрібну кнопку й натиснув.") +
                         " qa_denied=" + result.contains("не виконуватиму") +
                         " qa_scrolled=" + result.startsWith("Прокру") +
+                        " qa_typed=" + result.startsWith("Текст введено") +
                         " result=" + result);
                     return;
                 default:
