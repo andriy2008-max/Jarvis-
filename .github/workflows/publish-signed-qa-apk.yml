@@ -1,0 +1,86 @@
+name: Publish signed Jarvis QA APK for phone download
+
+# Only the signed QA APK; NOT a stable release. Run once on workflow creation.
+on:
+  push:
+    paths:
+      - '.github/workflows/publish-signed-qa-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  qa-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve the passed original-signature QA artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/jarvis-qa
+          gh run download 42799355295 --repo "$GITHUB_REPOSITORY" \
+            --name JARVIS-0.1.14-SIGNED-update-compatible-PHONE-QA \
+            --dir /tmp/jarvis-qa
+          (cd /tmp/jarvis-qa && sha256sum -c JARVIS-0.1.14-stable-phone-QA.sha256)
+          test -s /tmp/jarvis-qa/JARVIS-0.1.14-stable-phone-QA.apk
+      - name: Recheck original certificate and real upgrade package
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'build-tools;35.0.0' >/dev/null
+          apk=/tmp/jarvis-qa/JARVIS-0.1.14-stable-phone-QA.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+          actual="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1)"
+          expected="$(tr -d '[:space:]' < android/RELEASE-CERT-SHA256.txt | tr '[:upper:]' '[:lower:]')"
+          test "$actual" = "$expected"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" > /tmp/jarvis-badging
+          grep -Fq "package: name='com.andriy.jarvis.stable'" /tmp/jarvis-badging
+          grep -Fq "versionCode='24'" /tmp/jarvis-badging
+          grep -Fq "versionName='0.1.14'" /tmp/jarvis-badging
+      - name: Publish direct phone-download PRE-RELEASE (never mark stable)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view v0.1.14-phone-qa --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'A QA release already exists; refusing silent replacement.'
+            exit 1
+          fi
+          cat > /tmp/qa-notes.md <<'NOTES'
+          **TEST APK ONLY. Not a stable JARVIS release.**
+
+          This APK is **signed with the original stable certificate**, has the
+          original package ID `com.andriy.jarvis.stable`, and versionCode **24**.
+          It is designed to update the existing stable JARVIS installation instead
+          of creating a separate preview app.
+
+          Features under test: Dmytro/Lada offline ONNX (separate one-time model
+          download), say-a-phrase command, opt-in accessibility screen controls,
+          semantic matching of button labels/icons by accessible metadata.
+
+          Offline voice model (145 MB) is a separate experimental release.
+          The system Accessibility permission can read sensitive screen content.
+          Enable it only if you choose to test, then stop the mode afterwards.
+          Payments, data deletion, sending and confirmation are blocked.
+
+          **Physical ARM64 hardware and Android screen navigation not yet fully
+          validated.** Test at your own risk; retain a copy of important app data.
+          This is NOT the finished stable APK.
+
+          Android 11/15 emulator voice synthesis tests succeeded.
+          The original model's MIT license is in
+          [android/THIRD_PARTY_UKRAINIAN_TTS_LICENSE.txt](https://github.com/andriy2008-max/Jarvis-/blob/main/android/THIRD_PARTY_UKRAINIAN_TTS_LICENSE.txt).
+          NOTES
+          gh release create v0.1.14-phone-qa \
+            /tmp/jarvis-qa/JARVIS-0.1.14-stable-phone-QA.apk \
+            /tmp/jarvis-qa/JARVIS-0.1.14-stable-phone-QA.sha256 \
+            /tmp/jarvis-qa/README-PHONE-QA.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target 8efcfb1e6d7ce68ca81fab610ef8e94ccba58410 \
+            --title 'JARVIS 0.1.14 — signed update-compatible PHONE QA (NOT STABLE)' \
+            --prerelease \
+            --notes-file /tmp/qa-notes.md
