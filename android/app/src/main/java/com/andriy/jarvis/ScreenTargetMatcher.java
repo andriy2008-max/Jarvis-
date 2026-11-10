@@ -15,7 +15,7 @@ public final class ScreenTargetMatcher {
 
     // Stems cover Ukrainian case inflections and frequent English content descriptions.
     private static final String[][] ALIASES = {
-        {"search", "пошук", "пошу", "шука", "знайд", "луп", "search", "magnif"},
+        {"search", "пошук", "пошу", "шука", "луп", "search", "magnif"},
         {"chats", "чат", "діалог", "листуван", "chats", "chat", "conversation"},
         {"messages", "повідомлен", "вхідн", "inbox", "messages", "message", "direct"},
         {"home", "головн", "домівк", "home", "dashboard"},
@@ -106,7 +106,8 @@ public final class ScreenTargetMatcher {
         for (String value : new String[]{
             target.text, target.description, target.resourceId,
             target.parentText, target.parentDescription, target.parentResourceId}) {
-            if (ScreenControlCommands.isSensitiveLabel(value)) return true;
+            if (value != null && !value.trim().isEmpty() &&
+                ScreenControlCommands.isSensitiveLabel(value)) return true;
         }
         return false;
     }
