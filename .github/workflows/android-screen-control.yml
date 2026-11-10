@@ -68,8 +68,8 @@ jobs:
             for i in $(seq 1 20); do adb shell am broadcast -n com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlDebugReceiver -a com.andriy.jarvis.preview.DEBUG_SCREEN_CONTROL --es op status >/dev/null; if adb logcat -d -s JARVIS_SCREEN_QA:I '*:S' | grep -Fq 'qa_op=status qa_connected=true'; then break; fi; sleep 2; done
             adb logcat -d -s JARVIS_SCREEN_QA:I '*:S' | grep -F 'qa_op=status qa_connected=true'
             adb shell am broadcast -n com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlDebugReceiver -a com.andriy.jarvis.preview.DEBUG_SCREEN_CONTROL --es op start
-            adb shell am broadcast -n com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlDebugReceiver -a com.andriy.jarvis.preview.DEBUG_SCREEN_CONTROL --es op click --es phrase 'натисни кнопку тестова кнопка'
-            adb shell am broadcast -n com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlDebugReceiver -a com.andriy.jarvis.preview.DEBUG_SCREEN_CONTROL --es op click --es phrase 'відкрий пошук'
+            adb shell "am broadcast -n com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlDebugReceiver -a com.andriy.jarvis.preview.DEBUG_SCREEN_CONTROL --es op click --es phrase 'натисни кнопку тестова кнопка'"
+            adb shell "am broadcast -n com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlDebugReceiver -a com.andriy.jarvis.preview.DEBUG_SCREEN_CONTROL --es op click --es phrase 'відкрий пошук'"
             adb shell am broadcast -n com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlDebugReceiver -a com.andriy.jarvis.preview.DEBUG_SCREEN_CONTROL --es op scroll_down
             adb shell am broadcast -n com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlDebugReceiver -a com.andriy.jarvis.preview.DEBUG_SCREEN_CONTROL --es op blocked
             adb shell am broadcast -n com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlDebugReceiver -a com.andriy.jarvis.preview.DEBUG_SCREEN_CONTROL --es op stop
