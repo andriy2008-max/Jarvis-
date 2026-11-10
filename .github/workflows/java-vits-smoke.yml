@@ -1,0 +1,49 @@
+name: Test real voices with ONNX Runtime Java
+
+on:
+  push:
+    paths:
+      - '.github/workflows/java-vits-smoke.yml'
+      - 'tools/voice-export/JavaVitsSmoke.java'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  java-inference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Retrieve verified two-speaker export
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/jarvis-vits
+          gh run download 42779515189 --repo "$GITHUB_REPOSITORY" --name jarvis-dmytro-lada-onnx-experimental --dir /tmp/jarvis-vits
+          printf '%s  %s\n' '12fdd6521ae864f5eafac2d5a205d32f299ba65229800dafbd647b4a3ff8e0d5' '/tmp/jarvis-vits/jarvis-uktts-v6-onnx.zip' | sha256sum -c -
+          unzip -oq /tmp/jarvis-vits/jarvis-uktts-v6-onnx.zip -d /tmp/jarvis-vits/model
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('/tmp/jarvis-vits')
+          manifest = json.loads((root / 'model/manifest.json').read_text())
+          tokens = manifest['tokens']
+          text = 'привіт'
+          ids = [tokens.index(c) if c in tokens else tokens.index('<unk>') for c in text]
+          (root / 'tokens.csv').write_text(','.join(str(x) for x in ids))
+          for voice in ('dmytro', 'lada'):
+              (root / (voice + '.csv')).write_text(
+                  ','.join(str(x) for x in manifest['spembs'][voice]))
+          PY
+      - name: Java ONNX CPU inference test (not Android emulator)
+        run: |
+          curl -fsSL --retry 3 -o /tmp/onnxruntime-java.jar https://repo.maven.apache.org/maven2/com/microsoft/onnxruntime/onnxruntime/1.20.0/onnxruntime-1.20.0.jar
+          javac -cp /tmp/onnxruntime-java.jar -d /tmp tools/voice-export/JavaVitsSmoke.java
+          java -Xmx2g -cp /tmp:/tmp/onnxruntime-java.jar JavaVitsSmoke /tmp/jarvis-vits/model/onnx/full/vits.onnx /tmp/jarvis-vits
