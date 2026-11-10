@@ -122,12 +122,13 @@ public final class FloatingJarvisService extends Service {
                 tts.setOnUtteranceProgressListener(
                     new android.speech.tts.UtteranceProgressListener() {
                         @Override public void onStart(String id) {
-                            ui.post(() -> {
-                                if (!closing && id != null && id.equals(currentTtsId)) {
-                                    JarvisSpeechMouth.startSystemTts();
-                                    setFace("speaking");
-                                }
-                            });
+                            if (!closing && id != null && id.equals(currentTtsId)) {
+                                JarvisSpeechMouth.startSystemTts();
+                                ui.post(() -> {
+                                    if (!closing && id.equals(currentTtsId))
+                                        setFace("speaking");
+                                });
+                            }
                         }
                         @Override public void onRangeStart(String id, int start, int end, int frame) {
                             if (id != null && id.equals(currentTtsId))
@@ -468,6 +469,25 @@ public final class FloatingJarvisService extends Service {
         ui.postDelayed(silenceCheck, Math.max(25L, left));
     }
 
+    private void scheduleManualStopFallback() {
+        if (autoStopFallback != null) ui.removeCallbacks(autoStopFallback);
+        autoStopFallback = () -> {
+            autoStopFallback = null;
+            if (!recording || !stopRequested || autoSilenceStop) return;
+            if (!partialSpeech.isEmpty()) {
+                String full = JarvisTranscriptCorrection.join(
+                    speechDraft.toString(), partialSpeech);
+                speechDraft.setLength(0);
+                speechDraft.append(full);
+            }
+            if (recognizer != null) {
+                try { recognizer.cancel(); } catch (Exception ignored) {}
+            }
+            sendPendingSpeech();
+        };
+        ui.postDelayed(autoStopFallback, 1700L);
+    }
+
     private void restartAfterRecognizer(long delayMs) {
         if (closing || !recording || stopRequested) return;
         if (recognitionRestart != null) ui.removeCallbacks(recognitionRestart);
@@ -561,7 +581,7 @@ public final class FloatingJarvisService extends Service {
                 listening = false;
                 setFace("thinking");
                 try { recognizer.stopListening(); }
-                catch (Exception ignored) { sendPendingSpeech(); }
+                catch (Exception ignored) { sendPendingSpeech(); return; }
             } else if (!recognizerSessionActive) {
                 if (!partialSpeech.isEmpty()) {
                     String combined = JarvisTranscriptCorrection.join(
@@ -570,7 +590,11 @@ public final class FloatingJarvisService extends Service {
                     speechDraft.append(combined);
                 }
                 sendPendingSpeech();
+                return;
             }
+            // Even if the system recognizer fails to deliver final results,
+            // a second tap must finish this capture instead of hanging.
+            scheduleManualStopFallback();
             return;
         }
         cancelCorrectionRestart();
