@@ -181,21 +181,7 @@ public final class OfflineOnnxSynthesizer implements AutoCloseable {
     }
 
     static String normalizeText(String text) {
-        String s = text.toLowerCase(Locale.forLanguageTag("uk-UA")).trim()
-            .replace('’', '\'').replace('ʼ', '\'').replace('`', '\'')
-            .replace('“', '"').replace('”', '"')
-            .replace('«', '"').replace('»', '"')
-            .replace('–', '-').replace('—', '-').replace('…', '.');
-        s = s.replaceAll("\\s+", " ");
-        // Minimal Ukrainian number handling, pending exact upstream formatter port.
-        String[] digits = {"нуль", "один", "два", "три", "чотири", "п'ять", "шість", "сім", "вісім", "дев'ять"};
-        StringBuilder buf = new StringBuilder(s.length());
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            if (c >= '0' && c <= '9') buf.append(" ").append(digits[c - '0']).append(" ");
-            else buf.append(c);
-        }
-        return buf.toString().replaceAll(" +", " ").trim();
+        return UkrainianVoiceText.normalize(text);
     }
 
     private static ArrayList<String> chunks(String raw) throws Exception {
