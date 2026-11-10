@@ -1,0 +1,74 @@
+name: Android Quick Settings floating Jarvis orb (test only)
+
+on:
+  push:
+    paths:
+      - '.github/workflows/android-floating-quick-tile.yml'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisQuickTileService.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisBubbleLauncherActivity.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/FloatingJarvisService.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisOrbView.java'
+      - 'android/app/src/main/res/values/styles.xml'
+      - 'android/app/src/main/AndroidManifest.xml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quick-tile-orb:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        android: [30, 35]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build DEBUG test APK only
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+          gradle -p android --no-daemon --stacktrace :app:assembleDebug
+      - name: Accelerate emulator
+        run: test -e /dev/kvm && sudo chmod 666 /dev/kvm
+      - name: Use Android Quick Settings tile to open only the floating face
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.android }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_4
+          ram-size: 3072M
+          disk-size: 4096M
+          disable-animations: true
+          script: |
+            adb wait-for-device
+            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+            # CI simulates the one-time permissions the user grants in Settings.
+            adb shell appops set com.andriy.jarvis.preview SYSTEM_ALERT_WINDOW allow
+            adb shell pm grant com.andriy.jarvis.preview android.permission.RECORD_AUDIO
+            adb shell input keyevent 82
+            adb logcat -c
+            adb shell cmd statusbar add-tile com.andriy.jarvis.preview/com.andriy.jarvis.JarvisQuickTileService
+            sleep 3
+            adb shell cmd statusbar click-tile com.andriy.jarvis.preview/com.andriy.jarvis.JarvisQuickTileService
+            sleep 6
+            adb logcat -d -s JARVIS_FLOATING_QA:I AndroidRuntime:E '*:S' > /tmp/jarvis-tile.log
+            cat /tmp/jarvis-tile.log
+            grep -Fq 'JARVIS_FLOATING_QA: orb_shown=true' /tmp/jarvis-tile.log
+            # A second tile tap must not open the large MainActivity or duplicate the orb.
+            adb shell cmd statusbar click-tile com.andriy.jarvis.preview/com.andriy.jarvis.JarvisQuickTileService
+            sleep 3
+            adb logcat -d -s JARVIS_FLOATING_QA:I '*:S' | grep -F 'orb_shown=true'
+      - name: Collect diagnostics on failure
+        if: failure()
+        run: |
+          test ! -f /tmp/jarvis-tile.log || cat /tmp/jarvis-tile.log
