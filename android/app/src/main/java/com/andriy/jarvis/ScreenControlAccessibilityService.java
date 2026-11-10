@@ -35,7 +35,8 @@ import java.util.Set;
  *
  * Never takes spontaneous actions on accessibility events. Screen labels stay
  * on device; they are never sent to the chat AI or recorded to analytics/logs.
- * Only user-provided exact button labels, explicit scroll/back and stop work.
+ * Supports locally recognized user-goal synonyms, accessibility labels, and
+ * resource IDs; explicitly requested one-step scroll/back and stop only.
  */
 public final class ScreenControlAccessibilityService extends AccessibilityService {
     private static volatile WeakReference<ScreenControlAccessibilityService> connected =
@@ -207,7 +208,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                         String spoken = CommandPatterns.normalize(phrases.get(0));
                         ScreenControlCommands.Action action = ScreenControlCommands.parse(spoken);
                         if (action == null) {
-                            toast("Скажи «Натисни кнопку [назва]», «Прокрути вниз» або «Назад».");
+                            toast("Скажи «Відкрий пошук», «Знайди чати», «Натисни лупу», «Прокрути вниз» або «Назад».");
                         } else if (action.kind == ScreenControlCommands.Kind.DISABLE) {
                             toast(stop());
                         } else if (action.kind == ScreenControlCommands.Kind.STATUS) {
@@ -271,46 +272,87 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         return null;
     }
 
+    private static String asString(CharSequence value) {
+        return value == null ? "" : value.toString();
+    }
+
     private String clickNamed(String label) {
         if (label == null || label.isEmpty() ||
             ScreenControlCommands.isSensitiveLabel(label)) {
-            return "Цю кнопку я не натискатиму автоматично. Для платежів, підтверджень, надсилання та видалення використай ручне натискання.";
+            return "Цю дію я не виконуватиму автоматично. Платежі, підтвердження, надсилання й видалення потребують ручного натискання.";
         }
         AccessibilityNodeInfo root = currentExternalRoot();
         if (root == null)
-            return "Відкрий потрібну програму на телефоні, а команду подай через плаваючий мікрофон Джарвіса. Системними налаштуваннями я не керую.";
-        ArrayDeque<AccessibilityNodeInfo> q = new ArrayDeque<>();
-        q.add(root);
-        ArrayList<AccessibilityNodeInfo> matches = new ArrayList<>();
-        Set<String> targetBounds = new HashSet<>();
+            return "Відкрий потрібну програму й подай команду через плаваючий мікрофон Джарвіса. Системними дозволами я не керую.";
+
+        ArrayDeque<AccessibilityNodeInfo> queue = new ArrayDeque<>();
+        queue.add(root);
+        ArrayList<AccessibilityNodeInfo> controls = new ArrayList<>();
+        ArrayList<ScreenTargetMatcher.Target> descriptions = new ArrayList<>();
+        java.util.Map<String, Integer> boundsToIndex = new java.util.HashMap<>();
         int scanned = 0;
-        String requested = name(label);
-        while (!q.isEmpty() && ++scanned <= MAX_SCAN && matches.size() < MAX_MATCHES) {
-            AccessibilityNodeInfo node = q.removeFirst();
+
+        while (!queue.isEmpty()) {
+            if (++scanned > MAX_SCAN)
+                return "На екрані надто багато елементів. Не натискатиму нічого навмання.";
+            AccessibilityNodeInfo node = queue.removeFirst();
             if (!node.isVisibleToUser() || node.isPassword()) continue;
-            if (name(node.getText()).equals(requested) ||
-                name(node.getContentDescription()).equals(requested)) {
-                AccessibilityNodeInfo candidate = clickable(node);
-                if (candidate != null) {
-                    Rect bounds = new Rect();
-                    candidate.getBoundsInScreen(bounds);
-                    if (targetBounds.add(bounds.toShortString())) matches.add(candidate);
+
+            AccessibilityNodeInfo control = clickable(node);
+            if (control != null) {
+                Rect rect = new Rect();
+                control.getBoundsInScreen(rect);
+                if (rect.width() > 0 && rect.height() > 0) {
+                    String bounds = rect.toShortString();
+                    ScreenTargetMatcher.Target target = new ScreenTargetMatcher.Target(
+                        asString(node.getText()), asString(node.getContentDescription()),
+                        node.getViewIdResourceName(),
+                        asString(control.getText()), asString(control.getContentDescription()),
+                        control.getViewIdResourceName());
+                    Integer oldIndex = boundsToIndex.get(bounds);
+                    if (oldIndex == null) {
+                        boundsToIndex.put(bounds, controls.size());
+                        controls.add(control);
+                        descriptions.add(target);
+                    } else if (ScreenTargetMatcher.score(label, target) >
+                        ScreenTargetMatcher.score(label, descriptions.get(oldIndex))) {
+                        controls.set(oldIndex, control);
+                        descriptions.set(oldIndex, target);
+                    }
                 }
             }
             for (int i = 0; i < node.getChildCount(); i++) {
                 AccessibilityNodeInfo child = node.getChild(i);
-                if (child != null) q.addLast(child);
+                if (child != null) queue.addLast(child);
             }
         }
-        if (scanned > MAX_SCAN)
-            return "Екран надто складний. Не натискаю кнопку без точного визначення.";
-        if (matches.isEmpty())
-            return "Не знайшов видиму кнопку «" + label + "». Спробуй точну назву з екрана.";
-        if (matches.size() > 1)
-            return "Є кілька кнопок із назвою «" + label + "». Не натискатиму навмання.";
-        boolean done = matches.get(0).performAction(AccessibilityNodeInfo.ACTION_CLICK);
-        return done ? "Натиснув «" + label + "»." :
-            "Застосунок не дозволив натиснути «" + label + "».";
+
+        ScreenTargetMatcher.Selection selected =
+            ScreenTargetMatcher.select(label, descriptions);
+        if (selected.ambiguous)
+            return "Знайшов кілька можливих кнопок для «" + label +
+                "». Уточни, яку саме натиснути.";
+        if (selected.index < 0)
+            return "Не зміг однозначно визначити кнопку для «" + label +
+                "». Спробуй описати її призначення. Значки без опису поки не розпізнаю.";
+
+        // Re-check the actual control before interacting, in case a screen
+        // refresh changed its text or the active app while matching.
+        AccessibilityNodeInfo chosen = controls.get(selected.index);
+        ScreenTargetMatcher.Target metadata = descriptions.get(selected.index);
+        if (!sessionActive || !chosen.isVisibleToUser() || !chosen.isEnabled() ||
+            !chosen.isClickable() || chosen.isPassword() ||
+            ScreenTargetMatcher.dangerous(metadata)) {
+            return "Кнопка більше недоступна або ця дія потребує ручного підтвердження.";
+        }
+        AccessibilityNodeInfo current = currentExternalRoot();
+        if (current == null ||
+            !asString(current.getPackageName()).equals(asString(root.getPackageName()))) {
+            return "Екран змінився. Не натискатиму кнопку без повторної команди.";
+        }
+        boolean clicked = chosen.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+        return clicked ? "Знайшов потрібну кнопку й натиснув." :
+            "Кнопку знайдено, але застосунок не дозволив її натиснути.";
     }
 
     private String scroll(boolean down) {
