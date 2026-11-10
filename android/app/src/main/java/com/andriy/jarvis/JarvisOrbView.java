@@ -123,6 +123,11 @@ public final class JarvisOrbView extends View {
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(Color.rgb(217, 254, 255));
         float pixel = orb * .076f;
+        if (JarvisPhoneMode.isActive()) {
+            JarvisPixelPhone.draw(canvas, paint, cx, cy, pixel);
+            postInvalidateDelayed(360L);
+            return;
+        }
         float ox = cx - 8 * pixel, oy = cy - 8 * pixel;
         if (transcriptVisible() && !"speaking".equals(expression)) {
             drawRecognizedText(canvas, cx, cy, orb);
