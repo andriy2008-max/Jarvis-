@@ -74,9 +74,10 @@ function validAttachment(a) {
 function validateInput(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
   const mode = body.mode ?? 'chat';
-  if (!['chat','web','image'].includes(mode)) return null;
+  if (!['chat','web','image','analysis'].includes(mode)) return null;
   const message = typeof body.message === 'string' ? body.message.trim() : '';
   if (!message || message.length > MAX_MESSAGE_CHARS) return null;
+  if (body.effort != null && !['none','low','medium','high'].includes(body.effort)) return null;
   if (body.attachment != null && !validAttachment(body.attachment)) return null;
   if (mode === 'web' && body.attachment != null) return null;
   const history = body.history == null ? [] : body.history;
@@ -149,11 +150,15 @@ function createPayload(body, input, env) {
   const payload = {
     model:env.OPENAI_MODEL || DEFAULT_MODEL,
     instructions:INSTRUCTIONS,
-    input, store:false, reasoning:{effort:'none'},
-    max_output_tokens:mode === 'image' ? 400 : 1800,
+    input, store:false,
+    reasoning:{effort: mode === 'image' ? 'none' : body.effort || 'medium'},
+    max_output_tokens:mode === 'image' ? 400 : 4000,
   };
   if (mode === 'web') {
     payload.tools = [{type:'web_search',search_context_size:'medium'}];
+    payload.tool_choice = 'required';
+  } else if (mode === 'analysis') {
+    payload.tools = [{type:'code_interpreter',container:{type:'auto'}}];
     payload.tool_choice = 'required';
   } else if (mode === 'image') {
     payload.tools = [{type:'image_generation',model:env.OPENAI_IMAGE_MODEL || DEFAULT_IMAGE_MODEL,
@@ -198,7 +203,7 @@ export default {
     const image = extractImage(data?.output);
     const reply = extractText(data?.output);
     if (!image && !reply) return json({error:'Empty AI response'},502);
-    const result = {reply:(reply || 'Зображення готове.').slice(0,6000)};
+    const result = {reply:(reply || 'Зображення готове.').slice(0,12000)};
     const sources = extractSources(data?.output);
     if (sources.length) result.sources = sources;
     if (image) { result.image_base64 = image; result.image_mime = 'image/png'; }
