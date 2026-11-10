@@ -35,6 +35,10 @@ public final class JarvisVoicePause {
         return true;
     }
 
+    public void sawVoice(long timeMs) {
+        if (armed()) lastWordAtMs = Math.max(lastWordAtMs, timeMs);
+    }
+
     public boolean armed() { return lastWordAtMs >= 0; }
     public long remainingMs(long nowMs, int seconds) {
         if (!armed()) return Long.MAX_VALUE;

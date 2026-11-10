@@ -15,6 +15,14 @@ public final class JarvisPhoneModeTest {
         eq(JarvisPhoneMode.Transition.NONE,JarvisPhoneMode.transition("джарвіс натисни пошук"));
         eq(JarvisPhoneMode.Transition.NONE,JarvisPhoneMode.transition("телефонний дзвінок"));
         eq(JarvisPhoneMode.Transition.NONE,JarvisPhoneMode.transition(null));
+        eq(JarvisPhoneMode.Transition.ENTER,JarvisPhoneMode.transition("увімкни керування екраном"));
+        eq(JarvisPhoneMode.Transition.EXIT,JarvisPhoneMode.transition("вимкни керування екраном"));
+        eq(true,JarvisPhoneMode.requiresPhone("натисни пошук"));
+        eq(true,JarvisPhoneMode.requiresPhone("зажми повідомлення"));
+        eq(true,JarvisPhoneMode.requiresPhone("відкрий ютуб"));
+        eq(true,JarvisPhoneMode.requiresPhone("відкрий ютуб натисни пошук напиши музика"));
+        eq(false,JarvisPhoneMode.requiresPhone("котра година"));
+        eq(false,JarvisPhoneMode.requiresPhone("телефонний дзвінок"));
         final int[] notifications = {0};
         Runnable changed = () -> notifications[0]++;
         JarvisPhoneMode.subscribe(changed);

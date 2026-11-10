@@ -170,11 +170,71 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
     };
     private JarvisWearPhoneLink watchPhoneLink;
+    private boolean phoneListening;
+    private final Runnable phoneListenAgain = new Runnable() {
+        @Override public void run() {
+            if (!foreground || !phoneListening || !JarvisPhoneMode.isActive()) return;
+            if (!manualCapture && !processing && !aiBusy && !speaking && visibleDialogs == 0 &&
+                (watchPhoneLink == null || !watchPhoneLink.busy()) &&
+                (commandSequenceExecutor == null || !commandSequenceExecutor.isRunning()) &&
+                (spotifyPlayback == null || !spotifyPlayback.isRunning())) {
+                speechPause.reset("");
+                startManualListening();
+            }
+            wakeHandler.postDelayed(this, 350L);
+        }
+    };
+
+    private void startPhoneListening() {
+        if (!foreground || !JarvisPhoneMode.isActive()) return;
+        if (!isWatchDevice && android.provider.Settings.canDrawOverlays(this) &&
+            checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            Intent listen = new Intent(this, FloatingJarvisService.class);
+            listen.setAction(FloatingJarvisService.ACTION_LISTEN);
+            try {
+                if (Build.VERSION.SDK_INT >= 26) startForegroundService(listen);
+                else startService(listen);
+                return;
+            } catch (RuntimeException ignored) { }
+        }
+        if (!isWatchDevice) JarvisPhoneModeManager.enter(this, false);
+        phoneListening = true;
+        stopSpeaking();
+        shakeCommandCapture = false;
+        shakeAiPromptNext = false;
+        wakeConversation.end();
+        cancelAutoWakeSchedule();
+        if (autoWakeListening && recognizer != null) {
+            recognizer.cancel();
+            autoWakeListening = false;
+            recognizerSessionActive = false;
+            listening = false;
+            processing = false;
+        }
+        if (isWatchDevice) getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        wakeHandler.removeCallbacks(phoneListenAgain);
+        wakeHandler.post(phoneListenAgain);
+    }
+
+    private void stopPhoneListening() {
+        phoneListening = false;
+        wakeHandler.removeCallbacks(phoneListenAgain);
+        if (isWatchDevice) getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
     private final Runnable phoneModeListener = () -> runOnUiThread(() -> {
         if (isFinishing() || isDestroyed()) return;
+        if (!JarvisPhoneMode.isActive() && phoneListening) {
+            stopPhoneListening();
+            cancelManualRestart();
+            cancelSilenceCheck();
+            manualCapture = false;
+            listening = false;
+            recognizerSessionActive = false;
+            if (recognizer != null) recognizer.cancel();
+        }
         if (face != null) {
             face.setContentDescription(JarvisPhoneMode.isActive()
-                ? "8-бітний телефон. Натисни, щоб повернути Джарвіса."
+                ? "8-бітний телефон. Натисни, щоб слухати. Утримуй для виходу."
                 : "8-бітне обличчя Джарвіса");
             face.invalidate();
         }
@@ -327,6 +387,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     protected void onPause() {
+        stopPhoneListening();
         if (headsetRoute != null) headsetRoute.end();
         unregisterShakeSensor();
         if (shakeProbe != null) shakeProbe.close();
@@ -951,6 +1012,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     /** Prefer fully-local two-speaker ONNX, then private TTS server, then Android TTS. */
     private void speakReply(String text) {
+        if (phoneListening) return; // keep listening without recognizing our own reply
         if (!voiceEnabled || text == null || text.trim().isEmpty()) {
             endSpeaking();
             return;
@@ -1041,6 +1103,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private int speechPauseSeconds() {
+        if (JarvisPhoneMode.isActive()) return 2;
         return JarvisVoicePause.seconds(getSharedPreferences(JarvisVoicePause.PREFS,
             MODE_PRIVATE).getInt(JarvisVoicePause.KEY_SECONDS,
                 JarvisVoicePause.DEFAULT_SECONDS));
@@ -1477,10 +1540,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         face.setContentDescription(
             "Обличчя Джарвіса. Свайп вліво по словах — прибрати останнє й вимовити заново.");
         face.setOnClickListener(v -> {
-            if (isWatchDevice) {
-                if (JarvisPhoneMode.isActive()) exitPhoneMode();
-                else toggleListening();
-            } else if (JarvisPhoneMode.isActive()) exitPhoneMode();
+            if (JarvisPhoneMode.isActive()) startPhoneListening();
+            else if (isWatchDevice) toggleListening();
         });
         face.setOnTouchListener(new View.OnTouchListener() {
             float startX, startY;
@@ -1497,13 +1558,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         startY = event.getY();
                         held = false;
                         cancelHold();
-                        if (isWatchDevice && JarvisPhoneMode.isActive()) {
-                            // Samsung may reserve its hardware stem button.
-                            // Hold the phone icon to speak; tap still exits.
+                        if (JarvisPhoneMode.isActive()) {
+                            // Long press is the explicit exit; tap starts listening.
                             holdAction = () -> {
                                 if (JarvisPhoneMode.isActive() && foreground) {
                                     held = true;
-                                    toggleListening();
+                                    exitPhoneMode();
                                 }
                             };
                             wakeHandler.postDelayed(holdAction,
@@ -1664,6 +1724,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private void onShakeDetected() {
+        if (isWatchDevice && foreground && shakeEnabled && JarvisPhoneMode.isActive() &&
+            visibleDialogs == 0) {
+            startPhoneListening();
+            return;
+        }
         if (!foreground || !shakeEnabled || accelerometer == null ||
             visibleDialogs != 0 || manualCapture || processing || listening ||
             aiBusy || speaking || JarvisPhoneMode.isActive() ||
@@ -1741,7 +1806,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private boolean canAutoWake() {
-        return foreground && !shakeEnabled &&
+        return foreground && !phoneListening && !JarvisPhoneMode.isActive() && !shakeEnabled &&
             (shakeProbe == null || !shakeProbe.active()) &&
             visibleDialogs == 0 &&
             autoWakeEnabled && supportsOnDeviceRecognizer &&
@@ -1964,6 +2029,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     /** Manual recording waits for words, then auto-submits after configured silence. */
     private void toggleListening() {
+        if (JarvisPhoneMode.isActive()) { startPhoneListening(); return; }
+        startManualListening();
+    }
+
+    private void startManualListening() {
         if (pendingWakeCommand != null) {
             String ready = pendingWakeCommand;
             cancelPendingWakeCommand();
@@ -1993,6 +2063,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
         if (recognizer == null) selectRecognizerForMode(true);
         if (recognizer == null) {
+            stopPhoneListening();
             setStatus("Сервіс розпізнавання відсутній. Перевір голосовий ввід Android.");
             return;
         }
@@ -2048,6 +2119,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private void finishManualCapture() {
+        if (phoneListening) retireDisconnectedRecognizer();
         if (headsetRoute != null) headsetRoute.end();
         cancelManualRestart();
         cancelSilenceCheck();
@@ -2109,6 +2181,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
             }
             return;
         }
+        if (phoneListening && JarvisPhoneMode.isActive()) {
+            processCommand(transcript);
+            return;
+        }
         WakeConversation.Decision decision = wakeConversation.accept(
             transcript, SystemClock.elapsedRealtime(), true);
         if (JarvisPhoneMode.isActive() &&
@@ -2135,6 +2211,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (processing || recognizerSessionActive) return;
         selectRecognizerForMode(manualCapture);
         if (recognizer == null) {
+            stopPhoneListening();
             setStatus("На пристрої немає сервісу розпізнавання мовлення.");
             manualCapture = false;
             return;
@@ -2185,6 +2262,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 scheduleManualRestart(1700L);
             } else {
                 manualCapture = false;
+                stopPhoneListening();
                 resetListening("Не вдалося запустити розпізнавання. Перевір мікрофон Android.");
                 autoWakePausedForErrors = true;
             }
@@ -2210,6 +2288,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) {
                 beginListening();
             } else {
+                stopPhoneListening();
                 manualCapture = false;
                 JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                 setStatus("Дозволь доступ до мікрофона в налаштуваннях застосунку.");
@@ -2234,7 +2313,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (!manualCapture) JarvisLiveTranscript.begin(TRANSCRIPT_OWNER);
         setStatus(manualCapture ? "Розпізнаю голос..." : "Слухаю фразу...");
     }
-    @Override public void onRmsChanged(float rmsdB) { }
+    @Override public void onRmsChanged(float rmsdB) {
+        if (phoneListening && manualCapture && !manualStopRequested && rmsdB > 2f) {
+            speechPause.sawVoice(SystemClock.uptimeMillis());
+            scheduleSilenceCheck();
+        }
+    }
     @Override public void onBufferReceived(byte[] buffer) { }
 
 
@@ -2273,7 +2357,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (!manualHypothesis.isEmpty()) {
                 if (manualTranscript.length() > 0) manualTranscript.append(' ');
                 manualTranscript.append(manualHypothesis);
-                if (autoSilenceStop)
+                if (autoSilenceStop && !phoneListening)
                     speechPause.sawWords(manualTranscript.toString(), SystemClock.uptimeMillis());
                 else
                     observedManualWords(manualTranscript.toString());
@@ -2293,6 +2377,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 return;
             }
             if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                stopPhoneListening();
                 cancelSilenceCheck();
                 manualCapture = false;
                 shakeCommandCapture = false;
@@ -2307,6 +2392,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 retireDisconnectedRecognizer();
             if (JarvisSpeechErrorPolicy.needsConfiguration(error) ||
                 manualCycleFailures >= (error == SpeechRecognizer.ERROR_TOO_MANY_REQUESTS ? 2 : 3)) {
+                stopPhoneListening();
                 cancelSilenceCheck();
                 cancelManualRestart();
                 if (manualTranscript.length() > 0) {
@@ -3095,6 +3181,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private void exitPhoneMode() {
+        stopPhoneListening();
         cancelManualRestart();
         cancelSilenceCheck();
         cancelPendingWakeCommand();
@@ -3188,6 +3275,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     appendDialogue("Джарвіс", detail);
                     setStatus(detail);
                     if (!ok && voiceEnabled) speakReply(detail);
+                });
+                return;
+            }
+            if (JarvisPhoneMode.requiresPhone(raw) && SpotifyMusicCommands.parse(raw) == null) {
+                if (watchPhoneLink == null) { setStatus("Телефон не підключений."); return; }
+                watchPhoneLink.enter((ok, detail) -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    if (ok) watchPhoneLink.command(raw, (done, response) -> setStatus(response));
+                    else setStatus(detail);
                 });
                 return;
             }
@@ -3363,7 +3459,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         : "Керування екраном вимкнено. Скажи: увімкни керування екраном.";
                     break;
                 default:
-                    reply = ScreenControlAccessibilityService.perform(screenCommand);
+                    reply = JarvisPhoneModeManager.perform(this, screenCommand);
                     break;
             }
             }
@@ -3673,7 +3769,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             canvas.drawCircle(cx, cy, orb, paint);
 
             paint.setStyle(Paint.Style.FILL);
-            if (transcriptVisible() && !"speaking".equals(expression)) {
+            if (transcriptVisible() && !"speaking".equals(expression) &&
+                (isWatchDevice || !JarvisPhoneMode.isActive())) {
                 drawTranscript(canvas, cx, cy, orb);
                 postInvalidateDelayed(180);
                 return;

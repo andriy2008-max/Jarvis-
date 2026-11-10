@@ -31,6 +31,7 @@ public final class JarvisSequenceExecutor {
     private int lastAnnounced = -1;
     private String lastError;
     private boolean running;
+    private JarvisPhoneModeManager.Lease phoneLease;
     private final Runnable poll = this::tick;
 
     public JarvisSequenceExecutor(Context context) {
@@ -50,9 +51,10 @@ public final class JarvisSequenceExecutor {
                 plan == null ? "Не розпізнав послідовність." : plan.error);
             return;
         }
-        if (!ScreenControlAccessibilityService.isSessionActive()) {
-            if (callback != null) callback.onFinished(false,
-                "Спочатку увімкни керування екраном. Потім повтори послідовність.");
+        phoneLease = JarvisPhoneModeManager.acquireForCommand(context);
+        if (!phoneLease.granted) {
+            if (callback != null) callback.onFinished(false, phoneLease.message);
+            phoneLease = null;
             return;
         }
         this.listener = callback;
@@ -113,6 +115,8 @@ public final class JarvisSequenceExecutor {
         engine = null;
         planSteps = null;
         lastError = null;
+        JarvisPhoneModeManager.releaseForCommand(phoneLease);
+        phoneLease = null;
         if (cb != null) cb.onFinished(success, summary);
     }
 

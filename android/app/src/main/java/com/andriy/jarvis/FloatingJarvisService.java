@@ -47,10 +47,11 @@ import java.util.Locale;
 
 /**
  * Floating 8-bit Jarvis face from a Quick Settings tile.
- * Explicit tap-to-listen ONLY, no background mic capture or app launch.
+ * User-activated listening: one command normally, continuous in Phone mode.
  * This is its own speech session, not a proxy for the MainActivity UI.
  */
 public final class FloatingJarvisService extends Service {
+    public static final String ACTION_LISTEN = "com.andriy.jarvis.PHONE_LISTEN";
     public static final String ACTION_SHOW = "com.andriy.jarvis.FLOAT_SHOW";
     public static final String ACTION_CLOSE = "com.andriy.jarvis.FLOAT_CLOSE";
     public static final String ACTION_RESIZE = "com.andriy.jarvis.FLOAT_RESIZE";
@@ -77,6 +78,19 @@ public final class FloatingJarvisService extends Service {
     private JarvisHeadsetAudioRouter headsetRoute;
     private boolean listening;
     private boolean recording;
+    private boolean phoneListening;
+    private final Runnable phoneListenAgain = new Runnable() {
+        @Override public void run() {
+            if (closing || !phoneListening || !JarvisPhoneMode.isActive()) return;
+            if (!recording && correctionRestart == null && !aiBusy && !newsBusy && !webSearchBusy &&
+                (sequences == null || !sequences.isRunning()) &&
+                (spotifyPlayback == null || !spotifyPlayback.isRunning())) {
+                speechPause.reset("");
+                beginFloatingListening(false);
+            }
+            ui.postDelayed(this, 350L);
+        }
+    };
     private boolean aiBusy;
     private boolean screenModeStartedHere;
     private boolean ttsReady;
@@ -160,7 +174,8 @@ public final class FloatingJarvisService extends Service {
             if (face != null && !closing) resizeFace();
             return START_NOT_STICKY;
         }
-        if (!ACTION_SHOW.equals(intent.getAction()) || closing) return START_NOT_STICKY;
+        if ((!ACTION_SHOW.equals(intent.getAction()) &&
+             !ACTION_LISTEN.equals(intent.getAction())) || closing) return START_NOT_STICKY;
         android.util.Log.i("JARVIS_FLOATING_QA", "service_onstart=true");
         if (!Settings.canDrawOverlays(this) ||
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -194,6 +209,8 @@ public final class FloatingJarvisService extends Service {
             }
             android.util.Log.i("JARVIS_FLOATING_QA", "foreground_started=true");
             showFace();
+            if (ACTION_LISTEN.equals(intent.getAction()) && JarvisPhoneMode.isActive())
+                startPhoneListening();
         } catch (Exception error) {
             android.util.Log.e("JARVIS_FLOATING_QA", "orb_start_failed", error);
             Toast.makeText(this, "Не вдалося відкрити плаваючий Джарвіс. Перевір дозволи Android.",
@@ -217,15 +234,13 @@ public final class FloatingJarvisService extends Service {
         face.setOnClickListener(v -> {
             android.util.Log.i("JARVIS_FLOATING_QA", "face_tapped=true");
             if (JarvisPhoneMode.isActive()) {
-                abortPhoneSpeech();
-                String result = JarvisPhoneModeManager.exit();
-                message(result);
+                startPhoneListening();
             } else toggleListening();
         });
         face.setOnLongClickListener(v -> {
             if (JarvisPhoneMode.isActive()) {
-                // One face only: tap exits Phone mode, hold starts voice control.
-                toggleListening();
+                abortPhoneSpeech();
+                message(JarvisPhoneModeManager.exit());
             } else {
                 Toast.makeText(this, "Плаваючий Джарвіс закрито.", Toast.LENGTH_SHORT).show();
                 stopSelf();
@@ -394,18 +409,30 @@ public final class FloatingJarvisService extends Service {
     }
 
     /** Only the existing floating face changes into an 8-bit phone.
-     * Tap exits Phone mode, long-press activates the same microphone.
+     * Tap starts continuous listening, long-press exits Phone mode.
      * Never create a second overlay icon or a microphone bubble.
      */
     private void refreshPhoneModeUi() {
+        if (!JarvisPhoneMode.isActive() && phoneListening) abortPhoneSpeech();
         if (windows == null || closing || face == null) return;
         face.setContentDescription(JarvisPhoneMode.isActive()
-            ? "8-бітний телефон: коротко натисни для виходу, утримуй щоб говорити."
+            ? "8-бітний телефон: натисни, щоб слухати; утримуй для виходу."
             : "8-бітне обличчя Джарвіса: натисни, щоб говорити.");
         face.invalidate();
     }
 
+    private void startPhoneListening() {
+        if (!JarvisPhoneMode.isActive()) return;
+        JarvisPhoneModeManager.enter(this, true); // claim automatic mode on user tap
+        phoneListening = true;
+        stopSpeech();
+        ui.removeCallbacks(phoneListenAgain);
+        ui.post(phoneListenAgain);
+    }
+
     private void abortPhoneSpeech() {
+        phoneListening = false;
+        ui.removeCallbacks(phoneListenAgain);
         if (headsetRoute != null) headsetRoute.end();
         recording = false;
         listening = false;
@@ -441,6 +468,7 @@ public final class FloatingJarvisService extends Service {
     }
 
     private int speechPauseSeconds() {
+        if (JarvisPhoneMode.isActive()) return 2;
         return JarvisVoicePause.seconds(getSharedPreferences(JarvisVoicePause.PREFS,
             MODE_PRIVATE).getInt(JarvisVoicePause.KEY_SECONDS,
                 JarvisVoicePause.DEFAULT_SECONDS));
@@ -546,6 +574,11 @@ public final class FloatingJarvisService extends Service {
     }
 
     private void sendPendingSpeech() {
+        if (phoneListening && recognizer != null) {
+            SpeechRecognizer previous = recognizer;
+            recognizer = null;
+            try { previous.destroy(); } catch (RuntimeException ignored) { }
+        }
         if (headsetRoute != null) headsetRoute.end();
         cancelPendingSend();
         cancelCorrectionRestart();
@@ -608,6 +641,7 @@ public final class FloatingJarvisService extends Service {
 
     private void toggleListening() {
         if (closing) return;
+        if (JarvisPhoneMode.isActive()) { startPhoneListening(); return; }
         if (sequences != null && sequences.isRunning()) {
             sequences.cancel();
             return;
@@ -657,6 +691,7 @@ public final class FloatingJarvisService extends Service {
         if (closing) return;
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED) {
+            phoneListening = false;
             message("Дозволь Джарвісу користуватися мікрофоном.");
             return;
         }
@@ -668,6 +703,7 @@ public final class FloatingJarvisService extends Service {
                          SpeechRecognizer.isOnDeviceRecognitionAvailable(this))
                     recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this);
                 else {
+                    phoneListening = false;
                     message("На телефоні немає розпізнавача голосу.");
                     return;
                 }
@@ -682,7 +718,12 @@ public final class FloatingJarvisService extends Service {
                     @Override public void onBeginningOfSpeech() {
                         if (active() && recording) setFace("listening");
                     }
-                    @Override public void onRmsChanged(float rms) {}
+                    @Override public void onRmsChanged(float rms) {
+                        if (active() && phoneListening && recording && !stopRequested && rms > 2f) {
+                            speechPause.sawVoice(SystemClock.uptimeMillis());
+                            scheduleSilenceCheck();
+                        }
+                    }
                     @Override public void onBufferReceived(byte[] buffer) {}
                     @Override public void onEndOfSpeech() {
                         if (!active()) return;
@@ -701,7 +742,7 @@ public final class FloatingJarvisService extends Service {
                                 speechDraft.toString(), partialSpeech);
                             speechDraft.setLength(0);
                             speechDraft.append(combined);
-                            if (autoSilenceStop)
+                            if (autoSilenceStop && !phoneListening)
                                 speechPause.sawWords(combined, SystemClock.uptimeMillis());
                             else observeWords(combined);
                         }
@@ -729,6 +770,7 @@ public final class FloatingJarvisService extends Service {
                             return;
                         }
                         if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                            phoneListening = false;
                             recording = false;
                             cancelSpeechTiming();
                             speechPause.reset("");
@@ -741,6 +783,7 @@ public final class FloatingJarvisService extends Service {
                         else recognizerFailures++;
                         if (JarvisSpeechErrorPolicy.needsConfiguration(error) ||
                             recognizerFailures >= (error == SpeechRecognizer.ERROR_TOO_MANY_REQUESTS ? 2 : 3)) {
+                            phoneListening = false;
                             if (speechDraft.length() > 0) {
                                 sendPendingSpeech();
                             } else {
@@ -774,7 +817,7 @@ public final class FloatingJarvisService extends Service {
                                 speechDraft.toString(), finalSegment);
                             speechDraft.setLength(0);
                             speechDraft.append(combined);
-                            if (autoSilenceStop)
+                            if (autoSilenceStop && !phoneListening)
                                 speechPause.sawWords(combined, SystemClock.uptimeMillis());
                             else observeWords(combined);
                         }
@@ -854,6 +897,7 @@ public final class FloatingJarvisService extends Service {
             if (recording && recognizerFailures++ < 3) {
                 restartAfterRecognizer(1700L);
             } else {
+                phoneListening = false;
                 recording = false;
                 cancelSpeechTiming();
                 if (!correctingWord) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
@@ -971,7 +1015,7 @@ public final class FloatingJarvisService extends Service {
             switch (action.kind) {
                 case ENABLE:
                     screenModeStartedHere = true;
-                    reply(ScreenControlAccessibilityService.startFromBubble());
+                    reply(JarvisPhoneModeManager.enter(this, true));
                     return;
                 case DISABLE:
                     ScreenControlAccessibilityService.stop();
@@ -986,7 +1030,7 @@ public final class FloatingJarvisService extends Service {
                         ? "Керування екраном активне." : "Увімкни керування екраном голосом.");
                     return;
                 default:
-                    reply(ScreenControlAccessibilityService.perform(action));
+                    reply(JarvisPhoneModeManager.perform(this, action));
                     return;
             }
         }
@@ -1307,7 +1351,7 @@ public final class FloatingJarvisService extends Service {
         message(text);
         boolean enabled = getSharedPreferences("MainActivity", MODE_PRIVATE)
             .getBoolean("voiceEnabled", true);
-        if (!enabled) { setFace("idle"); return; }
+        if (!enabled || phoneListening) { setFace(phoneListening ? "listening" : "idle"); return; }
         stopSpeech();
         setFace("thinking");
         if (offline != null && offline.isInstalled()) {

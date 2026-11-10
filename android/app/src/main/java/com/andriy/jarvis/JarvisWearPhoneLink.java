@@ -37,13 +37,23 @@ public final class JarvisWearPhoneLink {
     private String pendingType;
     private Callback pendingCallback;
     private Runnable timeout;
+    private final Runnable sync = new Runnable() {
+        @Override public void run() {
+            if (closed) return;
+            if (listenerReady && !busy()) send(JarvisWearProtocol.SYNC, "", (ok, detail) -> {});
+            main.postDelayed(this, 10000L);
+        }
+    };
 
     public JarvisWearPhoneLink(Context context) {
         this.context = context.getApplicationContext();
         this.messageClient = Wearable.getMessageClient(this.context);
         listenerRegistration = messageClient.addListener(replies,
             Uri.parse("wear://*" + JarvisWearProtocol.REPLY), MessageClient.FILTER_LITERAL);
-        listenerRegistration.addOnSuccessListener(v -> listenerReady = true);
+        listenerRegistration.addOnSuccessListener(v -> {
+            listenerReady = true;
+            if (!closed) main.post(sync);
+        });
     }
 
     public boolean busy() { return requesting || pendingId != null; }
@@ -215,7 +225,11 @@ public final class JarvisWearPhoneLink {
                 }
                 activeSession = token;
                 JarvisPhoneMode.setActive(true);
-            } else if (JarvisWearProtocol.COMMAND.equals(type) && !ok &&
+            } else if (JarvisWearProtocol.SYNC.equals(type) && ok) {
+                String token = data.optString("session", "");
+                activeSession = JarvisWearProtocol.validId(token) ? token : "";
+                JarvisPhoneMode.setActive(!activeSession.isEmpty());
+            } else if (JarvisWearProtocol.COMMAND.equals(type) &&
                        data.optBoolean("session_ended",false)) {
                 activeSession = "";
                 JarvisPhoneMode.setActive(false);
@@ -232,7 +246,9 @@ public final class JarvisWearPhoneLink {
         Callback cb = pendingCallback;
         boolean exiting = JarvisWearProtocol.EXIT.equals(pendingType);
         boolean spotify = JarvisWearProtocol.SPOTIFY.equals(pendingType);
+        boolean syncing = JarvisWearProtocol.SYNC.equals(pendingType);
         clearPending();
+        if (syncing) { activeSession = ""; JarvisPhoneMode.setActive(false); }
         if (spotify && activeSession.isEmpty()) JarvisPhoneMode.setActive(false);
         if (exiting) {
             activeSession = "";
@@ -254,6 +270,7 @@ public final class JarvisWearPhoneLink {
         closed = true;
         requesting = false;
         clearPending();
+        main.removeCallbacks(sync);
         messageClient.removeListener(replies);
         activeSession = "";
         JarvisPhoneMode.setActive(false);

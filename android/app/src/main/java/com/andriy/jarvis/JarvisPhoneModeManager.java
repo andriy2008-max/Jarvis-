@@ -23,6 +23,21 @@ public final class JarvisPhoneModeManager {
         }
     }
 
+    public static synchronized boolean automatic() { return automaticOwner != null; }
+
+    public static void showPhoneIcon(Context context) {
+        if (FloatingJarvisService.isShowing() ||
+            !android.provider.Settings.canDrawOverlays(context) ||
+            context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+        try {
+            android.content.Intent show = new android.content.Intent(context, FloatingJarvisService.class);
+            show.setAction(FloatingJarvisService.ACTION_SHOW);
+            if (android.os.Build.VERSION.SDK_INT >= 26) context.startForegroundService(show);
+            else context.startService(show);
+        } catch (RuntimeException ignored) { /* Android can require a foreground launch. */ }
+    }
+
     public static synchronized String enter(Context context, boolean useFloatingMic) {
         if (!supported(context))
             return "Ця конфігурація Джарвіса не підтримує керування екраном.";
@@ -30,6 +45,7 @@ public final class JarvisPhoneModeManager {
             return consentNeeded();
         // An explicit "Телефон" supersedes temporary automated control.
         automaticOwner = null;
+        showPhoneIcon(context);
         if (JarvisPhoneMode.isActive() &&
             ScreenControlAccessibilityService.isSessionActive())
             return "Режим «Телефон» уже активний. Скажи «Джарвіс» для виходу.";
@@ -37,7 +53,7 @@ public final class JarvisPhoneModeManager {
         if (!ScreenControlAccessibilityService.isSessionActive()) return status;
         JarvisPhoneMode.setActive(true);
         return "Режим «Телефон» активний. Скажи «Натисни», «Зажми» або «Свайпни». " +
-            "Для виходу скажи «Джарвіс» чи натисни на 8-бітний телефон.";
+            "Натисни телефон, щоб слухати безперервно. Команда — після 2 с тиші. Для виходу скажи «Джарвіс».";
     }
 
     /** Run a single, user-requested action such as "увімкни реп". Consent
@@ -58,10 +74,18 @@ public final class JarvisPhoneModeManager {
         String result = ScreenControlAccessibilityService.startFromBubble();
         if (!ScreenControlAccessibilityService.isSessionActive())
             return new Lease(null,false,result);
+        showPhoneIcon(context);
         String token = UUID.randomUUID().toString();
         automaticOwner = token;
         JarvisPhoneMode.setActive(true);
         return new Lease(token,true,"Тимчасовий режим «Телефон» активовано.");
+    }
+
+    public static String perform(Context context, ScreenControlCommands.Action action) {
+        Lease lease = acquireForCommand(context);
+        if (!lease.granted) return lease.message;
+        try { return ScreenControlAccessibilityService.perform(action); }
+        finally { releaseForCommand(lease); }
     }
 
     public static synchronized void releaseForCommand(Lease lease) {

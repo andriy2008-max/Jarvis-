@@ -8,6 +8,7 @@ public final class JarvisWearProtocol {
     public static final int MAX_COMMAND_LENGTH = 250;
     public static final int ACK_TIMEOUT_MS = 12000;
     public static final int SESSION_IDLE_MS = 120000;
+    public static final String SYNC = "sync";
     public static final String ENTER = "enter";
     public static final String EXIT = "exit";
     public static final String COMMAND = "command";
@@ -18,7 +19,7 @@ public final class JarvisWearProtocol {
     private JarvisWearProtocol() {}
 
     public static boolean validAction(String action) {
-        return ENTER.equals(action) || EXIT.equals(action) || COMMAND.equals(action) ||
+        return SYNC.equals(action) || ENTER.equals(action) || EXIT.equals(action) || COMMAND.equals(action) ||
             SPOTIFY.equals(action) || CANCEL_SPOTIFY.equals(action);
     }
 

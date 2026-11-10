@@ -6,6 +6,8 @@ public final class JarvisWearProtocolTest {
         if (!result) throw new AssertionError(message);
     }
     public static void main(String[] args) {
+        if (!JarvisWearProtocol.validAction(JarvisWearProtocol.SYNC))
+            throw new AssertionError("Phone mode sync/heartbeat must be supported");
         yes(JarvisWearProtocol.validAction("enter"),"enter");
         yes(JarvisWearProtocol.validAction("exit"),"exit");
         yes(JarvisWearProtocol.validAction("command"),"command");

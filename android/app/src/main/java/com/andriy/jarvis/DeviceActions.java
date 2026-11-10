@@ -17,7 +17,7 @@ import android.view.KeyEvent;
 public final class DeviceActions {
     public static final int REQUEST_CAMERA_FOR_TORCH = 102;
     private static final String LAST_VOLUME_KEY = "lastNonzeroMusicVolume";
-    private final Activity activity;
+    private final Context activity;
     private final AudioManager audio;
     private final CameraManager cameras;
     private String torchCameraId;
@@ -34,7 +34,7 @@ public final class DeviceActions {
         }
     };
 
-    public DeviceActions(Activity activity) {
+    public DeviceActions(Context activity) {
         this.activity = activity;
         audio = (AudioManager) activity.getSystemService(Context.AUDIO_SERVICE);
         cameras = (CameraManager) activity.getSystemService(Context.CAMERA_SERVICE);
@@ -68,7 +68,7 @@ public final class DeviceActions {
             case VOLUME_UNMUTE: return unmute();
             case DISPLAY_SETTINGS:
                 try {
-                    activity.startActivity(new Intent(Settings.ACTION_DISPLAY_SETTINGS));
+                    activity.startActivity(new Intent(Settings.ACTION_DISPLAY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
                     return "Відкриваю налаштування екрана.";
                 } catch (RuntimeException failure) {
                     return "Android не дозволив відкрити налаштування екрана.";
@@ -118,7 +118,7 @@ public final class DeviceActions {
         try {
             int max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
             if (max <= 0) return "Неможливо відновити медіагучність.";
-            int saved = activity.getPreferences(Activity.MODE_PRIVATE).getInt(LAST_VOLUME_KEY, Math.max(1, max / 2));
+            int saved = activity.getSharedPreferences("MainActivity", Context.MODE_PRIVATE).getInt(LAST_VOLUME_KEY, Math.max(1, max / 2));
             saved = Math.min(max, Math.max(1, saved));
             audio.setStreamVolume(AudioManager.STREAM_MUSIC, saved, AudioManager.FLAG_SHOW_UI);
             return "Медіагучність відновлено: " + Math.round(audio.getStreamVolume(AudioManager.STREAM_MUSIC) * 100f / max) + " відсотків.";
@@ -128,7 +128,7 @@ public final class DeviceActions {
     }
 
     private void rememberVolume(int value) {
-        activity.getPreferences(Activity.MODE_PRIVATE).edit().putInt(LAST_VOLUME_KEY, value).apply();
+        activity.getSharedPreferences("MainActivity", Context.MODE_PRIVATE).edit().putInt(LAST_VOLUME_KEY, value).apply();
     }
 
     private String setTorch(boolean enabled) {
@@ -136,9 +136,11 @@ public final class DeviceActions {
             return "На цьому пристрої немає доступного ліхтарика.";
         }
         if (activity.checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            if (!(activity instanceof Activity))
+                return "Відкрий Джарвіс на телефоні та дозволь камеру для ліхтарика.";
             pendingTorchOn = enabled;
             cameraPermissionPending = true;
-            activity.requestPermissions(new String[]{Manifest.permission.CAMERA}, REQUEST_CAMERA_FOR_TORCH);
+            ((Activity) activity).requestPermissions(new String[]{Manifest.permission.CAMERA}, REQUEST_CAMERA_FOR_TORCH);
             return "Для ліхтарика потрібен дозвіл на камеру. Підтверди запит Android.";
         }
         return applyTorch(enabled);

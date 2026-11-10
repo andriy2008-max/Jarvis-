@@ -27,9 +27,22 @@ public final class JarvisWearPhoneSession {
     private static Runnable expiry;
     private static JarvisSequenceExecutor sequences;
     private static SpotifyPlaybackController spotify;
+    private static DeviceActions devices;
     // One user-initiated remote Spotify task at a time, tied to its watch node.
     private static String automaticSpotifyNode = "";
     private static boolean automaticSpotifyBusy;
+
+    static {
+        JarvisPhoneMode.subscribe(() -> {
+            if (!JarvisPhoneMode.isActive()) {
+                if (expiry != null) main.removeCallbacks(expiry);
+                expiry = null;
+                node = "";
+                session = "";
+                deadline = 0L;
+            }
+        });
+    }
 
     private JarvisWearPhoneSession() {}
 
@@ -47,6 +60,27 @@ public final class JarvisWearPhoneSession {
         }
         if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_WATCH)) {
             out.reply(false,"Ця команда призначена для телефона.","",true); return;
+        }
+        if (JarvisWearProtocol.SYNC.equals(action)) {
+            // Join a manually enabled phone mode, never activate it by polling.
+            if (!JarvisPhoneMode.isActive() ||
+                !ScreenControlAccessibilityService.isSessionActive() ||
+                JarvisPhoneModeManager.automatic()) {
+                out.reply(true,"Режим телефона не активний.","",true);
+                return;
+            }
+            if (!session.isEmpty() && !node.equals(sourceNode) &&
+                SystemClock.elapsedRealtime() < deadline) {
+                out.reply(false,"Інший годинник керує телефоном.","",true);
+                return;
+            }
+            if (session.isEmpty() || !node.equals(sourceNode)) {
+                node = sourceNode;
+                session = UUID.randomUUID().toString();
+            }
+            extend();
+            out.reply(true,"Режим телефона активний.",session,false);
+            return;
         }
         // A watch voice command can temporarily use the phone's already
         // user-approved Accessibility service without entering manual Phone mode.
@@ -98,7 +132,7 @@ public final class JarvisWearPhoneSession {
             }
             // The watch already provides the user-facing microphone; do not
             // display a redundant Accessibility mic over the phone screen.
-            String started = ScreenControlAccessibilityService.startFromBubble();
+            String started = JarvisPhoneModeManager.enter(context, true);
             if (!ScreenControlAccessibilityService.isSessionActive()) {
                 out.reply(false,started,"",true); return;
             }
@@ -133,6 +167,22 @@ public final class JarvisWearPhoneSession {
             out.reply(false,"Телефон ще виконує послідовність. Повтори пізніше.",session,false);
             return;
         }
+        JarvisCommandSequence.Plan plan = JarvisCommandSequence.parse(command);
+        if (plan != null && (!plan.valid() || plan.multiple())) {
+            if (!plan.valid()) {
+                out.reply(false,plan.error,session,false);
+                return;
+            }
+            if (sequences == null) sequences = new JarvisSequenceExecutor(context);
+            final String token = session;
+            sequences.start(plan,new JarvisSequenceExecutor.Listener() {
+                @Override public void onProgress(int step,int total,String description) { }
+                @Override public void onFinished(boolean success,String message) {
+                    out.reply(success,message,token,false);
+                }
+            });
+            return;
+        }
         ScreenControlCommands.Action screen = ScreenControlCommands.parse(command);
         if (screen != null) {
             if (screen.kind == ScreenControlCommands.Kind.ENABLE ||
@@ -154,22 +204,6 @@ public final class JarvisWearPhoneSession {
                 session,false);
             return;
         }
-        JarvisCommandSequence.Plan plan = JarvisCommandSequence.parse(command);
-        if (plan != null && plan.multiple()) {
-            if (!plan.valid()) {
-                out.reply(false,plan.error,session,false);
-                return;
-            }
-            if (sequences == null) sequences = new JarvisSequenceExecutor(context);
-            final String token = session;
-            sequences.start(plan,new JarvisSequenceExecutor.Listener() {
-                @Override public void onProgress(int step,int total,String description) { }
-                @Override public void onFinished(boolean success,String message) {
-                    out.reply(success,message,token,false);
-                }
-            });
-            return;
-        }
         SpotifyMusicCommands.Kind music = SpotifyMusicCommands.parse(command);
         if (music != null) {
             if (spotify == null) spotify = new SpotifyPlaybackController(context);
@@ -182,6 +216,25 @@ public final class JarvisWearPhoneSession {
             return;
         }
         String normalized = CommandPatterns.normalize(command);
+        DeviceCommands.Action device = DeviceCommands.parse(normalized);
+        if (device != null) {
+            if (devices == null) devices = new DeviceActions(context);
+            String detail = devices.perform(device);
+            out.reply(true,detail,session,false);
+            return;
+        }
+        Integer timer = CommandPatterns.timerSeconds(normalized);
+        if (timer != null) {
+            boolean ok = timer > 0 && TimerScheduler.start(context,timer);
+            out.reply(ok,ok ? "Таймер на телефоні встановлено на " + timer + " секунд."
+                : "Не вдалося запустити таймер на телефоні. Перевір дозвіл точних будильників.",session,false);
+            return;
+        }
+        if (normalized.equals("скасуй таймер") || normalized.equals("зупини таймер")) {
+            boolean ok = TimerScheduler.cancel(context);
+            out.reply(ok,ok ? "Таймер телефона скасовано." : "На телефоні немає таймера.",session,false);
+            return;
+        }
         String app = AssistantIntents.requestedApp(normalized);
         if (app != null) {
             String launched = launchApp(context,app);
@@ -189,7 +242,7 @@ public final class JarvisWearPhoneSession {
             return;
         }
         out.reply(false,"У режимі «Телефон» доступні «Натисни», «Зажми», «Напиши», " +
-            "«Свайпни», «Назад» і відкриття програм. Інші команди виконує звичайний Джарвіс.",
+            "«Свайпни», «Назад», програми, гучність, музика, ліхтарик і таймер телефона.",
             session,false);
     }
 
@@ -224,8 +277,11 @@ public final class JarvisWearPhoneSession {
         deadline = SystemClock.elapsedRealtime() + JarvisWearProtocol.SESSION_IDLE_MS;
         if (expiry != null) main.removeCallbacks(expiry);
         expiry = () -> {
-            if (!session.isEmpty() && SystemClock.elapsedRealtime() >= deadline)
-                endSession();
+            if (!session.isEmpty() && SystemClock.elapsedRealtime() >= deadline) {
+                if ((sequences != null && sequences.isRunning()) ||
+                    (spotify != null && spotify.isRunning())) extend();
+                else endSession();
+            }
         };
         main.postDelayed(expiry,JarvisWearProtocol.SESSION_IDLE_MS + 100);
     }

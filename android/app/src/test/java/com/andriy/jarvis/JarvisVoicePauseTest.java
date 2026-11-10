@@ -34,6 +34,18 @@ public final class JarvisVoicePauseTest {
             "Corrected baseline must not begin a timer");
         check(pause.sawWords("Привіт ще", 11000L), "Replacement word arms");
         check(pause.expired(14000L, 2), "Replacement word deadline");
+        // A slow recognizer can keep the same partial while the user still speaks.
+        pause.reset("");
+        pause.sawVoice(9000L);
+        check(!pause.armed(), "Noise without recognized words cannot submit a command");
+        pause.sawWords("відкрий", 10000L);
+        pause.sawVoice(11500L);
+        check(!pause.expired(13499L,2) && pause.expired(13500L,2),
+            "Wait two full seconds after speech, not after an old partial");
+        pause.reset("");
+        check(!pause.expired(90000L,2), "Next command may wait indefinitely for first word");
+        pause.sawWords("назад",90000L);
+        check(pause.expired(92000L,2), "Next command has its own silence deadline");
         System.out.println("PASS JarvisVoicePauseTest");
     }
 }

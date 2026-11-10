@@ -32,7 +32,24 @@ public final class JarvisPhoneMode {
         if (normalized.equals("джарвіс") || normalized.equals("джарвис") ||
             normalized.equals("jarvis") || normalized.equals("вийди з режиму телефон") ||
             normalized.equals("вийди з режиму телефона")) return Transition.EXIT;
+        ScreenControlCommands.Action screen = ScreenControlCommands.parse(normalized);
+        if (screen != null && screen.kind == ScreenControlCommands.Kind.ENABLE)
+            return Transition.ENTER;
+        if (screen != null && screen.kind == ScreenControlCommands.Kind.DISABLE)
+            return Transition.EXIT;
         return Transition.NONE;
+    }
+
+    /** Commands whose execution belongs on the companion phone. */
+    public static boolean requiresPhone(String command) {
+        ScreenControlCommands.Action screen = ScreenControlCommands.parse(command);
+        if (screen != null) return screen.kind != ScreenControlCommands.Kind.SETTINGS &&
+            screen.kind != ScreenControlCommands.Kind.STATUS &&
+            screen.kind != ScreenControlCommands.Kind.DISABLE;
+        JarvisCommandSequence.Plan plan = JarvisCommandSequence.parse(command);
+        return (plan != null && plan.valid() && plan.multiple()) ||
+            AssistantIntents.requestedApp(CommandPatterns.normalize(command)) != null ||
+            SpotifyMusicCommands.parse(command) != null;
     }
 
     public static void setActive(boolean value) {
