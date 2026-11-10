@@ -29,6 +29,7 @@ public final class JarvisWearPhoneLink {
     private final MessageClient.OnMessageReceivedListener replies = this::onReply;
     private Task<Void> listenerRegistration;
     private boolean listenerReady;
+    private boolean requesting;
     private boolean closed;
     private String activeSession = "";
     private String pendingId;
@@ -45,7 +46,7 @@ public final class JarvisWearPhoneLink {
         listenerRegistration.addOnSuccessListener(v -> listenerReady = true);
     }
 
-    public boolean busy() { return pendingId != null; }
+    public boolean busy() { return requesting || pendingId != null; }
     public boolean active() { return !activeSession.isEmpty() && JarvisPhoneMode.isActive(); }
 
     public void enter(Callback cb) { send(JarvisWearProtocol.ENTER, "", cb); }
@@ -86,6 +87,7 @@ public final class JarvisWearPhoneLink {
         }
         if (!listenerReady) {
             listenerRegistration.addOnSuccessListener(v -> {
+                listenerReady = true;
                 if (!closed) send(type,text,cb);
             });
             listenerRegistration.addOnFailureListener(err ->
@@ -93,11 +95,13 @@ public final class JarvisWearPhoneLink {
             return;
         }
 
+        requesting = true;
         Wearable.getNodeClient(context).getConnectedNodes()
             .addOnSuccessListener(nodes -> {
-                if (closed) return;
+                if (closed) { requesting = false; return; }
                 Node target = selectPhone(nodes);
                 if (target == null) {
+                    requesting = false;
                     cb.finished(false, "Не знайшов підключений Android-телефон. " +
                         "На годиннику й телефоні має бути Джарвіс з однаковим підписом.");
                     return;
@@ -105,6 +109,7 @@ public final class JarvisWearPhoneLink {
                 try {
                     JSONObject request = new JSONObject();
                     pendingId = UUID.randomUUID().toString();
+                    requesting = false;
                     request.put("id",pendingId);
                     request.put("action",type);
                     request.put("text",text);
@@ -121,10 +126,14 @@ public final class JarvisWearPhoneLink {
                         .addOnFailureListener(err -> failPending(
                             "Не вдалося передати команду на телефон. Перевір Bluetooth/Wi-Fi."));
                 } catch (Exception error) {
-                    failPending("Не вдалося підготувати команду для телефона.");
+                    requesting = false;
+                    if (pendingId != null)
+                        failPending("Не вдалося підготувати команду для телефона.");
+                    else cb.finished(false,"Не вдалося підготувати команду для телефона.");
                 }
             })
             .addOnFailureListener(err -> {
+                requesting = false;
                 if (!closed) cb.finished(false,"Немає зв'язку з телефоном через Wear OS.");
             });
     }
@@ -194,6 +203,7 @@ public final class JarvisWearPhoneLink {
 
     public void close() {
         closed = true;
+        requesting = false;
         clearPending();
         messageClient.removeListener(replies);
         activeSession = "";
