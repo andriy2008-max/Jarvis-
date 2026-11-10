@@ -580,70 +580,134 @@ public final class FloatingJarvisService extends Service {
                     message("На телефоні немає розпізнавача голосу.");
                     return;
                 }
+                final SpeechRecognizer currentRecognizer = recognizer;
                 recognizer.setRecognitionListener(new RecognitionListener() {
-                    @Override public void onReadyForSpeech(Bundle params) {
-                        setFace("listening");
+                    private boolean active() {
+                        return !closing && recognizer == currentRecognizer;
                     }
-                    @Override public void onBeginningOfSpeech() {}
+                    @Override public void onReadyForSpeech(Bundle params) {
+                        if (active() && recording) setFace("listening");
+                    }
+                    @Override public void onBeginningOfSpeech() {
+                        if (active() && recording) setFace("listening");
+                    }
                     @Override public void onRmsChanged(float rms) {}
                     @Override public void onBufferReceived(byte[] buffer) {}
                     @Override public void onEndOfSpeech() {
+                        if (!active()) return;
                         listening = false;
-                        if (recording) setFace("thinking");
+                        // Low-level Android recognition may end before our silence
+                        // timer. The logical microphone stays armed between segments.
+                        if (recording && !stopRequested) setFace("listening");
                     }
                     @Override public void onError(int error) {
-                        recording = false;
+                        if (!active()) return;
+                        recognizerSessionActive = false;
                         listening = false;
-                        partialSpeech = "";
-                        if (correctingWord) {
-                            JarvisLiveTranscript.update(TRANSCRIPT_OWNER,
-                                speechDraft.toString(), false, SystemClock.uptimeMillis());
-                            setFace("idle");
-                            if (!closing) message("Не почув слово. Натисни обличчя, щоб повторити.");
-                        } else {
-                            JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-                            setFace("idle");
-                            if (!closing) message("Не почув команди. Натисни обличчя ще раз.");
+                        if (!recording) return;
+                        if (!partialSpeech.isEmpty()) {
+                            String combined = JarvisTranscriptCorrection.join(
+                                speechDraft.toString(), partialSpeech);
+                            speechDraft.setLength(0);
+                            speechDraft.append(combined);
+                            if (autoSilenceStop)
+                                speechPause.sawWords(combined, SystemClock.uptimeMillis());
+                            else observeWords(combined);
                         }
-                    }
-                    @Override public void onResults(Bundle results) {
-                        recording = false;
-                        listening = false;
                         partialSpeech = "";
-                        ArrayList<String> list = results == null ? null :
-                            results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                        if (list == null || list.isEmpty() || list.get(0) == null ||
-                            list.get(0).trim().isEmpty()) {
-                            if (correctingWord) {
-                                JarvisLiveTranscript.update(TRANSCRIPT_OWNER,
-                                    speechDraft.toString(), false, SystemClock.uptimeMillis());
-                                setFace("idle");
-                                message("Не почув слово. Натисни обличчя, щоб повторити.");
+                        if (stopRequested) {
+                            if (autoSilenceStop && !speechPause.expired(
+                                SystemClock.uptimeMillis(), speechPauseSeconds())) {
+                                stopRequested = false;
+                                autoSilenceStop = false;
+                                cancelSpeechTiming();
+                                scheduleSilenceCheck();
+                                restartAfterRecognizer(320L);
+                                return;
+                            }
+                            sendPendingSpeech();
+                            return;
+                        }
+                        if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                            recording = false;
+                            cancelSpeechTiming();
+                            speechPause.reset("");
+                            setFace("idle");
+                            message("Дозволь доступ до мікрофона в налаштуваннях.");
+                            return;
+                        }
+                        boolean noSpeech = error == SpeechRecognizer.ERROR_NO_MATCH ||
+                            error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT;
+                        if (noSpeech) recognizerFailures = 0;
+                        else recognizerFailures++;
+                        if (recognizerFailures > 5) {
+                            if (speechDraft.length() > 0) {
+                                sendPendingSpeech();
                             } else {
-                                JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+                                recording = false;
+                                cancelSpeechTiming();
+                                speechPause.reset("");
                                 setFace("idle");
-                                message("Не почув команди. Спробуй ще раз.");
+                                message("Сервіс мікрофона зупинився через помилки. Натисни ще раз.");
                             }
                             return;
                         }
-                        String combined = JarvisTranscriptCorrection.join(
-                            speechDraft.toString(), list.get(0));
-                        speechDraft.setLength(0);
-                        speechDraft.append(combined);
+                        JarvisLiveTranscript.update(TRANSCRIPT_OWNER,
+                            speechDraft.toString(), false, SystemClock.uptimeMillis());
+                        setFace("listening");
+                        restartAfterRecognizer(noSpeech ? 350L : 1000L);
+                    }
+                    @Override public void onResults(Bundle results) {
+                        if (!active()) return;
+                        recognizerSessionActive = false;
+                        listening = false;
+                        if (!recording) return;
+                        ArrayList<String> list = results == null ? null :
+                            results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                        String finalSegment = list != null && !list.isEmpty() &&
+                            list.get(0) != null ? list.get(0).trim() : "";
+                        if (finalSegment.isEmpty()) finalSegment = partialSpeech;
+                        if (!finalSegment.isEmpty()) {
+                            String combined = JarvisTranscriptCorrection.join(
+                                speechDraft.toString(), finalSegment);
+                            speechDraft.setLength(0);
+                            speechDraft.append(combined);
+                            if (autoSilenceStop)
+                                speechPause.sawWords(combined, SystemClock.uptimeMillis());
+                            else observeWords(combined);
+                        }
+                        partialSpeech = "";
                         correctingWord = false;
-                        queueSpeechCommand();
+                        recognizerFailures = 0;
+                        if (stopRequested) {
+                            if (autoSilenceStop && !speechPause.expired(
+                                SystemClock.uptimeMillis(), speechPauseSeconds())) {
+                                stopRequested = false;
+                                autoSilenceStop = false;
+                                cancelSpeechTiming();
+                                scheduleSilenceCheck();
+                                setFace("listening");
+                                restartAfterRecognizer(320L);
+                            } else sendPendingSpeech();
+                            return;
+                        }
+                        JarvisLiveTranscript.update(TRANSCRIPT_OWNER,
+                            speechDraft.toString(), false, SystemClock.uptimeMillis());
+                        setFace("listening");
+                        restartAfterRecognizer(320L);
                     }
                     @Override public void onPartialResults(Bundle results) {
-                        if (!recording || closing || results == null) return;
-                        ArrayList<String> heard =
+                        if (!active() || !recording || stopRequested || results == null) return;
+                        ArrayList<String> hypotheses =
                             results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                        if (heard != null && !heard.isEmpty() && heard.get(0) != null) {
-                            partialSpeech = heard.get(0).trim();
-                            JarvisLiveTranscript.update(TRANSCRIPT_OWNER,
-                                JarvisTranscriptCorrection.join(
-                                    speechDraft.toString(), partialSpeech), false,
-                                SystemClock.uptimeMillis());
-                        }
+                        if (hypotheses == null || hypotheses.isEmpty() ||
+                            hypotheses.get(0) == null) return;
+                        partialSpeech = hypotheses.get(0).trim();
+                        String combined = JarvisTranscriptCorrection.join(
+                            speechDraft.toString(), partialSpeech);
+                        observeWords(combined);
+                        JarvisLiveTranscript.update(TRANSCRIPT_OWNER,
+                            combined, false, SystemClock.uptimeMillis());
                     }
                     @Override public void onEvent(int type, Bundle params) {}
                 });
@@ -664,20 +728,30 @@ public final class FloatingJarvisService extends Service {
             i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "uk-UA");
             i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
             i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
-            // Recognition engines may ignore these hints; don't claim
-            // that silence timing is guaranteed by Android.
-            i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1800L);
+            // Android may ignore these hints. Jarvis independently counts
+            // inactivity after the FIRST recognized word and restarts segments.
+            long silenceHint = Math.max(1500L, speechPauseSeconds() * 1000L);
+            i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, silenceHint);
+            i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, silenceHint + 1000L);
+            i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 700L);
             recording = true;
             listening = true;
+            recognizerSessionActive = true;
             setFace("listening");
             recognizer.startListening(i);
             android.util.Log.i("JARVIS_FLOATING_QA", "mic_tap_started=true");
         } catch (Exception exception) {
-            recording = false;
+            recognizerSessionActive = false;
             listening = false;
-            if (!correctingWord) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-            setFace("idle");
-            message("Не вдалося ввімкнути мікрофон. Повтори натискання.");
+            if (recording && recognizerFailures++ < 5) {
+                restartAfterRecognizer(700L);
+            } else {
+                recording = false;
+                cancelSpeechTiming();
+                if (!correctingWord) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+                setFace("idle");
+                message("Не вдалося ввімкнути мікрофон. Повтори натискання.");
+            }
         }
     }
 
