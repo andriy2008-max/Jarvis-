@@ -602,7 +602,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         aiControls.addView(aiResetButton, aiResetParams);
         // AI actions remain explicit: these never run simply from opening Jarvis.
         LinearLayout aiTools = new LinearLayout(this);
-        aiTools.setOrientation(isCompact ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+        aiTools.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams toolsParams = new LinearLayout.LayoutParams(-1, -2);
         toolsParams.topMargin = dp(8);
         chatPanel.addView(aiTools, toolsParams);
@@ -615,13 +615,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         for (int n = 0; n < names.length; n++) {
             Button button = secondaryButton(names[n], actions[n]);
             button.setTextSize(TypedValue.COMPLEX_UNIT_SP, isCompact ? 10 : 11);
-            LinearLayout.LayoutParams p = isCompact
-                ? new LinearLayout.LayoutParams(-1, dp(41))
-                : new LinearLayout.LayoutParams(0, dp(44), 1f);
-            if (n > 0) {
-                if (isCompact) p.topMargin = dp(5);
-                else p.leftMargin = dp(5);
-            }
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(43));
+            if (n > 0) p.topMargin = dp(5);
             aiTools.addView(button, p);
         }
         Button pythonButton = secondaryButton("🧮 Перевірити розрахунок / код у Python",
