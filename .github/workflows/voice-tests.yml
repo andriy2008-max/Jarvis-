@@ -7,6 +7,10 @@ on:
       - 'server/jarvis-tts-server/**'
       - 'android/app/src/main/java/com/andriy/jarvis/NeuralSpeechPolicy.java'
       - 'android/app/src/main/java/com/andriy/jarvis/NeuralSpeechClient.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/OfflineVoicePackRules.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/OfflineVoicePackManager.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/OfflineVoicePackRulesTest.java'
+      - 'tools/voice-export/**'
       - 'android/app/src/main/java/com/andriy/jarvis/MainActivity.java'
       - 'android/app/build.gradle'
       - 'android/app/src/test/java/com/andriy/jarvis/NeuralSpeechPolicyTest.java'
@@ -26,13 +30,18 @@ jobs:
           python-version: '3.10'
       - name: Python server contract (without model download)
         run: python -m unittest discover -s server/jarvis-tts-server -p 'test_*.py' -v
-      - name: Java policy contract (without APK)
+      - name: Export package contract (no model download)
+        run: python -m unittest discover -s tools/voice-export -p 'test_*.py' -v
+      - name: Java policy contracts (without APK)
         run: |
           mkdir -p /tmp/jarvis-voice-tests
           javac -encoding UTF-8 -d /tmp/jarvis-voice-tests \
             android/app/src/main/java/com/andriy/jarvis/NeuralSpeechPolicy.java \
-            android/app/src/test/java/com/andriy/jarvis/NeuralSpeechPolicyTest.java
+            android/app/src/main/java/com/andriy/jarvis/OfflineVoicePackRules.java \
+            android/app/src/test/java/com/andriy/jarvis/NeuralSpeechPolicyTest.java \
+            android/app/src/test/java/com/andriy/jarvis/OfflineVoicePackRulesTest.java
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.NeuralSpeechPolicyTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.OfflineVoicePackRulesTest
       
   android_compile:
     runs-on: ubuntu-latest
