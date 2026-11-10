@@ -16,7 +16,8 @@ public final class ScreenControlDebugReceiver extends BroadcastReceiver {
     private static final String ACTION = "com.andriy.jarvis.preview.DEBUG_SCREEN_CONTROL";
 
     @Override public void onReceive(Context context, Intent intent) {
-        if (!BuildConfig.DEBUG || intent == null || !ACTION.equals(intent.getAction())) return;
+        // This class is compiled only from src/debug and absent from release.
+        if (intent == null || !ACTION.equals(intent.getAction())) return;
         String operation = intent.getStringExtra("op");
         if (operation == null) return;
         try {
