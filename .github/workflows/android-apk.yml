@@ -134,8 +134,8 @@ jobs:
           fi
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" > "$RUNNER_TEMP/jarvis-badging.txt"
           grep -Fq "package: name='$package'" "$RUNNER_TEMP/jarvis-badging.txt"
-          version_code="$(sed -nE 's/^[[:space:]]*versionCode[[:space:]]+([0-9]+).*/\\1/p' android/app/build.gradle | head -n1)"
-          version_name="$(sed -nE "s/^[[:space:]]*versionName[[:space:]]+'([^']+)'.*/\\1/p" android/app/build.gradle | head -n1)"
+          version_code="$(sed -nE 's/^[[:space:]]*versionCode[[:space:]]+([0-9]+).*/\1/p' android/app/build.gradle | head -n1)"
+          version_name="$(sed -nE "s/^[[:space:]]*versionName[[:space:]]+'([^']+)'.*/\1/p" android/app/build.gradle | head -n1)"
           test -n "$version_code" && test -n "$version_name"
           grep -Fq "versionCode='$version_code'" "$RUNNER_TEMP/jarvis-badging.txt"
           grep -Fq "versionName='$version_name'" "$RUNNER_TEMP/jarvis-badging.txt"
