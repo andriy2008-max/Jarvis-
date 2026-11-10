@@ -1465,11 +1465,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         face.setContentDescription(
             "Обличчя Джарвіса. Свайп вліво по словах — прибрати останнє й вимовити заново.");
         face.setOnClickListener(v -> {
-            if (JarvisPhoneMode.isActive()) {
-                String result = JarvisPhoneModeManager.exit();
-                setStatus(result);
-                appendDialogue("Джарвіс", result);
-            }
+            if (JarvisPhoneMode.isActive()) exitPhoneMode();
         });
         face.setOnTouchListener(new View.OnTouchListener() {
             float startX, startY;
@@ -2817,11 +2813,36 @@ public final class MainActivity extends Activity implements RecognitionListener 
         });
     }
 
+    private void exitPhoneMode() {
+        cancelManualRestart();
+        cancelSilenceCheck();
+        cancelPendingWakeCommand();
+        manualCapture = false;
+        manualStopRequested = false;
+        recognizerSessionActive = false;
+        listening = false;
+        autoSilenceStop = false;
+        manualHypothesis = "";
+        manualTranscript.setLength(0);
+        if (recognizer != null) {
+            try { recognizer.cancel(); } catch (Exception ignored) {}
+        }
+        if (microphone != null)
+            microphone.setText(isWatchDevice ? "🎙 Говорити" :
+                "🎙️ Говорити з Джарвісом");
+        JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+        wakeConversation.end();
+        String result = JarvisPhoneModeManager.exit();
+        appendDialogue("Джарвіс", result);
+        setStatus(result);
+    }
+
     private void processCommand(String raw) {
         if (raw == null || raw.trim().isEmpty()) return;
         JarvisPhoneMode.Transition modeTransition = JarvisPhoneMode.transition(raw);
         if (modeTransition == JarvisPhoneMode.Transition.ENTER) {
-            String result = JarvisPhoneModeManager.enter(this, false);
+            String result = JarvisPhoneModeManager.enter(this,
+                FloatingJarvisService.isShowing());
             appendDialogue("Джарвіс", result);
             setStatus(result);
             if (!ScreenControlAccessibilityService.isConnected() &&
@@ -2831,9 +2852,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
         if (modeTransition == JarvisPhoneMode.Transition.EXIT &&
             JarvisPhoneMode.isActive()) {
-            String result = JarvisPhoneModeManager.exit();
-            appendDialogue("Джарвіс", result);
-            setStatus(result);
+            exitPhoneMode();
             return;
         }
         if (spotifyPlayback != null && spotifyPlayback.isRunning()) {
