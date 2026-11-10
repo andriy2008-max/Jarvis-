@@ -40,6 +40,7 @@ public final class OfflineOnnxSynthesizer implements AutoCloseable {
     private final JSONObject manifest;
     private final JSONObject model;
     private final OrtEnvironment environment;
+    private final OrtSession.SessionOptions sessionOptions;
     private final Map<String, OrtSession> sessions = new HashMap<>();
     private final Map<String, Integer> tokenMap = new HashMap<>();
     private final Map<String, float[]> speakers = new HashMap<>();
@@ -106,24 +107,22 @@ public final class OfflineOnnxSynthesizer implements AutoCloseable {
             speakers.put(speaker, v);
         }
         environment = OrtEnvironment.getEnvironment();
-        OrtSession.SessionOptions options = new OrtSession.SessionOptions();
+        sessionOptions = new OrtSession.SessionOptions();
         try {
-            options.setIntraOpNumThreads(2);
-            options.setInterOpNumThreads(1);
-            options.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.BASIC_OPT);
+            sessionOptions.setIntraOpNumThreads(2);
+            sessionOptions.setInterOpNumThreads(1);
+            sessionOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.BASIC_OPT);
             for (String part : new String[] {
                 "tts_model_encoder.onnx", "predecoder_0.onnx",
                 "tts_model_decoder.onnx", "postdecoder.onnx", "HiFiGANVocoder.onnx"
             }) {
                 File target = new File(modelDir, "onnx/full/" + part);
                 if (!target.isFile()) throw new Exception("Не знайдено " + part + ".");
-                sessions.put(part, environment.createSession(target.getAbsolutePath(), options));
+                sessions.put(part, environment.createSession(target.getAbsolutePath(), sessionOptions));
             }
         } catch (Exception error) {
             close();
             throw error;
-        } finally {
-            options.close();
         }
     }
 
@@ -197,7 +196,7 @@ public final class OfflineOnnxSynthesizer implements AutoCloseable {
         if (closed) throw new Exception("Офлайн-рушій закрито.");
         if (!speakers.containsKey(speaker))
             throw new Exception("Непідтримуваний голос: " + speaker);
-        if (text == null || text.isBlank())
+        if (text == null || text.trim().isEmpty())
             throw new Exception("Порожній текст.");
         ArrayList<float[]> waves = new ArrayList<>();
         int total = 0;
@@ -399,5 +398,6 @@ public final class OfflineOnnxSynthesizer implements AutoCloseable {
         for (OrtSession session : sessions.values())
             try { session.close(); } catch (Exception ignored) {}
         sessions.clear();
+        try { sessionOptions.close(); } catch (Exception ignored) {}
     }
 }
