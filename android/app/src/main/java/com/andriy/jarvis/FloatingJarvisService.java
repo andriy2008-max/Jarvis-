@@ -101,6 +101,7 @@ public final class FloatingJarvisService extends Service {
     private boolean webSearchBusy;
     private boolean newsBusy;
     private JarvisSequenceExecutor sequences;
+    private SpotifyPlaybackController spotifyPlayback;
 
     public static boolean isShowing() { return showing; }
 
@@ -801,6 +802,30 @@ public final class FloatingJarvisService extends Service {
 
     private void executeCommand(String raw) {
         if (closing) return;
+        if (spotifyPlayback != null && spotifyPlayback.isRunning()) {
+            String word = CommandPatterns.normalize(raw);
+            if (word.equals("скасуй spotify") || word.equals("зупини spotify") ||
+                word.equals("скасуй спотіфай")) spotifyPlayback.cancel();
+            else message("Завершую команду в Spotify. Скажи «Скасуй Spotify», щоб зупинити.");
+            return;
+        }
+        SpotifyMusicCommands.Kind requestedMusic = SpotifyMusicCommands.parse(raw);
+        if (requestedMusic != null) {
+            if (spotifyPlayback == null)
+                spotifyPlayback = new SpotifyPlaybackController(this);
+            spotifyPlayback.start(requestedMusic, new SpotifyPlaybackController.Listener() {
+                @Override public void onProgress(String status) {
+                    if (!closing) message(status);
+                }
+                @Override public void onFinished(boolean success, String result) {
+                    if (closing) return;
+                    if (success) message(result);
+                    else reply(result);
+                }
+            });
+            return;
+        }
+
 
         JarvisCommandSequence.Plan plan = JarvisCommandSequence.parse(raw);
         if (plan != null && (!plan.valid() || plan.multiple() ||
@@ -1263,6 +1288,7 @@ public final class FloatingJarvisService extends Service {
         cancelCorrectionRestart();
         cancelSpeechTiming();
         if (sequences != null) sequences.cancel();
+        if (spotifyPlayback != null) spotifyPlayback.cancel();
         if (screenModeStartedHere) ScreenControlAccessibilityService.stop();
         if (recognizer != null) {
             try { recognizer.cancel(); recognizer.destroy(); }
