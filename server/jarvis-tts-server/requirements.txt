@@ -1,0 +1,3 @@
+# Model and inference runtime from the original MIT-licensed project.
+# Use Python 3.10 and install PyTorch for your platform first when needed.
+git+https://github.com/robinhad/ukrainian-tts.git@v6.0.0
