@@ -401,6 +401,19 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         return null;
     }
 
+    /** Long-clickable list rows are not necessarily ordinary clickable buttons. */
+    private static AccessibilityNodeInfo longPressable(AccessibilityNodeInfo node) {
+        AccessibilityNodeInfo cursor = node;
+        AccessibilityNodeInfo fallback = null;
+        for (int depth = 0; depth < 5 && cursor != null; depth++,cursor=cursor.getParent()) {
+            if (cursor.isPassword() || cursor.isEditable()) return null;
+            if (!cursor.isVisibleToUser() || !cursor.isEnabled()) continue;
+            if (cursor.isLongClickable()) return cursor;
+            if (fallback == null && cursor.isClickable()) fallback = cursor;
+        }
+        return fallback;
+    }
+
     private static String asString(CharSequence value) {
         return value == null ? "" : value.toString();
     }
@@ -690,7 +703,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             if (++scanned > MAX_SCAN) return "Елементів екрана надто багато. Не натискатиму навмання.";
             AccessibilityNodeInfo node = queue.removeFirst();
             if (!node.isVisibleToUser() || node.isPassword()) continue;
-            AccessibilityNodeInfo control = clickable(node);
+            AccessibilityNodeInfo control = longPressable(node);
             if (control != null && control.isEnabled()) {
                 Rect rect = new Rect();
                 control.getBoundsInScreen(rect);
