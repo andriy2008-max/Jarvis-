@@ -9,7 +9,7 @@ Python **3.10** is recommended for compatibility with the upstream ESPnet/PyTorc
 ```bash
 cd server/jarvis-tts-server
 python3.10 -m venv .venv
-# Activate .venv (Windows PowerShell: .venv\\Scripts\\Activate.ps1)
+# Activate .venv on Linux/macOS:
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -23,10 +23,13 @@ export JARVIS_TTS_TOKEN='replace-with-a-long-random-private-token'
 python tts_server.py
 ```
 
-Windows PowerShell:
+Windows PowerShell (from the same directory):
 ```powershell
+py -3.10 -m venv .venv
+.\\.venv\\Scripts\\Activate.ps1
+python -m pip install -r requirements.txt
 $env:JARVIS_TTS_TOKEN = "replace-with-a-long-random-private-token"
-py -3.10 tts_server.py
+python tts_server.py
 ```
 
 By default listens on **127.0.0.1:8765**. Check `http://127.0.0.1:8765/health` on the same machine. The default listening socket is HTTP **only for the local machine**; do not expose it to the public internet directly.
