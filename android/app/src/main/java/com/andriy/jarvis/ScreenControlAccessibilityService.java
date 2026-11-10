@@ -82,6 +82,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             service.buttonOverlay = null;
         }
         service.sessionActive = true;
+        JarvisPhoneMode.setActive(true);
         return "Керування екраном активне в обличчі Джарвіса.";
     }
 
