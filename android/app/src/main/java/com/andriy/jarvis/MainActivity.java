@@ -108,6 +108,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private String pendingWakeCommand;
     private Runnable pendingWakeDispatch;
     private Runnable manualRestart;
+    private final JarvisVoicePause speechPause = new JarvisVoicePause();
+    private Runnable silenceCheck;
+    private Runnable finalizeSpeechFallback;
+    private boolean autoSilenceStop;
+    private Button speechPauseButton;
     private boolean autoWakeListening;
     private boolean autoWakePausedForErrors;
     private int autoWakeErrors;
@@ -243,6 +248,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         foreground = false;
         cancelAutoWakeSchedule();
         cancelManualRestart();
+        cancelSilenceCheck();
         if (recognizer != null && recognizerSessionActive) recognizer.cancel();
         recognizerSessionActive = false;
         listening = false;
@@ -493,6 +499,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
         LinearLayout.LayoutParams voiceSettingsParams = new LinearLayout.LayoutParams(-1, dp(43));
         voiceSettingsParams.topMargin = dp(7);
         chatPanel.addView(voiceSettings, voiceSettingsParams);
+        speechPauseButton = secondaryButton("", this::showSpeechPauseSettings);
+        refreshSpeechPauseLabel();
+        LinearLayout.LayoutParams silenceParams = new LinearLayout.LayoutParams(-1, dp(43));
+        silenceParams.topMargin = dp(7);
+        chatPanel.addView(speechPauseButton, silenceParams);
 
         feedScroll = new ScrollView(this);
         feedScroll.setFillViewport(true);
@@ -736,6 +747,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (!selected) stopSpeaking();
         });
         body.addView(voiceToggle, new LinearLayout.LayoutParams(-1, -2));
+        speechPauseButton = secondaryButton("", this::showSpeechPauseSettings);
+        refreshSpeechPauseLabel();
+        body.addView(speechPauseButton, new LinearLayout.LayoutParams(-1, dp(40)));
 
         feedScroll = new ScrollView(this);
         feedScroll.setFillViewport(true);
@@ -932,6 +946,43 @@ public final class MainActivity extends Activity implements RecognitionListener 
             setStatus("Обрано голос " + profileLabel(profile) + ". Перевіряю звучання.");
             previewCurrentVoice();
         } else showVoiceUnavailable(profile);
+    }
+
+    private int speechPauseSeconds() {
+        return JarvisVoicePause.seconds(getSharedPreferences(JarvisVoicePause.PREFS,
+            MODE_PRIVATE).getInt(JarvisVoicePause.KEY_SECONDS,
+                JarvisVoicePause.DEFAULT_SECONDS));
+    }
+
+    private void refreshSpeechPauseLabel() {
+        if (speechPauseButton != null)
+            speechPauseButton.setText("⏳ Пауза після слова: " + speechPauseSeconds() + " с");
+    }
+
+    private void showSpeechPauseSettings() {
+        android.widget.NumberPicker picker = new android.widget.NumberPicker(this);
+        picker.setMinValue(JarvisVoicePause.MIN_SECONDS);
+        picker.setMaxValue(JarvisVoicePause.MAX_SECONDS);
+        picker.setValue(speechPauseSeconds());
+        picker.setWrapSelectorWheel(false);
+        LinearLayout container = new LinearLayout(this);
+        container.setGravity(Gravity.CENTER);
+        container.setPadding(dp(12), dp(12), dp(12), dp(12));
+        container.addView(picker);
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Пауза перед виконанням голосової команди")
+            .setMessage("Мікрофон слухає до першого розпізнаного слова. Після кожного наступного слова відлік починається знову. Після вказаної кількості секунд тиші команда виконується. Кнопкою можна надіслати її раніше.")
+            .setView(container)
+            .setNegativeButton("Скасувати", null)
+            .setPositiveButton("Зберегти", (d, which) -> {
+                int selected = JarvisVoicePause.seconds(picker.getValue());
+                getSharedPreferences(JarvisVoicePause.PREFS, MODE_PRIVATE)
+                    .edit().putInt(JarvisVoicePause.KEY_SECONDS, selected).apply();
+                refreshSpeechPauseLabel();
+                scheduleSilenceCheck();
+                setStatus("Пауза між словами: " + selected + " с");
+            }).create();
+        showDialogWithoutWake(dialog);
     }
 
     private void showVoiceSettings() {
@@ -1533,9 +1584,71 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
     }
 
-    /** Manual press-to-talk stays armed until the SECOND press. Android recognition
-     * may end each low-level segment on silence: we restart those segments instead of
-     * treating the service callback as the end of the user's requested recording. */
+    /** Independent of the Android recognizer's arbitrary segment timeouts.
+     * Nothing starts counting before a recognized word. */
+    private void cancelSilenceCheck() {
+        if (silenceCheck != null) {
+            wakeHandler.removeCallbacks(silenceCheck);
+            silenceCheck = null;
+        }
+        if (finalizeSpeechFallback != null) {
+            wakeHandler.removeCallbacks(finalizeSpeechFallback);
+            finalizeSpeechFallback = null;
+        }
+    }
+
+    private void scheduleSilenceCheck() {
+        if (silenceCheck != null) wakeHandler.removeCallbacks(silenceCheck);
+        silenceCheck = null;
+        if (!manualCapture || manualStopRequested || !speechPause.armed()) return;
+        long remaining = speechPause.remainingMs(
+            SystemClock.uptimeMillis(), speechPauseSeconds());
+        silenceCheck = () -> {
+            silenceCheck = null;
+            if (!manualCapture || manualStopRequested) return;
+            if (!speechPause.expired(SystemClock.uptimeMillis(), speechPauseSeconds())) {
+                scheduleSilenceCheck();
+                return;
+            }
+            autoSilenceStop = true;
+            manualStopRequested = true;
+            cancelManualRestart();
+            microphone.setText("Обробляю...");
+            setStatus("Тиша після останнього слова. Надсилаю команду...");
+            if (recognizerSessionActive) {
+                if (listening && recognizer != null) {
+                    listening = false;
+                    try { recognizer.stopListening(); }
+                    catch (Exception ignored) { finishManualCapture(); return; }
+                }
+                finalizeSpeechFallback = () -> {
+                    finalizeSpeechFallback = null;
+                    if (manualCapture && autoSilenceStop) {
+                        if (!manualHypothesis.isEmpty()) {
+                            if (manualTranscript.length() > 0) manualTranscript.append(' ');
+                            manualTranscript.append(manualHypothesis);
+                        }
+                        if (recognizer != null) {
+                            try { recognizer.cancel(); } catch (Exception ignored) {}
+                        }
+                        finishManualCapture();
+                    }
+                };
+                wakeHandler.postDelayed(finalizeSpeechFallback, 1700L);
+            } else {
+                finishManualCapture();
+            }
+        };
+        wakeHandler.postDelayed(silenceCheck, Math.max(25L, remaining));
+    }
+
+    private void observedManualWords(String words) {
+        if (manualCapture && !manualStopRequested &&
+            speechPause.sawWords(words, SystemClock.uptimeMillis()))
+            scheduleSilenceCheck();
+    }
+
+    /** Manual recording waits for words, then auto-submits after configured silence. */
     private void toggleListening() {
         if (pendingWakeCommand != null) {
             String ready = pendingWakeCommand;
