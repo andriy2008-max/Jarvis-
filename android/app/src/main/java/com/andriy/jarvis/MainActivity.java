@@ -145,20 +145,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     @Override public void onStart(String id) {
                         runOnUiThread(() -> {
-                            if (!voiceEnabled) return;
-                            speaking = true;
-                            // Do not let the assistant's own speech trigger a new wake command.
-                            if (autoWakeListening && recognizer != null) {
-                                recognizer.cancel();
-                                listening = false;
-                                recognizerSessionActive = false;
-                                autoWakeListening = false;
-                            }
-                            face.setState("speaking");
+                            if (id != null && id.equals(activeTtsId) && voiceEnabled) markSpeaking();
                         });
                     }
-                    @Override public void onDone(String id) { endSpeaking(); }
-                    @Override public void onError(String id) { endSpeaking(); }
+                    @Override public void onDone(String id) {
+                        if (id != null && id.equals(activeTtsId)) endSpeaking();
+                    }
+                    @Override public void onError(String id) {
+                        if (id != null && id.equals(activeTtsId)) endSpeaking();
+                    }
                 });
             }
         });
@@ -717,8 +712,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         ArrayList<Voice> available = ukrainianVoices();
         String profile = selectedVoiceProfile();
         Voice namedVoice = voiceForProfile(available, profile);
-        // Ukrainian TTS (robinhad) is not an Android TTS engine. Exact voices need
-        // a separate native model integration or a system TTS engine exposing them.
+        // Android TTS is used only as fallback; named neural models run on the configured server.
         Voice chosen = namedVoice != null ? namedVoice :
             (available.isEmpty() ? null : available.get(0));
         if (chosen != null) {
@@ -732,9 +726,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         boolean clearlyMale = chosen != null && VoiceRanking.labeledMale(chosen.getName());
         tts.setPitch((knownProfile || clearlyMale) ? 1.0f : 0.86f);
         tts.setSpeechRate(0.94f);
-        if (namedVoice == null) {
-            setStatus("Голос " + profileLabel(profile) +
-                " не підключений. Тимчасово використовується системне українське озвучення.");
+        if (namedVoice == null && (neuralSpeech == null || !neuralSpeech.isConfigured())) {
+            setStatus("Підключи TTS-сервер для голосу " + profileLabel(profile) + ". Зараз озвучує Android.");
         }
     }
 
@@ -818,12 +811,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
         String label = profileLabel(profile);
         AlertDialog alert = new AlertDialog.Builder(this)
             .setTitle(label + " — поки недоступний")
-            .setMessage("Голос " + label + " є у безкоштовній Ukrainian TTS, але ця модель " +
-                "ще не підключена до Android-озвучення Джарвіса. Вибір збережено; " +
-                "тимчасово відповідатиме інший доступний український голос. " +
-                "Прослуховування оригіналу відкриє браузер.")
+            .setMessage("Профіль збережено. Для справжнього голосу " + label +
+                " потрібно підключити особистий HTTPS TTS-сервер. Без нього працює системний голос Android.")
             .setNegativeButton("Закрити", null)
-            .setNeutralButton("Голоси Android", (d, w) -> openSystemVoiceSettings())
+            .setNeutralButton("Рушій TTS", (d, w) -> showNeuralTtsSettings())
             .setPositiveButton("Зразок " + label, (d, w) -> openOriginalVoicePreview(profile))
             .create();
         showDialogWithoutWake(alert);
@@ -833,21 +824,21 @@ public final class MainActivity extends Activity implements RecognitionListener 
         String profile = VoiceRanking.profile(requested);
         getPreferences(MODE_PRIVATE).edit().putString("jarvisVoiceProfile", profile).apply();
         applyPreferredVoice();
-        if (ttsReady && voiceForProfile(ukrainianVoices(), profile) != null) {
-            setStatus("Голос Джарвіса: " + profileLabel(profile) + ".");
+        if ((neuralSpeech != null && neuralSpeech.isConfigured()) ||
+            (ttsReady && voiceForProfile(ukrainianVoices(), profile) != null)) {
+            setStatus("Обрано голос " + profileLabel(profile) + ". Перевіряю звучання.");
             previewCurrentVoice();
-        } else {
-            showVoiceUnavailable(profile);
-        }
+        } else showVoiceUnavailable(profile);
     }
 
     private void showVoiceSettings() {
         ArrayList<Voice> available = ukrainianVoices();
         boolean hasDmytro = voiceForProfile(available, VoiceRanking.DMYTRO) != null;
         boolean hasLada = voiceForProfile(available, VoiceRanking.LADA) != null;
+        boolean modelConfigured = neuralSpeech != null && neuralSpeech.isConfigured();
         String[] labels = {
-            "Дмитро — чоловічий · " + (hasDmytro ? "готовий" : "модель не підключена"),
-            "Лада — жіночий · " + (hasLada ? "готова" : "модель не підключена")
+            "Дмитро — чоловічий · " + (modelConfigured ? "сервер налаштовано" : hasDmytro ? "доступний через Android" : "потрібен сервер"),
+            "Лада — жіночий · " + (modelConfigured ? "сервер налаштовано" : hasLada ? "доступна через Android" : "потрібен сервер")
         };
         int checked = VoiceRanking.LADA.equals(selectedVoiceProfile()) ? 1 : 0;
         AlertDialog dialog = new AlertDialog.Builder(this)
@@ -856,8 +847,56 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 selectVoiceProfile(which == 1 ? VoiceRanking.LADA : VoiceRanking.DMYTRO);
             })
             .setNegativeButton("Закрити", null)
-            .setNeutralButton("Голоси Android", (d, w) -> openSystemVoiceSettings())
+            .setNeutralButton("Рушій TTS", (d, w) -> showNeuralTtsSettings())
             .create();
+        showDialogWithoutWake(dialog);
+    }
+
+    private void showNeuralTtsSettings() {
+        if (neuralSpeech == null) return;
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(18), dp(8), dp(18), dp(8));
+
+        form.addView(makeText(
+            "Дмитро і Лада працюють через власний HTTPS TTS-сервер. " +
+            "Сервер отримуватиме текст відповіді; без нього використовується озвучення Android.",
+            13, MUTED, Gravity.START, false), new LinearLayout.LayoutParams(-1, -2));
+        EditText url = new EditText(this);
+        url.setSingleLine(true);
+        url.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        url.setHint("https://your-server.example/tts");
+        url.setText(neuralSpeech.endpoint());
+        form.addView(url, new LinearLayout.LayoutParams(-1, -2));
+
+        EditText token = new EditText(this);
+        token.setSingleLine(true);
+        token.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        token.setHint(neuralSpeech.isConfigured() ? "Код (порожньо = без змін)" : "Код доступу, від 20 символів");
+        form.addView(token, new LinearLayout.LayoutParams(-1, -2));
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Нейро-TTS · Дмитро / Лада")
+            .setView(form)
+            .setNegativeButton("Закрити", null)
+            .setNeutralButton("Від'єднати", (d, w) -> {
+                neuralSpeech.disconnect();
+                stopSpeaking();
+                applyPreferredVoice();
+                setStatus("Нейро-TTS від'єднано. Озвучення Android активне.");
+            })
+            .setPositiveButton("Зберегти", null)
+            .create();
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            try {
+                neuralSpeech.configure(url.getText().toString(), token.getText().toString());
+                setStatus("TTS-сервер налаштовано. Обери Дмитра або Ладу для прослуховування.");
+                dialog.dismiss();
+            } catch (Exception error) {
+                url.setError(error.getMessage());
+                setStatus(error.getMessage());
+            }
+        }));
         showDialogWithoutWake(dialog);
     }
 
