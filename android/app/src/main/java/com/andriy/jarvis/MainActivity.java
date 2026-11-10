@@ -549,7 +549,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "💬 Поговорімо", "🤔 Поясни мені",
             "🗣 Скажи фразу", "💬 Скажи слово",
             "🖐 Керування екраном", "⏹ Зупини керування",
-            "🔎 Відкрий пошук", "💬 Знайди чати"
+            "🔎 Відкрий пошук", "💬 Знайди чати", "✍ Напиши текст"
         };
         String[] commands = {
             "Котра година", "Відкрий YouTube",
@@ -564,7 +564,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "Привіт, Джарвіс", "Поясни простими словами, як працює штучний інтелект",
             "Скажи Привіт, як справи?", "Джарвіс, скажи Дякую",
             "Увімкни керування екраном", "Зупини керування екраном",
-            "Відкрий пошук", "Знайди чати"
+            "Відкрий пошук", "Знайди чати", "Напиши Привіт, як справи?"
         };
         for (int i = 0; i < examples.length; i += 2) {
             LinearLayout row = new LinearLayout(this);
@@ -2020,7 +2020,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         AssistantIntents.Reminder reminder = AssistantIntents.reminder(command);
         String requestedApp = AssistantIntents.requestedApp(command);
         DeviceCommands.Action deviceCommand = DeviceCommands.parse(command);
-        ScreenControlCommands.Action screenCommand = ScreenControlCommands.parse(command);
+        ScreenControlCommands.Action screenCommand = ScreenControlCommands.parse(raw);
         boolean silentReply = false;
         String reply;
 
