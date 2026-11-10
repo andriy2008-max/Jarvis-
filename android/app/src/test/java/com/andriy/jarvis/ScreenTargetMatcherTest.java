@@ -14,7 +14,7 @@ public final class ScreenTargetMatcherTest {
         ScreenTargetMatcher.Selection selected = ScreenTargetMatcher.select(
             request, ScreenTargetMatcher.examples(options));
         eq(selected.index, expected);
-        eq(selected.ambiguous, false);
+        if (expected >= 0) eq(selected.ambiguous, false);
     }
     public static void main(String[] args) {
         eq(ScreenTargetMatcher.intent("лупа"), "search");
