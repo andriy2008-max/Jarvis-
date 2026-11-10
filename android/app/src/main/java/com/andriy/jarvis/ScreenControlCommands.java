@@ -15,7 +15,11 @@ public final class ScreenControlCommands {
     }
 
     private static final Pattern CLICK = Pattern.compile(
-        "^(?:натисни|нажми|торкнись|торкнися)(?:\\s+на)?(?:\\s+кнопку)?\\s+(.+)$",
+        "^(?:натисни|нажми|торкнись|торкнися)(?:\\s+на)?(?:\\s+(?:кнопку|значок|іконку|ікону|символ))?\\s+(.+)$",
+        Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern NAVIGATE = Pattern.compile(
+        "^(?:відкрий|покажи|знайди|перейди\\s+(?:до|в|у|на)|де\\s+тут|"
+        + "хочу\\s+відкрити|хочу\\s+знайти|мені\\s+потрібн(?:а|о|ий|і))\\s+(.+)$",
         Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     private ScreenControlCommands() {}
@@ -55,7 +59,17 @@ public final class ScreenControlCommands {
                 return new Action(Kind.BACK, null);
             default:
                 Matcher m = CLICK.matcher(s);
-                if (!m.matches()) return null;
+                if (!m.matches()) {
+                    // Only infer a navigation click for a RECOGNIZED destination.
+                    // "Відкрий Telegram" must continue to use Android app launching,
+                    // not be intercepted as an untrusted screen action.
+                    m = NAVIGATE.matcher(s);
+                    if (!m.matches()) return null;
+                    String goal = m.group(1).trim();
+                    if (ScreenTargetMatcher.intent(goal).isEmpty()) return null;
+                    if (isSensitiveLabel(goal)) return new Action(Kind.CLICK, "");
+                    return new Action(Kind.CLICK, goal);
+                }
                 String label = m.group(1).trim();
                 if (label.isEmpty() || label.length() > 90 ||
                     isSensitiveLabel(label))
