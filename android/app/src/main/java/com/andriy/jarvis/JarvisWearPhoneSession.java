@@ -55,7 +55,9 @@ public final class JarvisWearPhoneSession {
                 out.reply(false,"Режим «Телефон» уже використовується іншим пристроєм.","",false);
                 return;
             }
-            String started = ScreenControlAccessibilityService.start();
+            // The watch already provides the user-facing microphone; do not
+            // display a redundant Accessibility mic over the phone screen.
+            String started = ScreenControlAccessibilityService.startFromBubble();
             if (!ScreenControlAccessibilityService.isSessionActive()) {
                 out.reply(false,started,"",true); return;
             }
