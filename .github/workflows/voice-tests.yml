@@ -8,6 +8,10 @@ on:
       - 'android/app/src/main/java/com/andriy/jarvis/NeuralSpeechPolicy.java'
       - 'android/app/src/main/java/com/andriy/jarvis/NeuralSpeechClient.java'
       - 'android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/DeviceCommands.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/DeviceActions.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/SystemToggleActions.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/DeviceCommandsTest.java'
       - 'android/app/src/main/java/com/andriy/jarvis/ScreenControlCommands.java'
       - 'android/app/src/main/java/com/andriy/jarvis/ScreenTextInsertion.java'
       - 'android/app/src/test/java/com/andriy/jarvis/ScreenTextInsertionTest.java'
@@ -85,6 +89,7 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/OfflineVoicePackRules.java \
             android/app/src/main/java/com/andriy/jarvis/UkrainianVoiceText.java \
             android/app/src/test/java/com/andriy/jarvis/CommandPatternsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/DeviceCommandsTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisOrbTranscriptTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisLiveTranscriptTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisTranscriptCorrectionTest.java \
@@ -98,6 +103,7 @@ jobs:
             android/app/src/test/java/com/andriy/jarvis/OfflineVoicePackRulesTest.java \
             android/app/src/test/java/com/andriy/jarvis/UkrainianVoiceTextTest.java
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.CommandPatternsTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.DeviceCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisOrbTranscriptTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisLiveTranscriptTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisTranscriptCorrectionTest
