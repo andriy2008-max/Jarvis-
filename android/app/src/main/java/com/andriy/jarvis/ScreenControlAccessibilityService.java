@@ -15,6 +15,7 @@ import android.os.Looper;
 import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
@@ -84,6 +85,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             return "Спочатку скажи: увімкни керування екраном.";
         switch (action.kind) {
             case CLICK: return s.clickNamed(action.label);
+            case TYPE_TEXT: return s.writeToFocusedField(action.label);
             case SCROLL_DOWN: return s.scroll(true);
             case SCROLL_UP: return s.scroll(false);
             case BACK:
@@ -205,15 +207,18 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                             toast("Не почув команду.");
                             return;
                         }
-                        String spoken = CommandPatterns.normalize(phrases.get(0));
-                        ScreenControlCommands.Action action = ScreenControlCommands.parse(spoken);
+                        // Preserve case/punctuation: "Напиши..." is literal dictation,
+                        // unlike navigation commands which normalize inside the parser.
+                        ScreenControlCommands.Action action =
+                            ScreenControlCommands.parse(phrases.get(0));
                         if (action == null) {
-                            toast("Скажи «Відкрий пошук», «Знайди чати», «Натисни лупу», «Прокрути вниз» або «Назад».");
+                            toast("Скажи «Напиши Привіт», «Відкрий пошук», «Прокрути вниз» або «Назад».");
                         } else if (action.kind == ScreenControlCommands.Kind.DISABLE) {
                             toast(stop());
                         } else if (action.kind == ScreenControlCommands.Kind.STATUS) {
                             toast(isSessionActive() ? "Керування активне." : "Керування вимкнене.");
                         } else if (action.kind == ScreenControlCommands.Kind.CLICK ||
+                            action.kind == ScreenControlCommands.Kind.TYPE_TEXT ||
                             action.kind == ScreenControlCommands.Kind.SCROLL_DOWN ||
                             action.kind == ScreenControlCommands.Kind.SCROLL_UP ||
                             action.kind == ScreenControlCommands.Kind.BACK) {
@@ -353,6 +358,104 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         boolean clicked = chosen.performAction(AccessibilityNodeInfo.ACTION_CLICK);
         return clicked ? "Знайшов потрібну кнопку й натиснув." :
             "Кнопку знайдено, але застосунок не дозволив її натиснути.";
+    }
+
+    /**
+     * Insert the user's EXACT dictated phrase into the one currently focused
+     * editable input in the external app. Never auto-focus another field, touch
+     * passwords, use the clipboard, press "send", or forward field data to AI.
+     */
+    private String writeToFocusedField(String spoken) {
+        if (spoken == null || spoken.trim().isEmpty())
+            return "Скажи «Напиши», а потім продиктуй слово або речення.";
+        if (spoken.length() > ScreenTextInsertion.MAX_DICTATION_LENGTH)
+            return "Текст занадто довгий. Продиктуй не більше 1000 символів.";
+
+        AccessibilityNodeInfo root = currentExternalRoot();
+        if (root == null)
+            return "Відкрий потрібний застосунок, торкнись текстового поля й повтори команду через плаваючий мікрофон.";
+
+        AccessibilityNodeInfo focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+        if (focused == null || !focused.isEditable() || !focused.isFocused())
+            return "Немає активного текстового поля. Спочатку торкнися поля для введення тексту.";
+        if (!focused.isVisibleToUser() || !focused.isEnabled())
+            return "Текстове поле зараз недоступне.";
+        if (focused.isPassword() || isSensitiveInputType(focused.getInputType()) ||
+            isSensitiveFieldLabel(focused))
+            return "У паролі, PIN-коди та інші захищені поля Джарвіс текст не вводить.";
+
+        String rootPackage = asString(root.getPackageName());
+        if (rootPackage.isEmpty() || !rootPackage.equals(asString(focused.getPackageName())))
+            return "Активне поле належить іншому вікну. Повтори команду.";
+        boolean supportsSetText = false;
+        for (AccessibilityNodeInfo.AccessibilityAction supported : focused.getActionList()) {
+            if (supported.getId() == AccessibilityNodeInfo.ACTION_SET_TEXT) {
+                supportsSetText = true;
+                break;
+            }
+        }
+        if (!supportsSetText)
+            return "Цей застосунок не дозволяє вводити текст через спеціальні можливості.";
+
+        ScreenTextInsertion.Plan plan;
+        try {
+            plan = ScreenTextInsertion.plan(
+                asString(focused.getText()),
+                focused.getTextSelectionStart(),
+                focused.getTextSelectionEnd(), spoken);
+        } catch (IllegalArgumentException error) {
+            return error.getMessage();
+        }
+
+        // Recheck focus immediately before altering another app's editable node.
+        if (!sessionActive || !focused.isFocused() || focused.isPassword())
+            return "Фокус текстового поля змінився. Нічого не вводив.";
+        Bundle args = new Bundle();
+        args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+            plan.result);
+        try {
+            if (!focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args))
+                return "Застосунок відхилив введення тексту. Нічого не надсилав.";
+            Bundle selection = new Bundle();
+            selection.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT,
+                plan.cursor);
+            selection.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT,
+                plan.cursor);
+            // Some widgets do not support cursor repositioning. The text still
+            // was written; the default SET_TEXT cursor sits at the end.
+            focused.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selection);
+            return "Текст введено в активне поле. Повідомлення не надсилав.";
+        } catch (SecurityException error) {
+            return "Android заборонив введення в це поле.";
+        }
+    }
+
+    private static boolean isSensitiveInputType(int inputType) {
+        int variation = inputType & InputType.TYPE_MASK_VARIATION;
+        int group = inputType & InputType.TYPE_MASK_CLASS;
+        if (group == InputType.TYPE_CLASS_TEXT) {
+            return variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+                variation == InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
+                variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD;
+        }
+        return group == InputType.TYPE_CLASS_NUMBER &&
+            variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD;
+    }
+
+    private static boolean isSensitiveFieldLabel(AccessibilityNodeInfo node) {
+        String meta = (
+            asString(node.getViewIdResourceName()) + " " +
+            asString(node.getContentDescription()) + " " +
+            asString(node.getHintText()))
+            .toLowerCase(Locale.forLanguageTag("uk-UA"));
+        for (String term : new String[]{
+            "password", "passwd", "пароль", "пін-код", "pin_code", "pincode",
+            "one_time_password", "otp_code", "verification_code", "security_code",
+            "cvv", "cvc", "credit_card", "card_number"
+        }) {
+            if (meta.contains(term)) return true;
+        }
+        return false;
     }
 
     private String scroll(boolean down) {
