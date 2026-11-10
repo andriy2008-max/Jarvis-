@@ -31,6 +31,7 @@ import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
+import android.speech.tts.Voice;
 import android.util.TypedValue;
 import android.text.SpannableString;
 import android.text.Spanned;
@@ -51,6 +52,7 @@ import org.json.JSONException;
 
 import java.text.DateFormat;
 import java.util.ArrayList;
+import java.util.Set;
 import java.util.Date;
 import java.util.Locale;
 import java.util.List;
@@ -110,6 +112,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private boolean isCompact = false;
     private boolean isWatchDevice = false;
     private boolean voiceEnabled = true;
+    private boolean ttsReady;
 
     @Override
     public void onCreate(Bundle state) {
@@ -134,6 +137,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 if (supported == TextToSpeech.LANG_MISSING_DATA || supported == TextToSpeech.LANG_NOT_SUPPORTED) {
                     appendDialogue("Джарвіс", "Для озвучення встанови український голос TTS у налаштуваннях Android.");
                 }
+                ttsReady = true;
+                applyPreferredVoice();
                 tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     @Override public void onStart(String id) {
                         runOnUiThread(() -> {
@@ -345,7 +350,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
         topbar.addView(brand);
 
-        TextView version = makeText("● V 0.1.9", isCompact ? 11 : 12, GREEN, Gravity.CENTER, false);
+        TextView version = makeText("● V 0.1.10", isCompact ? 11 : 12, GREEN, Gravity.CENTER, false);
         version.setBackground(roundedFill(Color.TRANSPARENT, Color.rgb(43, 131, 108), 99));
         version.setPadding(dp(10), dp(6), dp(10), dp(6));
         if (!isWatchDevice) topbar.addView(version);
@@ -447,6 +452,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
             }
         });
         chatHeader.addView(voiceToggle);
+        Button voiceSettings = secondaryButton("🔊 Вибрати голос Джарвіса", this::showVoiceSettings);
+        LinearLayout.LayoutParams voiceSettingsParams = new LinearLayout.LayoutParams(-1, dp(43));
+        voiceSettingsParams.topMargin = dp(7);
+        chatPanel.addView(voiceSettings, voiceSettingsParams);
 
         feedScroll = new ScrollView(this);
         feedScroll.setFillViewport(true);
@@ -573,7 +582,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         noteHintParams.topMargin = dp(12);
         notesPanel.addView(noteHint, noteHintParams);
 
-        TextView footer = makeText("JARVIS 0.1.9 • Вільна розмова із ШІ після підключення сервера. Активація «Джарвіс» доступна лише у відкритій програмі за підтримки локального розпізнавання Android.",
+        TextView footer = makeText("JARVIS 0.1.10 • Вільна розмова із ШІ після підключення сервера. Активація «Джарвіс» доступна лише у відкритій програмі за підтримки локального розпізнавання Android.",
             isCompact ? 11 : 12, Color.rgb(127, 154, 184), Gravity.CENTER, false);
         footer.setLineSpacing(0f, 1.25f);
         LinearLayout.LayoutParams footerParams = new LinearLayout.LayoutParams(-1, -2);
@@ -661,6 +670,116 @@ public final class MainActivity extends Activity implements RecognitionListener 
         appendDialogue("Джарвіс", "Готовий. Натисни кнопку або скажи моє ім'я.");
     }
 
+
+    /** Android does not expose gender for its Voice objects. Select a Ukrainian
+     * voice with an explicit male label when available; otherwise offer a
+     * comfortable lower-pitched local fallback. No additional OpenAI billing. */
+    private ArrayList<Voice> ukrainianVoices() {
+        ArrayList<Voice> voices = new ArrayList<>();
+        if (tts == null || !ttsReady) return voices;
+        try {
+            Set<Voice> installed = tts.getVoices();
+            if (installed != null) {
+                for (Voice v : installed) {
+                    if (v != null && v.getName() != null && v.getLocale() != null &&
+                        VoiceRanking.ukrainian(v.getLocale().toLanguageTag())) voices.add(v);
+                }
+            }
+        } catch (RuntimeException ignored) { }
+        voices.sort((a, b) -> Integer.compare(
+            VoiceRanking.score(b.getLocale().toLanguageTag(), b.getName(),
+                b.isNetworkConnectionRequired(), b.getQuality()),
+            VoiceRanking.score(a.getLocale().toLanguageTag(), a.getName(),
+                a.isNetworkConnectionRequired(), a.getQuality())));
+        return voices;
+    }
+
+    private void applyPreferredVoice() {
+        if (tts == null || !ttsReady) return;
+        String preferred = getPreferences(MODE_PRIVATE).getString("jarvisVoiceName", "");
+        ArrayList<Voice> available = ukrainianVoices();
+        Voice chosen = null;
+        if (!preferred.isEmpty()) {
+            for (Voice voice : available) {
+                if (preferred.equals(voice.getName())) {
+                    chosen = voice;
+                    break;
+                }
+            }
+        }
+        if (chosen == null && !available.isEmpty()) chosen = available.get(0);
+        boolean clearlyMale = chosen != null && VoiceRanking.labeledMale(chosen.getName());
+        if (chosen != null) {
+            try { tts.setVoice(chosen); } catch (RuntimeException ignored) { }
+        } else {
+            tts.setLanguage(Locale.forLanguageTag("uk-UA"));
+        }
+        // A mild pitch adjustment when no explicitly male voice is available.
+        // This is only a fallback: lowering pitch does NOT turn female TTS into a true male voice.
+        tts.setPitch(clearlyMale ? 1.0f : 0.86f);
+        tts.setSpeechRate(0.94f);
+    }
+
+    private void previewCurrentVoice() {
+        if (!ttsReady || tts == null) {
+            setStatus("Синтез мовлення ще не готовий.");
+            return;
+        }
+        if (!voiceEnabled) {
+            setStatus("Спочатку ввімкни голосові відповіді.");
+            return;
+        }
+        tts.stop();
+        tts.speak("Привіт! Я Джарвіс. Готовий допомогти тобі.",
+            TextToSpeech.QUEUE_FLUSH, new Bundle(), "jarvis-voice-demo-" + SystemClock.uptimeMillis());
+    }
+
+    private void openSystemVoiceSettings() {
+        try {
+            startActivity(new Intent("com.android.settings.TTS_SETTINGS"));
+        } catch (Exception missing) {
+            try { startActivity(new Intent(Settings.ACTION_SETTINGS)); }
+            catch (Exception ignored) { setStatus("Налаштування голосу недоступні."); }
+        }
+    }
+
+    private void showVoiceSettings() {
+        if (tts == null || !ttsReady) {
+            new AlertDialog.Builder(this)
+                .setTitle("Голос Джарвіса")
+                .setMessage("Служба озвучення Android ще не готова. Перевір налаштування синтезу мовлення.")
+                .setNegativeButton("Закрити", null)
+                .setPositiveButton("Налаштування Android", (d, which) -> openSystemVoiceSettings())
+                .show();
+            return;
+        }
+        ArrayList<Voice> available = ukrainianVoices();
+        String[] labels = new String[available.size() + 1];
+        labels[0] = "Автоматично — чоловічий український голос, якщо встановлено";
+        int checked = 0;
+        String preference = getPreferences(MODE_PRIVATE).getString("jarvisVoiceName", "");
+        for (int i = 0; i < available.size(); i++) {
+            Voice v = available.get(i);
+            String label = v.getName() + (VoiceRanking.labeledMale(v.getName()) ? " · чоловічий" : "") +
+                (v.isNetworkConnectionRequired() ? " · мережевий" : " · локальний");
+            labels[i + 1] = label;
+            if (v.getName().equals(preference)) checked = i + 1;
+        }
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Голос Джарвіса")
+            .setMessage("Вибери голос українською. Після вибору Джарвіс одразу озвучить приклад. Android не повідомляє стать голосу — деякі назви її не вказують.")
+            .setSingleChoiceItems(labels, checked, (d, which) -> {
+                String selected = which == 0 ? "" : available.get(which - 1).getName();
+                getPreferences(MODE_PRIVATE).edit().putString("jarvisVoiceName", selected).apply();
+                applyPreferredVoice();
+                previewCurrentVoice();
+            })
+            .setNegativeButton("Закрити", null)
+            .setNeutralButton("Голоси Android", (d, which) -> openSystemVoiceSettings())
+            .create();
+        showDialogWithoutWake(dialog);
+    }
+
     private void showWatchTextInput() {
         EditText editor = new EditText(this);
         editor.setSingleLine(false);
@@ -678,7 +797,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private void showWatchActions() {
         final String[] actions = {
             "Підключення до ШІ", "Новий діалог", "Показати нотатки",
-            "Що ти вмієш?", "Введення текстом", "Голосова активація"
+            "Що ти вмієш?", "Введення текстом", "Голосова активація", "Чоловічий голос"
         };
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Джарвіс — дії")
             .setItems(actions, (d, which) -> {
@@ -695,6 +814,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                             setStatus("Для активації голосом потрібне локальне розпізнавання Android.");
                         }
                         break;
+                    case 6: showVoiceSettings(); break;
                     default: break;
                 }
             }).create();
@@ -1651,6 +1771,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
             reply = setMusicVolume(AudioManager.ADJUST_RAISE);
         } else if (command.equals("тихіше") || command.equals("зроби тихіше") || command.equals("зменш гучність")) {
             reply = setMusicVolume(AudioManager.ADJUST_LOWER);
+        } else if (command.equals("зміни голос") || command.equals("чоловічий голос") ||
+            command.equals("налаштуй голос") || command.equals("вибери голос")) {
+            showVoiceSettings();
+            return;
         } else if (command.equals("вимкни голос") || command.equals("вимкни озвучення")) {
             voiceToggle.setChecked(false);
             reply = "Голосові відповіді вимкнено.";
