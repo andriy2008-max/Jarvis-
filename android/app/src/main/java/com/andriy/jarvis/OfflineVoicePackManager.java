@@ -242,6 +242,23 @@ public final class OfflineVoicePackManager {
         if (voices == null || voices.length() != 2 ||
             !("dmytro".equals(voices.optString(0)) && "lada".equals(voices.optString(1))))
             throw new Exception("Пакет повинен містити спільну модель Дмитра і Лади.");
+        if (!manifest.optBoolean("smoke_verified", false))
+            throw new Exception("Пакет не проходив перевірку синтезу ONNX.");
+        JSONArray tokens = manifest.optJSONArray("tokens");
+        if (tokens == null || tokens.length() < 40 || tokens.length() > 5000)
+            throw new Exception("Неправильний словник української моделі.");
+        JSONObject vectors = manifest.optJSONObject("spembs");
+        if (vectors == null) throw new Exception("У пакеті відсутні голосові профілі.");
+        for (String voice : new String[] {"dmytro", "lada"}) {
+            JSONArray v = vectors.optJSONArray(voice);
+            if (v == null || v.length() < 64 || v.length() > 512)
+                throw new Exception("Неправильна голосова матриця " + voice + ".");
+            for (int k = 0; k < v.length(); k++) {
+                double sample = v.optDouble(k, Double.NaN);
+                if (!Double.isFinite(sample))
+                    throw new Exception("Некоректні дані голосу " + voice + ".");
+            }
+        }
         JSONArray files = manifest.optJSONArray("files");
         if (files == null || files.length() < 1 || files.length() > OfflineVoicePackRules.MAX_ENTRIES - 1)
             throw new Exception("Не вказано модельні файли.");
