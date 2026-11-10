@@ -52,6 +52,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     private boolean recording;
     private final Handler main = new Handler(Looper.getMainLooper());
     private JarvisSequenceExecutor sequences;
+    private SpotifyPlaybackController spotifyPlayback;
 
     public static boolean isConnected() { return connected.get() != null; }
     public static boolean isSessionActive() {
@@ -156,6 +157,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     private void stopSession() {
         sessionActive = false;
         if (sequences != null) sequences.cancel();
+        if (spotifyPlayback != null) spotifyPlayback.cancel();
         stopListening();
         if (buttonOverlay != null && windows != null) {
             try { windows.removeView(buttonOverlay); } catch (Exception ignored) {}
@@ -257,6 +259,29 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                         // Preserve case/punctuation: "Напиши..." is literal dictation,
                         // unlike navigation commands which normalize inside the parser.
                         String raw = phrases.get(0);
+                        if (spotifyPlayback != null && spotifyPlayback.isRunning()) {
+                            String request = CommandPatterns.normalize(raw);
+                            if (request.equals("скасуй spotify") ||
+                                request.equals("скасуй спотіфай"))
+                                spotifyPlayback.cancel();
+                            else toast("Зачекай завершення Spotify або скажи «Скасуй Spotify».");
+                            return;
+                        }
+                        SpotifyMusicCommands.Kind selection = SpotifyMusicCommands.parse(raw);
+                        if (selection != null) {
+                            if (spotifyPlayback == null)
+                                spotifyPlayback = new SpotifyPlaybackController(
+                                    ScreenControlAccessibilityService.this);
+                            spotifyPlayback.start(selection, new SpotifyPlaybackController.Listener() {
+                                @Override public void onProgress(String progress) {
+                                    if (sessionActive) toast(progress);
+                                }
+                                @Override public void onFinished(boolean success, String details) {
+                                    if (sessionActive) toast(details);
+                                }
+                            });
+                            return;
+                        }
                         JarvisCommandSequence.Plan plan = JarvisCommandSequence.parse(raw);
                         if (plan != null &&
                             (!plan.valid() || plan.multiple() ||
