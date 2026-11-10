@@ -1,0 +1,62 @@
+name: Preserve and inspect experimental voice model
+
+on:
+  push:
+    paths:
+      - '.github/workflows/preserve-voice-pack.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  preserve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download completed two-speaker ONNX artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p /tmp/voice-pack
+          gh run download 42779515189 --repo "$GITHUB_REPOSITORY" --name jarvis-dmytro-lada-onnx-experimental --dir /tmp/voice-pack
+          ls -alh /tmp/voice-pack
+          printf '%s  %s\n' '12fdd6521ae864f5eafac2d5a205d32f299ba65229800dafbd647b4a3ff8e0d5' '/tmp/voice-pack/jarvis-uktts-v6-onnx.zip' | sha256sum -c -
+      - name: Inspect real graph inputs, outputs and manifest
+        run: |
+          python -m pip install 'onnx==1.14.1' 'protobuf==3.20.3'
+          python - <<'PY'
+          from pathlib import Path
+          import json, zipfile
+          import onnx
+
+          package = Path('/tmp/voice-pack/jarvis-uktts-v6-onnx.zip')
+          with zipfile.ZipFile(package) as archive:
+              manifest = json.loads(archive.read('manifest.json'))
+              print('MANIFEST_ARCHITECTURE:', manifest['synthesis'])
+              print('SAMPLE_RATE:', manifest['sample_rate'])
+              print('TOKEN_COUNT:', len(manifest['tokens']))
+              print('TOKEN_SAMPLE:', manifest['tokens'][:25])
+              print('SPEAKER_SHAPES:', {k: len(v) for k, v in manifest['spembs'].items()})
+              print('ONNX_FILES:', [(x['path'], x['bytes']) for x in manifest['files']])
+              graph = manifest['synthesis']['graph']
+              model = onnx.load_model_from_string(archive.read(graph))
+              for label, values in [('INPUTS', model.graph.input), ('OUTPUTS', model.graph.output)]:
+                  for item in values:
+                      ty = item.type.tensor_type
+                      shape = [(d.dim_value if d.HasField('dim_value') else d.dim_param) for d in ty.shape.dim]
+                      print(label, item.name, 'dtype', ty.elem_type, 'dims', shape)
+          PY
+      - name: Preserve as DRAFT pre-release (not publicly installable)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create jarvis-offline-voices-v6-experimental \
+            --repo "$GITHUB_REPOSITORY" \
+            --title 'JARVIS offline Dmytro + Lada v6 — NOT YET ANDROID VERIFIED' \
+            --draft --prerelease \
+            --notes 'VITS ONNX model pack generated successfully on GitHub Actions for both Dmytro and Lada. Android runtime and sound quality NOT yet verified. Do not enable public in-app download before phone testing.' \
+            /tmp/voice-pack/jarvis-uktts-v6-onnx.zip \
+            /tmp/voice-pack/jarvis-uktts-v6-onnx.sha256
