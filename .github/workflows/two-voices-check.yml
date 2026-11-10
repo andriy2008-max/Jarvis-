@@ -1,0 +1,40 @@
+name: JARVIS 0.1.11 voice compilation and tests (no APK)
+on:
+  push:
+    branches:
+      - qa/jarvis-0111-two-voices-check
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Run pure-Java timer and voice tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android/build/timer-tests
+          javac -encoding UTF-8 -d android/build/timer-tests \
+            android/app/src/main/java/com/andriy/jarvis/TimerRules.java \
+            android/app/src/test/java/com/andriy/jarvis/TimerRulesTest.java \
+            android/app/src/main/java/com/andriy/jarvis/VoiceRanking.java \
+            android/app/src/test/java/com/andriy/jarvis/VoiceRankingTest.java
+          java -cp android/build/timer-tests com.andriy.jarvis.TimerRulesTest
+          java -cp android/build/timer-tests com.andriy.jarvis.VoiceRankingTest
+      - name: Compile Android Java source and manifest, do not assemble APK
+        shell: bash
+        run: gradle -p android --no-daemon --stacktrace :app:compileDebugJavaWithJavac
