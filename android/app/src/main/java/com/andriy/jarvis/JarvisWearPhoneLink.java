@@ -49,6 +49,45 @@ public final class JarvisWearPhoneLink {
     public boolean busy() { return requesting || pendingId != null; }
     public boolean active() { return !activeSession.isEmpty() && JarvisPhoneMode.isActive(); }
 
+    public boolean spotifyRunning() {
+        return JarvisWearProtocol.SPOTIFY.equals(pendingType);
+    }
+
+    public void spotify(String voice, Callback callback) {
+        if (!JarvisWearProtocol.validCommand(voice) ||
+            SpotifyMusicCommands.parse(voice) == null) {
+            callback.finished(false,"Невідома команда Spotify.");
+            return;
+        }
+        send(JarvisWearProtocol.SPOTIFY,voice,callback);
+    }
+
+    public void cancelSpotify(Callback callback) {
+        if (!spotifyRunning() || pendingNode == null) {
+            callback.finished(false,"Немає активного запиту Spotify.");
+            return;
+        }
+        final String destination = pendingNode;
+        clearPending();
+        if (activeSession.isEmpty()) JarvisPhoneMode.setActive(false);
+        try {
+            JSONObject request = new JSONObject();
+            request.put("id",UUID.randomUUID().toString());
+            request.put("action",JarvisWearProtocol.CANCEL_SPOTIFY);
+            request.put("session","");
+            request.put("text","");
+            messageClient.sendMessage(destination, JarvisWearProtocol.REQUEST,
+                request.toString().getBytes(StandardCharsets.UTF_8))
+                .addOnSuccessListener(result ->
+                    callback.finished(true,"Надіслав на телефон скасування Spotify."))
+                .addOnFailureListener(error ->
+                    callback.finished(false,"Не вдалося надіслати скасування. " +
+                        "Керування на телефоні завершиться за тайм-аутом."));
+        } catch (Exception error) {
+            callback.finished(false,"Помилка скасування Spotify на телефоні.");
+        }
+    }
+
     public void enter(Callback cb) { send(JarvisWearProtocol.ENTER, "", cb); }
     public void command(String voice, Callback cb) {
         if (!active()) {
@@ -121,7 +160,12 @@ public final class JarvisWearPhoneLink {
                     if (data.length > JarvisWearProtocol.MAX_BYTES)
                         throw new IllegalArgumentException("Payload too large");
                     timeout = () -> failPending("Телефон не підтвердив виконання команди.");
-                    main.postDelayed(timeout,JarvisWearProtocol.ACK_TIMEOUT_MS);
+                    main.postDelayed(timeout,
+                        JarvisWearProtocol.SPOTIFY.equals(type) ?
+                            JarvisWearProtocol.SPOTIFY_ACK_TIMEOUT_MS :
+                            JarvisWearProtocol.ACK_TIMEOUT_MS);
+                    if (JarvisWearProtocol.SPOTIFY.equals(type))
+                        JarvisPhoneMode.setActive(true);
                     messageClient.sendMessage(target.getId(),JarvisWearProtocol.REQUEST,data)
                         .addOnFailureListener(err -> failPending(
                             "Не вдалося передати команду на телефон. Перевір Bluetooth/Wi-Fi."));
@@ -175,6 +219,9 @@ public final class JarvisWearPhoneLink {
                        data.optBoolean("session_ended",false)) {
                 activeSession = "";
                 JarvisPhoneMode.setActive(false);
+            } else if (JarvisWearProtocol.SPOTIFY.equals(type)) {
+                // The temporary control was limited to the Spotify command.
+                if (activeSession.isEmpty()) JarvisPhoneMode.setActive(false);
             }
             clearPending();
             if (cb != null) cb.finished(ok,detail);
@@ -184,7 +231,9 @@ public final class JarvisWearPhoneLink {
     private void failPending(String reason) {
         Callback cb = pendingCallback;
         boolean exiting = JarvisWearProtocol.EXIT.equals(pendingType);
+        boolean spotify = JarvisWearProtocol.SPOTIFY.equals(pendingType);
         clearPending();
+        if (spotify && activeSession.isEmpty()) JarvisPhoneMode.setActive(false);
         if (exiting) {
             activeSession = "";
             JarvisPhoneMode.setActive(false);
