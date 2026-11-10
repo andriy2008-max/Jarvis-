@@ -22,6 +22,14 @@ public final class ScreenControlCommandsTest {
         is("прокрути вниз", ScreenControlCommands.Kind.SCROLL_DOWN, null);
         is("прокрути вгору", ScreenControlCommands.Kind.SCROLL_UP, null);
         is("повернись назад", ScreenControlCommands.Kind.BACK, null);
+        is("напиши Привіт, це тест!", ScreenControlCommands.Kind.TYPE_TEXT, "Привіт, це тест!");
+        is("Джарвіс, напиши: Я люблю Україну. 🇺🇦", ScreenControlCommands.Kind.TYPE_TEXT, "Я люблю Україну. 🇺🇦");
+        is("Jarvis — НАПИШИ Hello, World!", ScreenControlCommands.Kind.TYPE_TEXT, "Hello, World!");
+        is("напиши", ScreenControlCommands.Kind.TYPE_TEXT, "");
+        is("напиши: ", ScreenControlCommands.Kind.TYPE_TEXT, "");
+        is("напиши замовкни", ScreenControlCommands.Kind.TYPE_TEXT, "замовкни");
+        eq(ScreenControlCommands.parse("написане слово"), null);
+        eq(ScreenControlCommands.parse("скажи Привіт"), null);
         is("натисни кнопку пошук", ScreenControlCommands.Kind.CLICK, "пошук");
         is("натисни на значок лупи", ScreenControlCommands.Kind.CLICK, "лупи");
         is("відкрий пошук", ScreenControlCommands.Kind.CLICK, "пошук");
