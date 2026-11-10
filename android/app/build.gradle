@@ -47,6 +47,18 @@ android {
             if (stableSigningReady) signingConfig signingConfigs.jarvisStable
             minifyEnabled false
         }
+        // Alternative QA build without the accessibility service manifest entry.
+        // It contains no cross-app screen access; do not imply that screen control works.
+        // Uses the SAME stable package ID and certificate for an in-place update.
+        lite {
+            initWith release
+            applicationIdSuffix '.stable'
+            versionNameSuffix '-lite'
+            manifestPlaceholders = [appLabel: 'Джарвіс Lite']
+            if (stableSigningReady) signingConfig signingConfigs.jarvisStable
+            minifyEnabled false
+            matchingFallbacks = ['release']
+        }
     }
 
     compileOptions {
@@ -63,7 +75,7 @@ dependencies {
 }
 
 // Never complete an unsigned release build inadvertently.
-tasks.matching { it.name == 'assembleRelease' || it.name == 'bundleRelease' }.configureEach {
+tasks.matching { it.name == 'assembleRelease' || it.name == 'bundleRelease' || it.name == 'assembleLite' || it.name == 'bundleLite' }.configureEach {
     doFirst {
         if (!stableSigningReady) {
             throw new GradleException('Stable signing is not configured. See android/RELEASE-SIGNING.md')
