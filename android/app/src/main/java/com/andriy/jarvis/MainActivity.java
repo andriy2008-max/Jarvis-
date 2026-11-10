@@ -177,7 +177,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     @Override public void onStart(String id) {
                         runOnUiThread(() -> {
-                            if (id != null && id.equals(activeTtsId) && voiceEnabled) markSpeaking();
+                            if (id != null && id.equals(activeTtsId) && voiceEnabled) {
+                                JarvisSpeechMouth.startSystemTts();
+                                markSpeaking();
+                            }
                         });
                     }
                     @Override public void onDone(String id) {
@@ -185,6 +188,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     }
                     @Override public void onError(String id) {
                         if (id != null && id.equals(activeTtsId)) endSpeaking();
+                    }
+                    @Override public void onStop(String id, boolean interrupted) {
+                        if (id != null && id.equals(activeTtsId)) endSpeaking();
+                    }
+                    @Override public void onRangeStart(String id, int start, int end, int frame) {
+                        if (id != null && id.equals(activeTtsId) && voiceEnabled)
+                            JarvisSpeechMouth.systemWord(end - start);
                     }
                 });
             }
@@ -833,6 +843,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
     }
 
+    /** While WAV synthesizes or downloads, show thinking, not a false talking mouth. */
+    private void prepareSpeech() {
+        speaking = true;
+        cancelAutoWakeSchedule();
+        if (face != null) face.setState("thinking");
+    }
+
     /** Pause wake recognition while either voice engine is producing audio. */
     private void markSpeaking() {
         speaking = true;
@@ -853,7 +870,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             endSpeaking();
             return;
         }
-        markSpeaking();
+        prepareSpeech();
         activeTtsId = "jarvis-system-" + SystemClock.uptimeMillis();
         int statusCode = tts.speak(text, TextToSpeech.QUEUE_FLUSH, new Bundle(), activeTtsId);
         if (statusCode != TextToSpeech.SUCCESS) endSpeaking();
@@ -867,7 +884,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
         stopSpeaking();
         if (offlineSpeech != null && offlineSpeech.isInstalled()) {
-            markSpeaking();
+            prepareSpeech();
             if (offlineSpeech.speak(text, selectedVoiceProfile(), new NeuralSpeechClient.Listener() {
                 @Override public void onStart() { markSpeaking(); }
                 @Override public void onDone() { endSpeaking(); }
@@ -883,7 +900,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void speakRemoteOrSystem(String text) {
         if (neuralSpeech != null && neuralSpeech.isConfigured()) {
-            markSpeaking();
+            prepareSpeech();
             if (neuralSpeech.speak(text, selectedVoiceProfile(), new NeuralSpeechClient.Listener() {
                 @Override public void onStart() { markSpeaking(); }
                 @Override public void onDone() { endSpeaking(); }
@@ -2330,6 +2347,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void stopSpeaking() {
         activeTtsId = null;
+        JarvisSpeechMouth.stopSystemTts();
         if (offlineSpeech != null) offlineSpeech.stop();
         if (neuralSpeech != null) neuralSpeech.stop();
         if (tts != null) tts.stop();
@@ -2801,6 +2819,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void endSpeaking() {
         runOnUiThread(() -> {
+            activeTtsId = null;
+            JarvisSpeechMouth.stopSystemTts();
             speaking = false;
             if (!listening && !processing) face.setState("idle");
             resumeAfterReply();
@@ -2916,7 +2936,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             canvas.drawCircle(cx, cy, orb, paint);
 
             paint.setStyle(Paint.Style.FILL);
-            if (transcriptVisible()) {
+            if (transcriptVisible() && !"speaking".equals(expression)) {
                 drawTranscript(canvas, cx, cy, orb);
                 postInvalidateDelayed(180);
                 return;
@@ -2945,7 +2965,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     drawPixel(canvas, ox, oy, pixel, 9, 11, 1, 1);
                     break;
                 case "speaking":
-                    drawPixel(canvas, ox, oy, pixel, 6, 10, 4, (SystemClock.uptimeMillis() / 270) % 2 == 0 ? 3 : 1);
+                    int mouth = JarvisSpeechMouth.height();
+                    if (mouth > 0)
+                        drawPixel(canvas, ox, oy, pixel, 6, 10, 4, mouth);
+                    else
+                        drawPixel(canvas, ox, oy, pixel, 6, 11, 4, 1);
                     break;
                 default:
                     drawPixel(canvas, ox, oy, pixel, 4, 11, 2, 1);
@@ -2953,7 +2977,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     drawPixel(canvas, ox, oy, pixel, 10, 11, 2, 1);
                     break;
             }
-            postInvalidateDelayed(180);
+            postInvalidateDelayed("speaking".equals(expression) ? 42L : 180L);
         }
 
         private void drawPixel(Canvas canvas, float x, float y, float unit, int px, int py, int width, int height) {
