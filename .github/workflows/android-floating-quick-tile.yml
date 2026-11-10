@@ -1,15 +1,7 @@
 name: Android Quick Settings floating Jarvis orb (test only)
 
 on:
-  push:
-    paths:
-      - '.github/workflows/android-floating-quick-tile.yml'
-      - 'android/app/src/main/java/com/andriy/jarvis/JarvisQuickTileService.java'
-      - 'android/app/src/main/java/com/andriy/jarvis/JarvisBubbleLauncherActivity.java'
-      - 'android/app/src/main/java/com/andriy/jarvis/FloatingJarvisService.java'
-      - 'android/app/src/main/java/com/andriy/jarvis/JarvisOrbView.java'
-      - 'android/app/src/main/res/values/styles.xml'
-      - 'android/app/src/main/AndroidManifest.xml'
+  # Manually triggered only after an explicit user instruction. No APK jobs on push.
   workflow_dispatch:
 
 permissions:
