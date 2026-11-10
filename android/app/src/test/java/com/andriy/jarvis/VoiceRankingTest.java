@@ -18,6 +18,12 @@ public final class VoiceRankingTest {
         ok(!VoiceRanking.labeledMale("uk-UA-x-ukd-local"));
         ok(VoiceRanking.score("uk-UA", "uk-UA-Male", true, 300)
             > VoiceRanking.score("uk-UA", "uk-UA-female", false, 400));
+        ok(VoiceRanking.preferredVladimir("Vladimir"));
+        ok(VoiceRanking.preferredVladimir("uk-UA-Volodymyr"));
+        ok(VoiceRanking.preferredVladimir("Володимир"));
+        ok(!VoiceRanking.preferredVladimir("Anatol"));
+        ok(VoiceRanking.score("uk-UA", "Vladimir", false, 200)
+            > VoiceRanking.score("uk-UA", "male", false, 400));
         ok(VoiceRanking.score("en-US", "male", false, 400) == Integer.MIN_VALUE);
         ok(VoiceRanking.score("uk-UA", "neural", false, 300)
             > VoiceRanking.score("uk-UA", "neural", true, 300));

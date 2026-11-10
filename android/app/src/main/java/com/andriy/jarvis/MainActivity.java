@@ -708,7 +708,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
             }
         }
         if (chosen == null && !available.isEmpty()) chosen = available.get(0);
-        boolean clearlyMale = chosen != null && VoiceRanking.labeledMale(chosen.getName());
+        boolean clearlyMale = chosen != null &&
+            (VoiceRanking.labeledMale(chosen.getName()) ||
+             VoiceRanking.preferredVladimir(chosen.getName()));
         if (chosen != null) {
             try { tts.setVoice(chosen); } catch (RuntimeException ignored) { }
         } else {
@@ -755,12 +757,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
         ArrayList<Voice> available = ukrainianVoices();
         String[] labels = new String[available.size() + 1];
-        labels[0] = "Автоматично — чоловічий український голос, якщо встановлено";
+        labels[0] = "Автоматично — Володимир (RHVoice), якщо доступний";
         int checked = 0;
         String preference = getPreferences(MODE_PRIVATE).getString("jarvisVoiceName", "");
         for (int i = 0; i < available.size(); i++) {
             Voice v = available.get(i);
-            String label = v.getName() + (VoiceRanking.labeledMale(v.getName()) ? " · чоловічий" : "") +
+            String label = v.getName() +
+                (VoiceRanking.preferredVladimir(v.getName()) ? " · обраний голос" :
+                 VoiceRanking.labeledMale(v.getName()) ? " · чоловічий" : "") +
                 (v.isNetworkConnectionRequired() ? " · мережевий" : " · локальний");
             labels[i + 1] = label;
             if (v.getName().equals(preference)) checked = i + 1;

@@ -25,10 +25,18 @@ public final class VoiceRanking {
              token(voiceName, "masculine") || token(voiceName, "чоловічий"));
     }
 
+    public static boolean preferredVladimir(String voiceName) {
+        if (voiceName == null) return false;
+        String normalized = voiceName.toLowerCase(Locale.ROOT);
+        return normalized.contains("volodymyr") || normalized.contains("vladimir") ||
+            normalized.contains("володимир") || normalized.contains("владимир");
+    }
+
     public static int score(String languageTag, String voiceName,
                             boolean networkRequired, int quality) {
         if (!ukrainian(languageTag)) return Integer.MIN_VALUE;
         int score = 100 + quality;
+        if (preferredVladimir(voiceName)) score += 20_000;
         if (languageTag != null &&
             languageTag.replace('_', '-').equalsIgnoreCase("uk-UA")) score += 50;
         if (!networkRequired) score += 30;
