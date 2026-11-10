@@ -602,6 +602,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
             }
             aiTools.addView(button, p);
         }
+        Button pythonButton = secondaryButton("🧮 Перевірити розрахунок / код у Python",
+            () -> askAiFromInput("analysis"));
+        LinearLayout.LayoutParams pythonParams = new LinearLayout.LayoutParams(-1, dp(43));
+        pythonParams.topMargin = dp(6);
+        chatPanel.addView(pythonButton, pythonParams);
 
         // Lite APK deliberately has NO accessibility service: do not misrepresent it.
         Button screenControlButton = secondaryButton(
@@ -2570,6 +2575,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
             appendDialogue("Ти", "🎨 " + question);
             askAiDetailed(question, "image", attachment);
         });
+        else builder.setNeutralButton("Аналіз Python", (d, which) -> {
+            String question = prompt.getText().toString().trim();
+            appendDialogue("Ти", "🧮 " + question);
+            askAiDetailed(question, "analysis", attachment);
+        });
         showDialogWithoutWake(builder.create());
     }
 
@@ -2692,6 +2702,22 @@ public final class MainActivity extends Activity implements RecognitionListener 
         LinearLayout.LayoutParams codeParams = new LinearLayout.LayoutParams(-1, -2);
         codeParams.topMargin = dp(8);
         form.addView(codeInput, codeParams);
+        form.addView(makeText("Глибина міркування ШІ: впливає на швидкість і витрати API.",
+            12, MUTED, Gravity.START, false), new LinearLayout.LayoutParams(-1,-2));
+        String[] labels = {"Без міркування — найшвидше",
+            "Низька — економно", "Середня — рекомендовано",
+            "Висока — складні задачі"};
+        String[] efforts = {"none","low","medium","high"};
+        android.widget.Spinner effortSpinner = new android.widget.Spinner(this);
+        android.widget.ArrayAdapter<String> adapter = new android.widget.ArrayAdapter<>(
+            this, android.R.layout.simple_spinner_item, labels);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        effortSpinner.setAdapter(adapter);
+        String currentEffort = aiChatClient.getReasoningEffort();
+        for (int i = 0; i < efforts.length; i++)
+            if (efforts[i].equals(currentEffort)) effortSpinner.setSelection(i);
+        form.addView(effortSpinner, new LinearLayout.LayoutParams(-1,-2));
+
         TextView note = makeText(
             "Якщо код уже збережено, залиш поле порожнім. «Від'єднати» очищує адресу, код і контекст ШІ.",
             11, MUTED, Gravity.START, false);
@@ -2713,6 +2739,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             try {
                 aiChatClient.configure(urlInput.getText().toString(), codeInput.getText().toString());
+                aiChatClient.setReasoningEffort(efforts[effortSpinner.getSelectedItemPosition()]);
                 aiBusy = false;
                 processing = false;
                 setStatus("Налаштування ШІ збережено");
@@ -2784,6 +2811,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
         boolean silentReply = false;
         String reply;
 
+        if (command.startsWith("обчисли через python") ||
+            command.startsWith("перевір через python") ||
+            command.startsWith("проаналізуй дані")) {
+            askAiDetailed(command, "analysis", null);
+            return;
+        }
         if (command.startsWith("створи зображення") ||
             command.startsWith("згенеруй зображення") ||
             command.startsWith("намалюй ") ||
