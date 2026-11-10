@@ -1,0 +1,41 @@
+name: Experimental real Dmytro and Lada ONNX export
+
+# One-shot on creation and manual re-runs. Never ships an untested model or APK.
+on:
+  push:
+    paths:
+      - '.github/workflows/export-uktts-onnx.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Disk capacity
+        run: df -h . /tmp
+      - name: Install official upstream and ONNX tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r server/jarvis-tts-server/requirements.txt
+          python -m pip install espnet_onnx onnx onnxruntime pyyaml
+      - name: Real ONNX synthesis of both voices
+        run: |
+          python -u tools/voice-export/export_voice_pack.py --cache-dir /tmp/uktts-v6-cache --output /tmp/jarvis-uktts-v6-onnx.zip
+          sha256sum /tmp/jarvis-uktts-v6-onnx.zip | tee /tmp/jarvis-uktts-v6-onnx.sha256
+      - name: Upload ONLY if both speakers synthesized with real model
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-dmytro-lada-onnx-experimental
+          path: |
+            /tmp/jarvis-uktts-v6-onnx.zip
+            /tmp/jarvis-uktts-v6-onnx.sha256
+          retention-days: 1
+          compression-level: 0
