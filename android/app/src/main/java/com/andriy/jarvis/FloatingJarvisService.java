@@ -216,12 +216,11 @@ public final class FloatingJarvisService extends Service {
                         }
                         if (dragging && windows != null) {
                             updateDisplayBounds();
+                            // Keep the orb reachable above system navigation bars.
                             faceParams.x = JarvisOrbPlacement.clamp(
-                                startingX + Math.round(dx), 0,
-                                Math.max(0, displayWidth - faceParams.width));
+                                startingX + Math.round(dx), leftLimit(), rightLimit());
                             faceParams.y = JarvisOrbPlacement.clamp(
-                                startingY + Math.round(dy), 0,
-                                Math.max(0, displayHeight - faceParams.height));
+                                startingY + Math.round(dy), topLimit(), bottomLimit());
                             try { windows.updateViewLayout(face, faceParams); }
                             catch (IllegalArgumentException ignored) { }
                         }
@@ -258,25 +257,34 @@ public final class FloatingJarvisService extends Service {
         displayHeight = Math.max(1, size.y);
     }
 
+    private int leftLimit() { return dp(4); }
+    private int rightLimit() {
+        return Math.max(leftLimit(), displayWidth - faceParams.width - dp(4));
+    }
+    private int topLimit() { return dp(32); }
+    private int bottomLimit() {
+        return Math.max(topLimit(), displayHeight - faceParams.height - dp(44));
+    }
+
     private void restorePosition() {
         if (faceParams == null) return;
-        int maxX = Math.max(0, displayWidth - faceParams.width);
-        int maxY = Math.max(0, displayHeight - faceParams.height);
         float horizontal = getSharedPreferences(ORB_PREFS, MODE_PRIVATE)
             .getFloat("position_x", 0.97f);
         float vertical = getSharedPreferences(ORB_PREFS, MODE_PRIVATE)
             .getFloat("position_y", 0.5f);
-        faceParams.x = JarvisOrbPlacement.fromFraction(horizontal, maxX);
-        faceParams.y = JarvisOrbPlacement.fromFraction(vertical, maxY);
+        faceParams.x = leftLimit() + JarvisOrbPlacement.fromFraction(
+            horizontal, rightLimit() - leftLimit());
+        faceParams.y = topLimit() + JarvisOrbPlacement.fromFraction(
+            vertical, bottomLimit() - topLimit());
     }
 
     private void persistPosition() {
         if (faceParams == null) return;
         getSharedPreferences(ORB_PREFS, MODE_PRIVATE).edit()
-            .putFloat("position_x", JarvisOrbPlacement.fraction(faceParams.x,
-                Math.max(0, displayWidth - faceParams.width)))
-            .putFloat("position_y", JarvisOrbPlacement.fraction(faceParams.y,
-                Math.max(0, displayHeight - faceParams.height)))
+            .putFloat("position_x", JarvisOrbPlacement.fraction(
+                faceParams.x - leftLimit(), rightLimit() - leftLimit()))
+            .putFloat("position_y", JarvisOrbPlacement.fraction(
+                faceParams.y - topLimit(), bottomLimit() - topLimit()))
             .apply();
     }
 
