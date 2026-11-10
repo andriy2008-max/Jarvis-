@@ -8,6 +8,11 @@ on:
       - 'android/app/src/main/java/com/andriy/jarvis/NeuralSpeechPolicy.java'
       - 'android/app/src/main/java/com/andriy/jarvis/NeuralSpeechClient.java'
       - 'android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/WorldNewsCommands.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/WorldNewsFeed.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/WorldNewsReader.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/WorldNewsCommandsTest.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/WorldNewsFeedTest.java'
       - 'android/app/src/main/java/com/andriy/jarvis/DeviceCommands.java'
       - 'android/app/src/main/java/com/andriy/jarvis/DeviceActions.java'
       - 'android/app/src/main/java/com/andriy/jarvis/SystemToggleActions.java'
@@ -74,6 +79,8 @@ jobs:
           mkdir -p /tmp/jarvis-voice-tests
           javac -encoding UTF-8 -d /tmp/jarvis-voice-tests \
             android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java \
+            android/app/src/main/java/com/andriy/jarvis/WorldNewsCommands.java \
+            android/app/src/main/java/com/andriy/jarvis/WorldNewsFeed.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisOrbTranscript.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisLiveTranscript.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisTranscriptCorrection.java \
@@ -89,6 +96,8 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/OfflineVoicePackRules.java \
             android/app/src/main/java/com/andriy/jarvis/UkrainianVoiceText.java \
             android/app/src/test/java/com/andriy/jarvis/CommandPatternsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/WorldNewsCommandsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/WorldNewsFeedTest.java \
             android/app/src/test/java/com/andriy/jarvis/DeviceCommandsTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisOrbTranscriptTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisLiveTranscriptTest.java \
@@ -103,6 +112,8 @@ jobs:
             android/app/src/test/java/com/andriy/jarvis/OfflineVoicePackRulesTest.java \
             android/app/src/test/java/com/andriy/jarvis/UkrainianVoiceTextTest.java
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.CommandPatternsTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.WorldNewsCommandsTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.WorldNewsFeedTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.DeviceCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisOrbTranscriptTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisLiveTranscriptTest
