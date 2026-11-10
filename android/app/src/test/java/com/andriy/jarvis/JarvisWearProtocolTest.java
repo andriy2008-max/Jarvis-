@@ -9,6 +9,12 @@ public final class JarvisWearProtocolTest {
         yes(JarvisWearProtocol.validAction("enter"),"enter");
         yes(JarvisWearProtocol.validAction("exit"),"exit");
         yes(JarvisWearProtocol.validAction("command"),"command");
+        yes(JarvisWearProtocol.validAction("spotify"),"temporary spotify control");
+        yes(JarvisWearProtocol.validAction("cancel_spotify"),"watch can cancel Spotify");
+        yes(JarvisWearProtocol.SPOTIFY_ACK_TIMEOUT_MS > 6*20000,
+            "Spotify command may include six sequential 20-second UI stages");
+        yes(JarvisWearProtocol.MAX_COMMAND_LENGTH < JarvisWearProtocol.MAX_BYTES,
+            "Bound commands transmitted over Wear Data Layer");
         yes(!JarvisWearProtocol.validAction("execute_shell"),"no arbitrary action");
         yes(!JarvisWearProtocol.validAction(null),"null action");
         yes(JarvisWearProtocol.validCommand("Натисни пошук"),"ordinary command");
