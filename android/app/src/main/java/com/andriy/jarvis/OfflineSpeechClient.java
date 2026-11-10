@@ -97,6 +97,7 @@ public final class OfflineSpeechClient {
             player.setOnPreparedListener(mp -> {
                 if (!active(id)) return;
                 try {
+                    JarvisSpeechMouth.startWav(mp, file);
                     mp.start();
                     callback.onStart();
                 } catch (Exception e) {
@@ -129,6 +130,7 @@ public final class OfflineSpeechClient {
 
     private void release() {
         if (player != null) {
+            JarvisSpeechMouth.stopWav(player);
             try { player.reset(); player.release(); } catch (Exception ignored) {}
             player = null;
         }
