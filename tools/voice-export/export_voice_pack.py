@@ -165,7 +165,7 @@ def export_model(cache_dir, output):
             raise RuntimeError("Unsupported decoder configuration for Android")
         expected_graphs = (
             "tts_model_encoder.onnx", "tts_model_decoder.onnx",
-            "predecoder.onnx", "postdecoder.onnx", "HiFiGANVocoder.onnx")
+            "predecoder_0.onnx", "postdecoder.onnx", "HiFiGANVocoder.onnx")
         for graph in expected_graphs:
             if not (model_dir / "full" / graph).is_file():
                 raise RuntimeError("Missing exported ONNX submodel: " + graph)
