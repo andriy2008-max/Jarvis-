@@ -20,6 +20,10 @@ jobs:
   android-offline:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [30, 35]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -50,7 +54,7 @@ jobs:
       - name: Run actual ONNX Runtime and MediaPlayer on Android with airplane mode
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30
+          api-level: ${{ matrix.api-level }}
           target: google_apis
           arch: x86_64
           profile: pixel_4
@@ -80,8 +84,12 @@ jobs:
             adb shell settings put global airplane_mode_on 1
             adb shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true
             adb shell settings get global airplane_mode_on | grep -x 1
-            adb shell am instrument -w -r com.andriy.jarvis.preview.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/jarvis-android-instrumentation.log
+            adb shell am instrument -w -r -e class com.andriy.jarvis.OfflineVoicesInstrumentedTest#bothVoicesReallySpeakWithAirplaneModeAndSurviveReload com.andriy.jarvis.preview.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/jarvis-android-instrumentation.log
             grep -q 'OK (1 test)' /tmp/jarvis-android-instrumentation.log
+            # Must upgrade the SAME app ID, not install an additional variant.
+            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+            adb shell am instrument -w -r -e class com.andriy.jarvis.OfflineVoicesInstrumentedTest#offlineVoiceDataSurvivesInPlaceAppUpdate com.andriy.jarvis.preview.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/jarvis-android-upgrade.log
+            grep -q 'OK (1 test)' /tmp/jarvis-android-upgrade.log
             adb logcat -d -s JARVIS_OFFLINE_TEST:I '*:S'
       - name: Provide error logs only when emulator test fails
         if: failure()

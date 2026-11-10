@@ -125,6 +125,7 @@ public final class OfflineVoicesInstrumentedTest {
         try (OfflineOnnxSynthesizer engine = new OfflineOnnxSynthesizer(installed)) {
             long loaded = android.os.SystemClock.elapsedRealtime();
             android.util.Log.i("JARVIS_OFFLINE_TEST", "model_load_ms=" + (loaded-start));
+            android.util.Log.i("JARVIS_OFFLINE_TEST", "model_loaded_pss_kb=" + android.os.Debug.getPss());
             File dmytro = engine.synthesize("Привіт, це Дмитро.", "dmytro",
                 app.getCacheDir(), () -> {});
             try {
@@ -148,7 +149,33 @@ public final class OfflineVoicesInstrumentedTest {
                 app.getCacheDir(), () -> {});
             try { checkWave(wav, "reload"); } finally { wav.delete(); }
         }
+        android.util.Log.i("JARVIS_OFFLINE_TEST", "after_both_voices_pss_kb=" + android.os.Debug.getPss());
         pack.close();
         android.util.Log.i("JARVIS_OFFLINE_TEST", "both_voices_airplane_mode_passed");
+    }
+
+    @Test
+    public void offlineVoiceDataSurvivesInPlaceAppUpdate() throws Exception {
+        Context app = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        assertEquals("Update check must remain offline", 1,
+            Settings.Global.getInt(app.getContentResolver(), Settings.Global.AIRPLANE_MODE_ON, 0));
+        OfflineVoicePackManager pack = new OfflineVoicePackManager(app);
+        try {
+            assertTrue("App update erased private offline voice package", pack.hasInstalledFiles());
+            File dir = pack.installedDirectory();
+            assertTrue("Model disappeared on app update", new File(dir, "onnx/full/vits.onnx").isFile());
+            try (OfflineOnnxSynthesizer engine = new OfflineOnnxSynthesizer(dir)) {
+                File wav = engine.synthesize("Лада працює без інтернету.", "lada",
+                    app.getCacheDir(), () -> {});
+                try {
+                    checkWave(wav, "after_update");
+                } finally {
+                    wav.delete();
+                }
+            }
+        } finally {
+            pack.close();
+        }
+        android.util.Log.i("JARVIS_OFFLINE_TEST", "in_place_upgrade_preserved_voice_and_synthesis");
     }
 }
