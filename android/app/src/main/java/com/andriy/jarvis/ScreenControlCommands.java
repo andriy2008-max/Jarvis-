@@ -6,13 +6,18 @@ import java.util.regex.Pattern;
 
 /** Deliberate, single-step Android UI actions requested verbatim by the user. */
 public final class ScreenControlCommands {
-    public enum Kind { ENABLE, DISABLE, SETTINGS, CLICK, SCROLL_UP, SCROLL_DOWN, BACK, STATUS }
+    public enum Kind { ENABLE, DISABLE, SETTINGS, CLICK, TYPE_TEXT, SCROLL_UP, SCROLL_DOWN, BACK, STATUS }
 
     public static final class Action {
         public final Kind kind;
         public final String label;
         Action(Kind kind, String label) { this.kind = kind; this.label = label; }
     }
+
+    private static final Pattern WRITE = Pattern.compile(
+        "^(?iu)напиши(?:[\\s,:—-]+([\\s\\S]*))?$");
+    private static final Pattern WAKE = Pattern.compile(
+        "^(?iu)(?:джарвіс|джарвис|jarvis)[\\s,:—-]*");
 
     private static final Pattern CLICK = Pattern.compile(
         "^(?:натисни|нажми|торкнись|торкнися)(?:\\s+на)?(?:\\s+(?:кнопку|значок|іконку|ікону|символ))?\\s+(.+)$",
@@ -26,7 +31,15 @@ public final class ScreenControlCommands {
 
     public static Action parse(String normalized) {
         if (normalized == null) return null;
-        String s = normalized.trim().toLowerCase(Locale.forLanguageTag("uk-UA"))
+        // Extract dictated payload BEFORE normalization. Otherwise casing and
+        // punctuation would be lost, and the contents could be sent to the AI.
+        String original = WAKE.matcher(normalized.trim()).replaceFirst("").trim();
+        Matcher write = WRITE.matcher(original);
+        if (write.matches()) {
+            String payload = write.group(1) == null ? "" : write.group(1).trim();
+            return new Action(Kind.TYPE_TEXT, payload);
+        }
+        String s = original.toLowerCase(Locale.forLanguageTag("uk-UA"))
             .replaceAll("[.!?]+$", "").trim().replaceAll("\\s+", " ");
         switch (s) {
             case "увімкни керування екраном":
