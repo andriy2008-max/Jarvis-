@@ -7,6 +7,9 @@
     <!-- Only outgoing HTTPS to a user-configured AI proxy. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Explicit user approval through Android special-access settings required. -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <!-- Flashlight optional: app also runs on tablets and Wear OS without a flash. -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
