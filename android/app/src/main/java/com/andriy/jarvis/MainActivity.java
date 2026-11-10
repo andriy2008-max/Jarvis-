@@ -1813,8 +1813,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
             setStatus("Локальне розпізнавання недоступне. Користуйся кнопкою мікрофона.");
             return;
         }
-        if (tts != null && tts.isSpeaking()) tts.stop();
-        speaking = false;
+        // Never capture Jarvis's own response through the microphone.
+        // Stop both WAV speech engines and Android TTS before listening.
+        stopSpeaking();
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "uk-UA");
