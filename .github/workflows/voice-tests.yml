@@ -32,6 +32,10 @@ on:
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisBubbleLauncherActivity.java'
       - 'android/app/src/main/java/com/andriy/jarvis/FloatingJarvisService.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisOrbView.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisOrbTranscript.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisOrbPlacement.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/JarvisOrbTranscriptTest.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/JarvisOrbPlacementTest.java'
       - 'android/app/src/main/res/values/styles.xml'
       - 'android/app/build.gradle'
       - 'android/app/src/test/java/com/andriy/jarvis/NeuralSpeechPolicyTest.java'
@@ -58,6 +62,8 @@ jobs:
           mkdir -p /tmp/jarvis-voice-tests
           javac -encoding UTF-8 -d /tmp/jarvis-voice-tests \
             android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java \
+            android/app/src/main/java/com/andriy/jarvis/JarvisOrbTranscript.java \
+            android/app/src/main/java/com/andriy/jarvis/JarvisOrbPlacement.java \
             android/app/src/main/java/com/andriy/jarvis/ScreenControlCommands.java \
             android/app/src/main/java/com/andriy/jarvis/ScreenTextInsertion.java \
             android/app/src/main/java/com/andriy/jarvis/ScreenTargetMatcher.java \
@@ -65,6 +71,8 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/OfflineVoicePackRules.java \
             android/app/src/main/java/com/andriy/jarvis/UkrainianVoiceText.java \
             android/app/src/test/java/com/andriy/jarvis/CommandPatternsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/JarvisOrbTranscriptTest.java \
+            android/app/src/test/java/com/andriy/jarvis/JarvisOrbPlacementTest.java \
             android/app/src/test/java/com/andriy/jarvis/ScreenControlCommandsTest.java \
             android/app/src/test/java/com/andriy/jarvis/ScreenTextInsertionTest.java \
             android/app/src/test/java/com/andriy/jarvis/ScreenTargetMatcherTest.java \
@@ -72,6 +80,8 @@ jobs:
             android/app/src/test/java/com/andriy/jarvis/OfflineVoicePackRulesTest.java \
             android/app/src/test/java/com/andriy/jarvis/UkrainianVoiceTextTest.java
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.CommandPatternsTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisOrbTranscriptTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisOrbPlacementTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.ScreenControlCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.ScreenTextInsertionTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.ScreenTargetMatcherTest
