@@ -69,6 +69,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private static final int REQUEST_MICROPHONE = 101;
     private static final int REQUEST_TIMER_NOTIFICATIONS = 103;
     private static final int REQUEST_AI_ATTACHMENT = 106;
+    public static final String EXTRA_AI_IMAGE_PROMPT = "com.andriy.jarvis.AI_IMAGE_PROMPT";
     private static final int BG = Color.rgb(8, 14, 29);
     private static final int PANEL = Color.rgb(17, 27, 48);
     private static final int BORDER = Color.rgb(38, 57, 87);
@@ -229,6 +230,27 @@ public final class MainActivity extends Activity implements RecognitionListener 
             wakeToggle.setEnabled(supportsOnDeviceRecognizer);
             wakeToggle.setChecked(autoWakeEnabled && supportsOnDeviceRecognizer);
         }
+        acceptImageIntent(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        acceptImageIntent(intent);
+    }
+
+    private void acceptImageIntent(Intent intent) {
+        if (intent == null) return;
+        String prompt = intent.getStringExtra(EXTRA_AI_IMAGE_PROMPT);
+        if (prompt == null || prompt.trim().isEmpty()) return;
+        intent.removeExtra(EXTRA_AI_IMAGE_PROMPT);
+        final String text = prompt.trim();
+        wakeHandler.post(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            appendDialogue("Ти", "🎨 " + text);
+            askAiDetailed(text, "image", null);
+        });
     }
 
     @Override
