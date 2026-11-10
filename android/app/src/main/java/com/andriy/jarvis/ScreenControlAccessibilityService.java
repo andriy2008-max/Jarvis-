@@ -112,7 +112,8 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             !focused.isVisibleToUser() || !focused.isEnabled() ||
             focused.isPassword() || isSensitiveInputType(focused.getInputType()) ||
             isSensitiveFieldLabel(focused)) return false;
-        return packageName.contentEquals(focused.getPackageName());
+        return focused.getPackageName() != null &&
+            packageName.contentEquals(focused.getPackageName());
     }
 
     public static String perform(ScreenControlCommands.Action action) {
