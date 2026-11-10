@@ -69,9 +69,12 @@ jobs:
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
             adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             # emulator-runner executes each script line in a fresh shell.
-            adb shell mkdir -p /sdcard/Android/data/com.andriy.jarvis.preview/files/voice-fixture/onnx/full
-            adb push /tmp/jarvis-voice-fixture/model/manifest.json /sdcard/Android/data/com.andriy.jarvis.preview/files/voice-fixture/manifest.json
-            adb push /tmp/jarvis-voice-fixture/model/onnx/full/vits.onnx /sdcard/Android/data/com.andriy.jarvis.preview/files/voice-fixture/onnx/full/vits.onnx
+            # CI root stages the fixture in app-private no-backup storage.
+            adb shell mkdir -p /data/user/0/com.andriy.jarvis.preview/no_backup/voice-fixture/onnx/full
+            adb push /tmp/jarvis-voice-fixture/model/manifest.json /data/user/0/com.andriy.jarvis.preview/no_backup/voice-fixture/manifest.json
+            adb push /tmp/jarvis-voice-fixture/model/onnx/full/vits.onnx /data/user/0/com.andriy.jarvis.preview/no_backup/voice-fixture/onnx/full/vits.onnx
+            adb shell 'chown -R $(stat -c %u /data/user/0/com.andriy.jarvis.preview) /data/user/0/com.andriy.jarvis.preview/no_backup/voice-fixture'
+            adb shell restorecon -RF /data/user/0/com.andriy.jarvis.preview/no_backup/voice-fixture
             adb shell svc wifi disable
             adb shell svc data disable
             adb shell settings put global airplane_mode_on 1

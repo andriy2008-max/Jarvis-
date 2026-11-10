@@ -108,9 +108,9 @@ public final class OfflineVoicesInstrumentedTest {
         Context app = InstrumentationRegistry.getInstrumentation().getTargetContext();
         assertEquals("Emulator must disable network before offline test", 1,
             Settings.Global.getInt(app.getContentResolver(), Settings.Global.AIRPLANE_MODE_ON, 0));
-        File external = app.getExternalFilesDir(null);
-        assertNotNull("External voice fixture directory not mounted", external);
-        File fixture = new File(external, "voice-fixture");
+        // Rooted CI emulator stages a signed model in test-only app-private storage.
+        // Unlike /sdcard/Android/data, this directory is readable under scoped storage.
+        File fixture = new File(app.getNoBackupFilesDir(), "voice-fixture");
         File installed = new File(app.getNoBackupFilesDir(), "jarvis-offline-voices/current");
         copy(new File(fixture, "manifest.json"), new File(installed, "manifest.json"));
         copy(new File(fixture, "onnx/full/vits.onnx"), new File(installed, "onnx/full/vits.onnx"));
