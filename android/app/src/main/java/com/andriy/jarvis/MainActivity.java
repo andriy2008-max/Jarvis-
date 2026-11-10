@@ -2108,6 +2108,18 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void processCommand(String raw) {
         if (raw == null || raw.trim().isEmpty()) return;
+        if (commandSequenceExecutor != null && commandSequenceExecutor.isRunning()) {
+            String request = CommandPatterns.normalize(raw);
+            if (request.equals("скасуй послідовність") ||
+                request.equals("зупини послідовність") ||
+                request.equals("скасуй виконання") ||
+                request.equals("стоп")) {
+                commandSequenceExecutor.cancel();
+            } else {
+                setStatus("Спочатку заверши поточну послідовність або скажи «Скасуй послідовність».");
+            }
+            return;
+        }
         appendDialogue("Ти", raw.trim());
         String command = CommandPatterns.normalize(raw);
         if (command.isEmpty()) return;
