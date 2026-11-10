@@ -16,7 +16,7 @@ public final class ScreenTargetMatcher {
     // Stems cover Ukrainian case inflections and frequent English content descriptions.
     private static final String[][] ALIASES = {
         {"search", "пошук", "пошу", "шука", "луп", "search", "magnif"},
-        {"chats", "чат", "діалог", "листуван", "chats", "chat", "conversation"},
+        {"chats", "чат", "діалог", "листуван", "переписк", "chats", "chat", "conversation"},
         {"messages", "повідомлен", "вхідн", "inbox", "messages", "message", "direct"},
         {"home", "головн", "домівк", "home", "dashboard"},
         {"profile", "профіл", "акаунт", "обліков", "profile", "account", "avatar"},
