@@ -1,10 +1,8 @@
-name: Signed Jarvis 0.1.15 floating-face QA APKs (not stable)
+name: Signed full Jarvis QA APK only (manual request)
 
 # Only signed test artifacts. Never publish a stable GitHub release.
 on:
-  push:
-    paths:
-      - '.github/workflows/build-signed-015-qa.yml'
+  # Manually triggered only after an explicit user instruction. No APK jobs on push.
   workflow_dispatch:
 
 permissions:
@@ -17,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [release, lite]
+        variant: [release]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -54,7 +52,7 @@ jobs:
           QA_VARIANT: ${{ matrix.variant }}
         run: |
           set -euo pipefail
-          if [ "$QA_VARIANT" = "lite" ]; then task=assembleLite; else task=assembleRelease; fi
+          task=assembleRelease
           gradle -p android --no-daemon --stacktrace :app:testDebugUnitTest ":app:$task"
       - name: Check exact certificate, update-safe ID, Quick tile and Lite privacy
         env:
@@ -70,17 +68,11 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" > /tmp/jarvis-badging
           grep -Fq "package: name='com.andriy.jarvis.stable'" /tmp/jarvis-badging
           grep -Fq "versionCode='25'" /tmp/jarvis-badging
-          if [ "$QA_VARIANT" = "lite" ]; then name=0.1.15-lite; else name=0.1.15; fi
+          name=0.1.15
           grep -Fq "versionName='$name'" /tmp/jarvis-badging
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump xmltree "$apk" AndroidManifest.xml > /tmp/jarvis-manifest
           grep -Fq 'JarvisQuickTileService' /tmp/jarvis-manifest
           grep -Fq 'FloatingJarvisService' /tmp/jarvis-manifest
-          if [ "$QA_VARIANT" = "lite" ]; then
-            if grep -Eiq 'ScreenControlAccessibilityService|BIND_ACCESSIBILITY_SERVICE' /tmp/jarvis-manifest; then
-              echo "::error::Lite APK must NOT include AccessibilityService"
-              exit 1
-            fi
-          fi
           mkdir -p android/dist
           cp "$apk" "android/dist/JARVIS-0.1.15-$QA_VARIANT-SIGNED-QA.apk"
           (cd android/dist && sha256sum "JARVIS-0.1.15-$QA_VARIANT-SIGNED-QA.apk" > "JARVIS-0.1.15-$QA_VARIANT-SIGNED-QA.sha256")
