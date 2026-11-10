@@ -86,10 +86,12 @@ public final class JarvisCommandSequence {
     private static Step parseStep(String part) {
         ScreenControlCommands.Action screen = ScreenControlCommands.parse(part);
         if (screen != null) {
-            if (screen.kind == ScreenControlCommands.Kind.CLICK &&
-                !screen.label.isEmpty() &&
-                !ScreenControlCommands.isSensitiveLabel(screen.label))
-                return new Step(Kind.CLICK, screen.label, -1);
+            if (screen.kind == ScreenControlCommands.Kind.CLICK) {
+                String target = screen.label.replaceAll("[,;.!?]+$", "").trim();
+                if (!target.isEmpty() && !ScreenControlCommands.isSensitiveLabel(target))
+                    return new Step(Kind.CLICK, target, -1);
+                return null;
+            }
             if (screen.kind == ScreenControlCommands.Kind.TYPE_TEXT &&
                 !screen.label.trim().isEmpty() &&
                 screen.label.length() <= ScreenTextInsertion.MAX_DICTATION_LENGTH)
