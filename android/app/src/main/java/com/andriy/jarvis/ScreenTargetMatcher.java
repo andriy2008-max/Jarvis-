@@ -92,7 +92,7 @@ public final class ScreenTargetMatcher {
     private static boolean containsAlias(String text, String alias) {
         if (text.isEmpty() || alias.isEmpty()) return false;
         for (String part : text.split(" ")) {
-            if (part.equals(alias) || (alias.length() >= 4 && part.startsWith(alias)))
+            if (part.equals(alias) || (alias.length() >= 3 && part.startsWith(alias)))
                 return true;
         }
         // Multi-word phrases such as "три крапки" are valid when all words appear.
