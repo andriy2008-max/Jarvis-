@@ -90,6 +90,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private int pendingTimerSeconds;
 
     private SpeechRecognizer recognizer;
+    private JarvisHeadsetAudioRouter headsetRoute;
     private boolean recognizerUsesOnDevice;
     private TextToSpeech tts;
     private NeuralSpeechClient neuralSpeech;
@@ -205,6 +206,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         supportsOnDeviceRecognizer = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             SpeechRecognizer.isOnDeviceRecognitionAvailable(this);
         loadNotes();
+        headsetRoute = new JarvisHeadsetAudioRouter(this);
         aiChatClient = new AiChatClient(this);
         worldNewsReader = new WorldNewsReader();
         generalWebSearch = new GeneralWebSearchClient();
@@ -325,6 +327,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     protected void onPause() {
+        if (headsetRoute != null) headsetRoute.end();
         unregisterShakeSensor();
         if (shakeProbe != null) shakeProbe.close();
         shakeCommandCapture = false;
@@ -1576,6 +1579,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         cancelSilenceCheck();
         speechPause.reset(undone);
         autoSilenceStop = false;
+        if (headsetRoute != null) headsetRoute.begin();
         manualCapture = true;
         manualStopRequested = false;
         autoSilenceStop = false;
@@ -1685,6 +1689,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         face.setState("listening");
         JarvisLiveTranscript.begin(TRANSCRIPT_OWNER);
         setStatus("Струшування: 3 секунди чекаю «Джарвіс»...");
+        if (headsetRoute != null) headsetRoute.begin();
         boolean started = shakeProbe.start(new JarvisShakeWakeProbe.Callback() {
             @Override public void onPartial(String words) {
                 if (foreground) JarvisLiveTranscript.update(
@@ -1694,6 +1699,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 if (!foreground) return;
                 JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                 if (!heard) {
+                    if (headsetRoute != null) headsetRoute.end();
                     face.setState("idle");
                     setStatus(detail);
                     scheduleAutoWake(550L);
@@ -1711,6 +1717,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             }
         });
         if (!started) {
+            if (headsetRoute != null) headsetRoute.end();
             face.setState("idle");
             JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
             setStatus("Не вдалося почати прослуховування. Перевір доступ до мікрофона.");
@@ -2041,6 +2048,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private void finishManualCapture() {
+        if (headsetRoute != null) headsetRoute.end();
         cancelManualRestart();
         cancelSilenceCheck();
         final String transcript = manualTranscript.toString().trim();
@@ -2164,6 +2172,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             : "Чекаю першого розпізнаного слова...") :
             wakeConversation.isActive(SystemClock.elapsedRealtime()) ? "Продовжуй розмову..." :
                 "Очікую «Джарвіс»");
+        if (headsetRoute != null) headsetRoute.begin();
         try {
             recognizer.startListening(intent);
         } catch (Exception error) {
@@ -3497,6 +3506,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     protected void onDestroy() {
+        if (headsetRoute != null) headsetRoute.end();
         JarvisPhoneMode.unsubscribe(phoneModeListener);
         if (watchPhoneLink != null) watchPhoneLink.close();
         JarvisLiveTranscript.setCorrectionHandler(TRANSCRIPT_OWNER, null);
