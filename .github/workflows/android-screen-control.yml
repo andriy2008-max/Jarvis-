@@ -55,8 +55,9 @@ jobs:
           script: |
             set -euo pipefail
             adb wait-for-device
-            adb root
-            adb wait-for-device
+            # This test only needs adb shell's WRITE_SECURE_SETTINGS permission.
+            # adb root is unnecessary and intermittently disconnects the API 35 emulator.
+            adb shell id
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
             adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             # CI-only equivalent of user's manual Accessibility settings toggle.
@@ -69,7 +70,7 @@ jobs:
             adb shell sleep 4
             adb shell dumpsys accessibility | grep -i -E 'jarvis|ScreenControl' | head -30 || true
             adb shell am start -n com.andriy.jarvis.preview.test/com.andriy.jarvis.ScreenControlTestTarget
-            adb shell am instrument -w -r -e class com.andriy.jarvis.ScreenControlInstrumentedTest com.andriy.jarvis.preview.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/screen-control-test.log
+            timeout 180s adb shell am instrument -w -r -e class com.andriy.jarvis.ScreenControlInstrumentedTest com.andriy.jarvis.preview.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/screen-control-test.log
             # Always collect diagnostics before evaluating the test exit status.
             adb shell dumpsys accessibility | grep -i -E 'jarvis|ScreenControl' | head -40 || true
             adb logcat -d -s AccessibilityManagerService:D ActivityManager:E AndroidRuntime:E '*:S'
