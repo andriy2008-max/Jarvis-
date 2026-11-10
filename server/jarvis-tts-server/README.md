@@ -2,6 +2,22 @@
 
 **This is a real free/open-source voice model, not Android pitch-shifting.** Source: [robinhad/ukrainian-tts](https://github.com/robinhad/ukrainian-tts) (MIT licensed v6.0.0 model). Supports `dmytro` and `lada` as named speakers. The upstream model is ~446 MB **before** Python/ESPnet dependencies; it is installed on a *separate server/PC*, not bundled in the Android APK.
 
+## Easiest free setup: Windows PC + Android (private Tailscale)
+
+For personal use, the Windows PC can host both voices without TTS API charges. The PC needs to remain powered on while you use the neural voices. No RunPod GPU is required for a CPU-only first test.
+
+1. On the Windows PC, install **Python 3.10**, **Git**, and **Tailscale**. On Android install Tailscale as well and log in to the **same Tailscale account**. Tailscale Personal is free for individual non-commercial use. Download this repository as ZIP from GitHub and extract it.
+2. Open `server/jarvis-tts-server/` and double-click **Start-Jarvis-Voices.cmd**. On first run it installs the Python libraries and downloads the upstream model (around 446 MB plus dependencies). The program generates a private access code and displays it in the terminal. **Do not share the code**. It is locally stored using your Windows account's DPAPI encryption.
+3. Once the terminal says the server is ready, open another Windows terminal (with administrator rights if your Tailscale installation requires them) and run:
+   ```powershell
+   tailscale serve --bg 8765
+   ```
+   Tailscale displays an HTTPS URL such as `https://my-pc.your-tailnet.ts.net`. You may need to approve HTTPS in your tailnet when prompted. **Do not use Tailscale Funnel**, which makes services publicly accessible.
+4. In the Android Tailscale app, connect. In JARVIS select **🔊 Вибрати голос Джарвіса → Рушій TTS**, set endpoint to **that HTTPS URL + `/tts`**, enter the private access code from Windows, save, and select Дмитро or Лада.
+5. Switch between the voices and speak a test phrase. If the server is offline, Android TTS will be used. To disable Tailscale Serve on Windows, run `tailscale serve off` (or `tailscale serve reset` on newer clients).
+
+**Caution:** These scripts have not been executed on your own Windows PC, so the actual package installation and compatibility must still be verified there. This is a prototype personal setup, not a managed always-on cloud service.
+
 ## 1. Run locally (Windows/Linux)
 
 Python **3.10** is recommended for compatibility with the upstream ESPnet/PyTorch dependencies.
