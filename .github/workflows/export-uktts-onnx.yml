@@ -31,7 +31,7 @@ jobs:
           python -m pip install espnet_onnx espnet_model_zoo onnx onnxruntime pyyaml
           # ESPnet 202301 expects the SciPy 1.x signal API; a newer SciPy removed kaiser.
           # ONNX 1.14.x and protobuf 3.20.x are the compatible legacy export path.
-          python -m pip install 'scipy==1.10.1' 'protobuf==3.20.3' 'onnx==1.14.1' 'onnxruntime==1.20.0'
+          python -m pip install 'scipy==1.10.1' 'protobuf==3.20.3' 'onnx==1.14.1' 'onnxruntime==1.15.1'
           python -m pip check || true
       - name: Real ONNX synthesis of both voices
         run: |
