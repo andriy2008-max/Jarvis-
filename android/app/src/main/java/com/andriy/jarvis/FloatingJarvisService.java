@@ -149,6 +149,7 @@ public final class FloatingJarvisService extends Service {
         p.y = 0;
         windows.addView(face, p);
         showing = true;
+        android.util.Log.i("JARVIS_FLOATING_QA", "orb_shown=true");
         try {
             android.service.quicksettings.TileService.requestListeningState(this,
                 new android.content.ComponentName(this, JarvisQuickTileService.class));
@@ -240,6 +241,7 @@ public final class FloatingJarvisService extends Service {
             listening = true;
             setFace("listening");
             recognizer.startListening(i);
+            android.util.Log.i("JARVIS_FLOATING_QA", "mic_tap_started=true");
         } catch (Exception exception) {
             recording = false;
             listening = false;
@@ -443,6 +445,7 @@ public final class FloatingJarvisService extends Service {
     @Override public void onDestroy() {
         closing = true;
         showing = false;
+        android.util.Log.i("JARVIS_FLOATING_QA", "orb_closed=true");
         recording = false;
         listening = false;
         if (screenModeStartedHere) ScreenControlAccessibilityService.stop();
