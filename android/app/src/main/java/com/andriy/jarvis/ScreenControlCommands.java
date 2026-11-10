@@ -15,9 +15,9 @@ public final class ScreenControlCommands {
     }
 
     private static final Pattern WRITE = Pattern.compile(
-        "^(?iu)напиши(?:[\\s,:—-]+([\\s\\S]*))?$");
+        "(?iu)^напиши(?:[\\s,:—-]+([\\s\\S]*))?$");
     private static final Pattern WAKE = Pattern.compile(
-        "^(?iu)(?:джарвіс|джарвис|jarvis)[\\s,:—-]*");
+        "(?iu)^(?:джарвіс|джарвис|jarvis)[\\s,:—-]*");
 
     private static final Pattern CLICK = Pattern.compile(
         "^(?:натисни|нажми|торкнись|торкнися)(?:\\s+на)?(?:\\s+(?:кнопку|значок|іконку|ікону|символ))?\\s+(.+)$",
