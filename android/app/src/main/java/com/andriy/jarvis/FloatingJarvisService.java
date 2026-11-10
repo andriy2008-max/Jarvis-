@@ -77,6 +77,11 @@ public final class FloatingJarvisService extends Service {
     private boolean screenModeStartedHere;
     private boolean ttsReady;
     private boolean closing;
+    private final StringBuilder speechDraft = new StringBuilder();
+    private String partialSpeech = "";
+    private boolean correctingWord;
+    private Runnable pendingSend;
+    private Runnable correctionRestart;
     private TextToSpeech tts;
     private OfflineVoicePackManager packs;
     private OfflineSpeechClient offline;
@@ -191,7 +196,7 @@ public final class FloatingJarvisService extends Service {
         face.setOnTouchListener(new View.OnTouchListener() {
             float downRawX, downRawY;
             int startingX, startingY;
-            boolean dragging, longPressed;
+            boolean dragging, longPressed, swipingBack, canSwipeFromCenter;
             final int slop = ViewConfiguration.get(FloatingJarvisService.this)
                 .getScaledTouchSlop();
             Runnable holdAction;
@@ -205,6 +210,11 @@ public final class FloatingJarvisService extends Service {
                         startingY = faceParams.y;
                         dragging = false;
                         longPressed = false;
+                        swipingBack = false;
+                        float cx = v.getWidth() / 2f, cy = v.getHeight() / 2f;
+                        float radius = Math.min(v.getWidth(), v.getHeight()) * .33f;
+                        canSwipeFromCenter = JarvisLiveTranscript.canCorrect() &&
+                            Math.hypot(event.getX() - cx, event.getY() - cy) <= radius;
                         holdAction = () -> {
                             if (!dragging && !closing && face != null) {
                                 longPressed = true;
@@ -217,9 +227,14 @@ public final class FloatingJarvisService extends Service {
                         if (longPressed || faceParams == null) return true;
                         float dx = event.getRawX() - downRawX;
                         float dy = event.getRawY() - downRawY;
-                        if (!dragging && Math.hypot(dx, dy) > slop) {
-                            dragging = true;
+                        if (!dragging && !swipingBack && Math.hypot(dx, dy) > slop) {
                             ui.removeCallbacks(holdAction);
+                            if (canSwipeFromCenter && dx < -slop &&
+                                -dx >= Math.abs(dy) * 1.30f) {
+                                swipingBack = true;
+                            } else {
+                                dragging = true;
+                            }
                         }
                         if (dragging && windows != null) {
                             updateDisplayBounds();
@@ -234,7 +249,12 @@ public final class FloatingJarvisService extends Service {
                         return true;
                     case MotionEvent.ACTION_UP:
                         if (holdAction != null) ui.removeCallbacks(holdAction);
-                        if (dragging) persistPosition();
+                        if (swipingBack && !longPressed && !closing) {
+                            float dx = event.getRawX() - downRawX;
+                            float dy = event.getRawY() - downRawY;
+                            if (JarvisTranscriptCorrection.isLeftSwipe(
+                                dx, dy, dp(28))) JarvisLiveTranscript.requestCorrection();
+                        } else if (dragging) persistPosition();
                         else if (!longPressed && !closing) v.performClick();
                         return true;
                     case MotionEvent.ACTION_CANCEL:
@@ -249,6 +269,7 @@ public final class FloatingJarvisService extends Service {
         android.util.Log.i("JARVIS_FLOATING_QA", "orb_window_add_start=true");
         windows.addView(face, faceParams);
         JarvisLiveTranscript.subscribe(transcriptListener);
+        JarvisLiveTranscript.setCorrectionHandler(TRANSCRIPT_OWNER, this::undoHeardWord);
         showing = true;
         android.util.Log.i("JARVIS_FLOATING_QA", "orb_shown=true");
         try {
@@ -323,6 +344,77 @@ public final class FloatingJarvisService extends Service {
         ui.post(() -> Toast.makeText(this, text, Toast.LENGTH_LONG).show());
     }
 
+    private void cancelPendingSend() {
+        if (pendingSend != null) {
+            ui.removeCallbacks(pendingSend);
+            pendingSend = null;
+        }
+    }
+
+    private void cancelCorrectionRestart() {
+        if (correctionRestart != null) {
+            ui.removeCallbacks(correctionRestart);
+            correctionRestart = null;
+        }
+    }
+
+    private void queueSpeechCommand() {
+        cancelPendingSend();
+        JarvisLiveTranscript.update(TRANSCRIPT_OWNER, speechDraft.toString(), false,
+            SystemClock.uptimeMillis());
+        setFace("thinking");
+        pendingSend = this::sendPendingSpeech;
+        ui.postDelayed(pendingSend, 5000L);
+    }
+
+    private void sendPendingSpeech() {
+        cancelPendingSend();
+        cancelCorrectionRestart();
+        String command = speechDraft.toString().trim();
+        speechDraft.setLength(0);
+        partialSpeech = "";
+        correctingWord = false;
+        if (command.isEmpty()) {
+            JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+            setFace("idle");
+            return;
+        }
+        JarvisLiveTranscript.update(TRANSCRIPT_OWNER, command, true,
+            SystemClock.uptimeMillis());
+        executeCommand(command);
+    }
+
+    private void undoHeardWord() {
+        if (closing || aiBusy || (sequences != null && sequences.isRunning())) return;
+        String current = JarvisTranscriptCorrection.join(speechDraft.toString(), partialSpeech);
+        if (current.isEmpty()) return;
+        String restored = JarvisTranscriptCorrection.removeLastWord(current);
+        cancelPendingSend();
+        cancelCorrectionRestart();
+        speechDraft.setLength(0);
+        speechDraft.append(restored);
+        partialSpeech = "";
+        correctingWord = true;
+        // Destroy the recognizer so stale callbacks never re-add a rejected word.
+        SpeechRecognizer previous = recognizer;
+        recognizer = null;
+        if (previous != null) {
+            try { previous.cancel(); previous.destroy(); }
+            catch (Exception ignored) { }
+        }
+        recording = false;
+        listening = false;
+        JarvisLiveTranscript.update(TRANSCRIPT_OWNER, restored, false,
+            SystemClock.uptimeMillis());
+        setFace("listening");
+        message("Слово прибрано. Повтори його ще раз.");
+        correctionRestart = () -> {
+            correctionRestart = null;
+            if (!closing && correctingWord) beginFloatingListening(true);
+        };
+        ui.postDelayed(correctionRestart, 550L);
+    }
+
     private void toggleListening() {
         if (closing) return;
         if (sequences != null && sequences.isRunning()) {
@@ -333,6 +425,10 @@ public final class FloatingJarvisService extends Service {
             message("Джарвіс ще опрацьовує попередню команду.");
             return;
         }
+        if (pendingSend != null) {
+            sendPendingSpeech();
+            return;
+        }
         if (recording) {
             if (recognizer != null && listening) {
                 listening = false;
@@ -341,6 +437,12 @@ public final class FloatingJarvisService extends Service {
             }
             return;
         }
+        cancelCorrectionRestart();
+        beginFloatingListening(correctingWord);
+    }
+
+    private void beginFloatingListening(boolean continuation) {
+        if (closing) return;
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED) {
             message("Дозволь Джарвісу користуватися мікрофоном.");
@@ -371,39 +473,70 @@ public final class FloatingJarvisService extends Service {
                     @Override public void onError(int error) {
                         recording = false;
                         listening = false;
-                        JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-                        setFace("idle");
-                        if (!closing) message("Не почув команди. Натисни обличчя ще раз.");
+                        partialSpeech = "";
+                        if (correctingWord) {
+                            JarvisLiveTranscript.update(TRANSCRIPT_OWNER,
+                                speechDraft.toString(), false, SystemClock.uptimeMillis());
+                            setFace("idle");
+                            if (!closing) message("Не почув слово. Натисни обличчя, щоб повторити.");
+                        } else {
+                            JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+                            setFace("idle");
+                            if (!closing) message("Не почув команди. Натисни обличчя ще раз.");
+                        }
                     }
                     @Override public void onResults(Bundle results) {
                         recording = false;
                         listening = false;
-                        setFace("thinking");
-                        java.util.ArrayList<String> list =
+                        partialSpeech = "";
+                        ArrayList<String> list = results == null ? null :
                             results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                        if (list == null || list.isEmpty() || list.get(0).trim().isEmpty()) {
-                            JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-                            setFace("idle");
-                            message("Не почув команди. Спробуй ще раз.");
+                        if (list == null || list.isEmpty() || list.get(0) == null ||
+                            list.get(0).trim().isEmpty()) {
+                            if (correctingWord) {
+                                JarvisLiveTranscript.update(TRANSCRIPT_OWNER,
+                                    speechDraft.toString(), false, SystemClock.uptimeMillis());
+                                setFace("idle");
+                                message("Не почув слово. Натисни обличчя, щоб повторити.");
+                            } else {
+                                JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+                                setFace("idle");
+                                message("Не почув команди. Спробуй ще раз.");
+                            }
                             return;
                         }
-                        JarvisLiveTranscript.update(TRANSCRIPT_OWNER, list.get(0), true,
-                            SystemClock.uptimeMillis());
-                        executeCommand(list.get(0));
+                        String combined = JarvisTranscriptCorrection.join(
+                            speechDraft.toString(), list.get(0));
+                        speechDraft.setLength(0);
+                        speechDraft.append(combined);
+                        correctingWord = false;
+                        queueSpeechCommand();
                     }
                     @Override public void onPartialResults(Bundle results) {
                         if (!recording || closing || results == null) return;
                         ArrayList<String> heard =
                             results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
-                        if (heard != null && !heard.isEmpty() && heard.get(0) != null)
-                            JarvisLiveTranscript.update(TRANSCRIPT_OWNER, heard.get(0), false,
+                        if (heard != null && !heard.isEmpty() && heard.get(0) != null) {
+                            partialSpeech = heard.get(0).trim();
+                            JarvisLiveTranscript.update(TRANSCRIPT_OWNER,
+                                JarvisTranscriptCorrection.join(
+                                    speechDraft.toString(), partialSpeech), false,
                                 SystemClock.uptimeMillis());
+                        }
                     }
                     @Override public void onEvent(int type, Bundle params) {}
                 });
             }
             stopSpeech();
-            JarvisLiveTranscript.begin(TRANSCRIPT_OWNER);
+            partialSpeech = "";
+            if (!continuation) {
+                speechDraft.setLength(0);
+                correctingWord = false;
+                JarvisLiveTranscript.begin(TRANSCRIPT_OWNER);
+            } else {
+                JarvisLiveTranscript.update(TRANSCRIPT_OWNER, speechDraft.toString(),
+                    false, SystemClock.uptimeMillis());
+            }
             Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
             i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                 RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
@@ -421,7 +554,7 @@ public final class FloatingJarvisService extends Service {
         } catch (Exception exception) {
             recording = false;
             listening = false;
-            JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+            if (!correctingWord) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
             setFace("idle");
             message("Не вдалося ввімкнути мікрофон. Повтори натискання.");
         }
@@ -740,6 +873,8 @@ public final class FloatingJarvisService extends Service {
         android.util.Log.i("JARVIS_FLOATING_QA", "orb_closed=true");
         recording = false;
         listening = false;
+        cancelPendingSend();
+        cancelCorrectionRestart();
         if (sequences != null) sequences.cancel();
         if (screenModeStartedHere) ScreenControlAccessibilityService.stop();
         if (recognizer != null) {
@@ -748,6 +883,7 @@ public final class FloatingJarvisService extends Service {
             recognizer = null;
         }
         ui.removeCallbacksAndMessages(null);
+        JarvisLiveTranscript.setCorrectionHandler(TRANSCRIPT_OWNER, null);
         JarvisLiveTranscript.unsubscribe(transcriptListener);
         JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
         if (face != null && windows != null) {
