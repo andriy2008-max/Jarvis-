@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "ready": false,
+  "format": "jarvis-espnet-onnx-v1",
+  "voices": ["dmytro", "lada"],
+  "url": "",
+  "sha256": "",
+  "notes": "Do not mark ready until a real ONNX export of both speakers and Android inference tests pass."
+}
