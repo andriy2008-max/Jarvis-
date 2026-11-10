@@ -888,8 +888,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             ? "ONNX-пакет збережено. Офлайн-синтез увімкнеться під час наступної відповіді; потрібна перевірка реального звучання на пристрої."
             : "Пакет ще не встановлено. Потрібен конвертований ONNX ZIP, не оригінальний model.pth.";
         TextView description = makeText(
-            state + "\nОбидва голоси використовують одну модель. Для безпечного встановлення потрібне " +
-            "HTTPS-посилання та SHA-256 від перевіреного випуску. Сам пакет не входить до APK.",
+            state + "\nНатисни «Завантажити». Джарвіс сам перевірить офіційний пакет та SHA-256. " +
+            "Поля нижче потрібні лише для ручного встановлення експериментального пакета.",
             13, MUTED, Gravity.START, false);
         form.addView(description, new LinearLayout.LayoutParams(-1, -2));
 
@@ -922,13 +922,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
             install.setOnClickListener(v -> {
                 String url = link.getText().toString().trim();
                 String hash = sha.getText().toString().trim();
-                if (!OfflineVoicePackRules.validUrl(url) || !OfflineVoicePackRules.validSha256(hash)) {
-                    progress.setText("Наразі немає готового випуску. Потрібні справжні HTTPS URL та SHA-256 ONNX-пакета.");
+                boolean automatic = url.isEmpty() && hash.isEmpty();
+                if (!automatic &&
+                    (!OfflineVoicePackRules.validUrl(url) || !OfflineVoicePackRules.validSha256(hash))) {
+                    progress.setText("Для ручного завантаження потрібні HTTPS ZIP та правильний SHA-256. Або залиш поля порожніми.");
                     return;
                 }
                 install.setEnabled(false);
-                progress.setText("Завантаження: 0%. Не закривай Джарвіса до завершення.");
-                offlinePacks.install(url, hash, new OfflineVoicePackManager.Callback() {
+                progress.setText("Перевіряю офіційний випуск. Не закривай Джарвіса до завершення.");
+                OfflineVoicePackManager.Callback callback = new OfflineVoicePackManager.Callback() {
                     @Override public void onProgress(int percentage) {
                         if (!isFinishing() && !isDestroyed())
                             progress.setText("Завантаження: " + percentage + "%. Після нього буде перевірка файлів.");
@@ -939,7 +941,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         setStatus(message);
                         install.setEnabled(true);
                     }
-                });
+                };
+                if (automatic) offlinePacks.installOfficial(callback);
+                else offlinePacks.install(url, hash, callback);
             });
         });
         showDialogWithoutWake(dialog);
