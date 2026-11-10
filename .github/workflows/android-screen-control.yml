@@ -1,0 +1,72 @@
+name: Android screen control integration (test only)
+
+# Only temporary debug APKs for CI; does not sign or release Jarvis.
+on:
+  push:
+    paths:
+      - '.github/workflows/android-screen-control.yml'
+      - 'android/app/src/androidTest/java/com/andriy/jarvis/ScreenControl*'
+      - 'android/app/src/androidTest/AndroidManifest.xml'
+      - 'android/app/src/main/java/com/andriy/jarvis/ScreenControl*'
+      - 'android/app/src/main/AndroidManifest.xml'
+      - 'android/app/src/main/res/xml/jarvis_screen_accessibility.xml'
+      - 'android/app/src/main/res/values/strings.xml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ui-accessibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [30, 35]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build temporary debug and instrumentation APKs
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+          gradle -p android --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Enable KVM acceleration
+        run: |
+          test -e /dev/kvm && sudo chmod 666 /dev/kvm
+      - name: Run explicit-accessibility-mode test against separate test app
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_4
+          ram-size: 3072M
+          disk-size: 4096M
+          heap-size: 512M
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            adb wait-for-device
+            adb root
+            adb wait-for-device
+            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+            adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            # CI-only equivalent of user's manual Accessibility settings toggle.
+            adb shell settings put secure enabled_accessibility_services com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlAccessibilityService
+            adb shell settings put secure accessibility_enabled 1
+            adb shell am start -n com.andriy.jarvis.preview.test/com.andriy.jarvis.ScreenControlTestTarget
+            adb shell am instrument -w -r -e class com.andriy.jarvis.ScreenControlInstrumentedTest com.andriy.jarvis.preview.test/androidx.test.runner.AndroidJUnitRunner | tee /tmp/screen-control-test.log
+            grep -q 'OK (1 test)' /tmp/screen-control-test.log
+            adb logcat -d -s AccessibilityManagerService:E AndroidRuntime:E '*:S'
+      - name: Report test failure
+        if: failure()
+        run: |
+          test ! -f /tmp/screen-control-test.log || cat /tmp/screen-control-test.log
