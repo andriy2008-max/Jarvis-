@@ -143,6 +143,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private boolean speaking = false;
     private boolean isCompact = false;
     private boolean isWatchDevice = false;
+    private JarvisWearPhoneLink watchPhoneLink;
     private final Runnable phoneModeListener = () -> runOnUiThread(() -> {
         if (isFinishing() || isDestroyed()) return;
         if (face != null) {
@@ -165,6 +166,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         getWindow().setNavigationBarColor(BG);
         if (state != null) pendingTimerSeconds = state.getInt("pending_timer_seconds", 0);
         isWatchDevice = getPackageManager().hasSystemFeature(PackageManager.FEATURE_WATCH);
+        if (isWatchDevice) watchPhoneLink = new JarvisWearPhoneLink(this);
         isCompact = getResources().getConfiguration().smallestScreenWidthDp < 360;
         voiceEnabled = getPreferences(MODE_PRIVATE).getBoolean("voiceEnabled", true);
         autoWakeEnabled = getPreferences(MODE_PRIVATE).getBoolean("autoWakeEnabled", true);
@@ -2792,6 +2794,17 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 "🎙️ Говорити з Джарвісом");
         JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
         wakeConversation.end();
+        if (isWatchDevice) {
+            if (watchPhoneLink != null) {
+                watchPhoneLink.exit((ok, detail) -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    appendDialogue("Джарвіс", detail);
+                    setStatus(detail);
+                    if (!ok && voiceEnabled) speakReply(detail);
+                });
+            } else JarvisPhoneMode.setActive(false);
+            return;
+        }
         String result = JarvisPhoneModeManager.exit();
         appendDialogue("Джарвіс", result);
         setStatus(result);
@@ -2800,6 +2813,40 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private void processCommand(String raw) {
         if (raw == null || raw.trim().isEmpty()) return;
         JarvisPhoneMode.Transition modeTransition = JarvisPhoneMode.transition(raw);
+        if (isWatchDevice) {
+            if (modeTransition == JarvisPhoneMode.Transition.ENTER) {
+                if (watchPhoneLink == null) {
+                    setStatus("На годиннику немає з'єднання з телефоном.");
+                    return;
+                }
+                watchPhoneLink.enter((ok, detail) -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    appendDialogue("Джарвіс", detail);
+                    setStatus(detail);
+                    if (!ok && voiceEnabled) speakReply(detail);
+                });
+                return;
+            }
+            if (modeTransition == JarvisPhoneMode.Transition.EXIT &&
+                JarvisPhoneMode.isActive()) {
+                exitPhoneMode();
+                return;
+            }
+            if (JarvisPhoneMode.isActive()) {
+                if (watchPhoneLink == null) {
+                    JarvisPhoneMode.setActive(false);
+                    setStatus("Зв'язок із телефоном втрачено.");
+                    return;
+                }
+                watchPhoneLink.command(raw,(ok, detail) -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    appendDialogue("Джарвіс", detail);
+                    setStatus(detail);
+                    if (!ok && voiceEnabled) speakReply(detail);
+                });
+                return;
+            }
+        }
         if (modeTransition == JarvisPhoneMode.Transition.ENTER) {
             String result = JarvisPhoneModeManager.enter(this,
                 FloatingJarvisService.isShowing());
@@ -3134,6 +3181,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     @Override
     protected void onDestroy() {
         JarvisPhoneMode.unsubscribe(phoneModeListener);
+        if (watchPhoneLink != null) watchPhoneLink.close();
         JarvisLiveTranscript.setCorrectionHandler(TRANSCRIPT_OWNER, null);
         JarvisLiveTranscript.unsubscribe(transcriptListener);
         cancelPendingWakeCommand();
@@ -3242,14 +3290,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
             canvas.drawCircle(cx, cy, orb, paint);
 
             paint.setStyle(Paint.Style.FILL);
-            if (JarvisPhoneMode.isActive()) {
-                JarvisPixelPhone.draw(canvas, paint, cx, cy, orb * .076f);
-                postInvalidateDelayed(380L);
-                return;
-            }
             if (transcriptVisible() && !"speaking".equals(expression)) {
                 drawTranscript(canvas, cx, cy, orb);
                 postInvalidateDelayed(180);
+                return;
+            }
+            if (JarvisPhoneMode.isActive()) {
+                JarvisPixelPhone.draw(canvas, paint, cx, cy, orb * .076f);
+                postInvalidateDelayed(380L);
                 return;
             }
             // Match the web SVG sprite: 16x16 grid with a roughly 90/148 face/orb ratio.
