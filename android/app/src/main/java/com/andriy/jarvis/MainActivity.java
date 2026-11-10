@@ -350,7 +350,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
         topbar.addView(brand);
 
-        TextView version = makeText("● V 0.1.10", isCompact ? 11 : 12, GREEN, Gravity.CENTER, false);
+        TextView version = makeText("● V 0.1.11", isCompact ? 11 : 12, GREEN, Gravity.CENTER, false);
         version.setBackground(roundedFill(Color.TRANSPARENT, Color.rgb(43, 131, 108), 99));
         version.setPadding(dp(10), dp(6), dp(10), dp(6));
         if (!isWatchDevice) topbar.addView(version);
@@ -582,7 +582,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         noteHintParams.topMargin = dp(12);
         notesPanel.addView(noteHint, noteHintParams);
 
-        TextView footer = makeText("JARVIS 0.1.10 • Вільна розмова із ШІ після підключення сервера. Активація «Джарвіс» доступна лише у відкритій програмі за підтримки локального розпізнавання Android.",
+        TextView footer = makeText("JARVIS 0.1.11 • Вільна розмова із ШІ після підключення сервера. Активація «Джарвіс» доступна лише у відкритій програмі за підтримки локального розпізнавання Android.",
             isCompact ? 11 : 12, Color.rgb(127, 154, 184), Gravity.CENTER, false);
         footer.setLineSpacing(0f, 1.25f);
         LinearLayout.LayoutParams footerParams = new LinearLayout.LayoutParams(-1, -2);
@@ -694,32 +694,46 @@ public final class MainActivity extends Activity implements RecognitionListener 
         return voices;
     }
 
+    private Voice voiceForProfile(ArrayList<Voice> available, String profile) {
+        for (Voice voice : available) {
+            if (VoiceRanking.matchesProfile(voice.getName(), profile)) return voice;
+        }
+        return null;
+    }
+
+    private String selectedVoiceProfile() {
+        return VoiceRanking.profile(
+            getPreferences(MODE_PRIVATE).getString("jarvisVoiceProfile", VoiceRanking.DMYTRO));
+    }
+
+    private String profileLabel(String profile) {
+        return VoiceRanking.LADA.equals(profile) ? "Лада" : "Дмитро";
+    }
+
     private void applyPreferredVoice() {
         if (tts == null || !ttsReady) return;
-        String preferred = getPreferences(MODE_PRIVATE).getString("jarvisVoiceName", "");
         ArrayList<Voice> available = ukrainianVoices();
-        Voice chosen = null;
-        if (!preferred.isEmpty()) {
-            for (Voice voice : available) {
-                if (preferred.equals(voice.getName())) {
-                    chosen = voice;
-                    break;
-                }
-            }
-        }
-        if (chosen == null && !available.isEmpty()) chosen = available.get(0);
-        boolean clearlyMale = chosen != null &&
-            (VoiceRanking.labeledMale(chosen.getName()) ||
-             VoiceRanking.preferredVladimir(chosen.getName()));
+        String profile = selectedVoiceProfile();
+        Voice namedVoice = voiceForProfile(available, profile);
+        // Ukrainian TTS (robinhad) is not an Android TTS engine. Exact voices need
+        // a separate native model integration or a system TTS engine exposing them.
+        Voice chosen = namedVoice != null ? namedVoice :
+            (available.isEmpty() ? null : available.get(0));
         if (chosen != null) {
             try { tts.setVoice(chosen); } catch (RuntimeException ignored) { }
         } else {
             tts.setLanguage(Locale.forLanguageTag("uk-UA"));
         }
-        // A mild pitch adjustment when no explicitly male voice is available.
-        // This is only a fallback: lowering pitch does NOT turn female TTS into a true male voice.
-        tts.setPitch(clearlyMale ? 1.0f : 0.86f);
+        boolean knownProfile = chosen != null &&
+            (VoiceRanking.matchesProfile(chosen.getName(), VoiceRanking.DMYTRO) ||
+             VoiceRanking.matchesProfile(chosen.getName(), VoiceRanking.LADA));
+        boolean clearlyMale = chosen != null && VoiceRanking.labeledMale(chosen.getName());
+        tts.setPitch((knownProfile || clearlyMale) ? 1.0f : 0.86f);
         tts.setSpeechRate(0.94f);
+        if (namedVoice == null) {
+            setStatus("Голос " + profileLabel(profile) +
+                " не підключений. Тимчасово використовується системне українське озвучення.");
+        }
     }
 
     private void previewCurrentVoice() {
@@ -745,40 +759,60 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
     }
 
+    private void openOriginalVoicePreview(String profile) {
+        String url = VoiceRanking.LADA.equals(profile)
+            ? "https://github.com/robinhad/ukrainian-tts/assets/5759207/fcf558b2-3ff9-4539-ad9e-8455b52223a4"
+            : "https://github.com/robinhad/ukrainian-tts/assets/5759207/67d3dac9-6626-40ef-98e5-ec194096bbe0";
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)));
+        } catch (Exception ignored) {
+            setStatus("Не вдалося відкрити приклад голосу " + profileLabel(profile) + ".");
+        }
+    }
+
+    private void showVoiceUnavailable(String profile) {
+        String label = profileLabel(profile);
+        AlertDialog alert = new AlertDialog.Builder(this)
+            .setTitle(label + " — поки недоступний")
+            .setMessage("Голос " + label + " є у безкоштовній Ukrainian TTS, але ця модель " +
+                "ще не підключена до Android-озвучення Джарвіса. Вибір збережено; " +
+                "тимчасово відповідатиме інший доступний український голос. " +
+                "Прослуховування оригіналу відкриє браузер.")
+            .setNegativeButton("Закрити", null)
+            .setNeutralButton("Голоси Android", (d, w) -> openSystemVoiceSettings())
+            .setPositiveButton("Зразок " + label, (d, w) -> openOriginalVoicePreview(profile))
+            .create();
+        showDialogWithoutWake(alert);
+    }
+
+    private void selectVoiceProfile(String requested) {
+        String profile = VoiceRanking.profile(requested);
+        getPreferences(MODE_PRIVATE).edit().putString("jarvisVoiceProfile", profile).apply();
+        applyPreferredVoice();
+        if (ttsReady && voiceForProfile(ukrainianVoices(), profile) != null) {
+            setStatus("Голос Джарвіса: " + profileLabel(profile) + ".");
+            previewCurrentVoice();
+        } else {
+            showVoiceUnavailable(profile);
+        }
+    }
+
     private void showVoiceSettings() {
-        if (tts == null || !ttsReady) {
-            new AlertDialog.Builder(this)
-                .setTitle("Голос Джарвіса")
-                .setMessage("Служба озвучення Android ще не готова. Перевір налаштування синтезу мовлення.")
-                .setNegativeButton("Закрити", null)
-                .setPositiveButton("Налаштування Android", (d, which) -> openSystemVoiceSettings())
-                .show();
-            return;
-        }
         ArrayList<Voice> available = ukrainianVoices();
-        String[] labels = new String[available.size() + 1];
-        labels[0] = "Автоматично — Володимир (RHVoice), якщо доступний";
-        int checked = 0;
-        String preference = getPreferences(MODE_PRIVATE).getString("jarvisVoiceName", "");
-        for (int i = 0; i < available.size(); i++) {
-            Voice v = available.get(i);
-            String label = v.getName() +
-                (VoiceRanking.preferredVladimir(v.getName()) ? " · обраний голос" :
-                 VoiceRanking.labeledMale(v.getName()) ? " · чоловічий" : "") +
-                (v.isNetworkConnectionRequired() ? " · мережевий" : " · локальний");
-            labels[i + 1] = label;
-            if (v.getName().equals(preference)) checked = i + 1;
-        }
+        boolean hasDmytro = voiceForProfile(available, VoiceRanking.DMYTRO) != null;
+        boolean hasLada = voiceForProfile(available, VoiceRanking.LADA) != null;
+        String[] labels = {
+            "Дмитро — чоловічий · " + (hasDmytro ? "готовий" : "модель не підключена"),
+            "Лада — жіночий · " + (hasLada ? "готова" : "модель не підключена")
+        };
+        int checked = VoiceRanking.LADA.equals(selectedVoiceProfile()) ? 1 : 0;
         AlertDialog dialog = new AlertDialog.Builder(this)
-            .setTitle("Український голос Джарвіса")
+            .setTitle("Українські голоси Джарвіса")
             .setSingleChoiceItems(labels, checked, (d, which) -> {
-                String selected = which == 0 ? "" : available.get(which - 1).getName();
-                getPreferences(MODE_PRIVATE).edit().putString("jarvisVoiceName", selected).apply();
-                applyPreferredVoice();
-                previewCurrentVoice();
+                selectVoiceProfile(which == 1 ? VoiceRanking.LADA : VoiceRanking.DMYTRO);
             })
             .setNegativeButton("Закрити", null)
-            .setNeutralButton("Голоси Android", (d, which) -> openSystemVoiceSettings())
+            .setNeutralButton("Голоси Android", (d, w) -> openSystemVoiceSettings())
             .create();
         showDialogWithoutWake(dialog);
     }
@@ -800,7 +834,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private void showWatchActions() {
         final String[] actions = {
             "Підключення до ШІ", "Новий діалог", "Показати нотатки",
-            "Що ти вмієш?", "Введення текстом", "Голосова активація", "Чоловічий голос"
+            "Що ти вмієш?", "Введення текстом", "Голосова активація", "Дмитро / Лада"
         };
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Джарвіс — дії")
             .setItems(actions, (d, which) -> {
@@ -1774,6 +1808,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
             reply = setMusicVolume(AudioManager.ADJUST_RAISE);
         } else if (command.equals("тихіше") || command.equals("зроби тихіше") || command.equals("зменш гучність")) {
             reply = setMusicVolume(AudioManager.ADJUST_LOWER);
+        } else if (command.equals("голос дмитро") || command.equals("голос дмитра") ||
+            command.equals("вибери дмитра") || command.equals("увімкни дмитра")) {
+            selectVoiceProfile(VoiceRanking.DMYTRO);
+            return;
+        } else if (command.equals("голос лада") || command.equals("голос лади") ||
+            command.equals("вибери ладу") || command.equals("увімкни ладу")) {
+            selectVoiceProfile(VoiceRanking.LADA);
+            return;
         } else if (command.equals("зміни голос") || command.equals("чоловічий голос") ||
             command.equals("налаштуй голос") || command.equals("вибери голос")) {
             showVoiceSettings();

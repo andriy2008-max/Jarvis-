@@ -2,8 +2,11 @@ package com.andriy.jarvis;
 
 import java.util.Locale;
 
-/** Language-first best effort voice selection. Android Voice exposes NO gender metadata. */
+/** Ukrainian system TTS ranking; Android does not expose voice gender metadata. */
 public final class VoiceRanking {
+    public static final String DMYTRO = "dmytro";
+    public static final String LADA = "lada";
+
     private VoiceRanking() {}
 
     public static boolean ukrainian(String languageTag) {
@@ -14,9 +17,9 @@ public final class VoiceRanking {
 
     private static boolean token(String name, String token) {
         if (name == null) return false;
-        String n = name.toLowerCase(Locale.ROOT);
-        // Android engines are not required to label gender in the voice name.
-        return ("-" + n.replaceAll("[^\\p{L}]+", "-") + "-").contains("-" + token + "-");
+        String normalized = name.toLowerCase(Locale.ROOT);
+        return ("-" + normalized.replaceAll("[^\\p{L}]+", "-") + "-")
+            .contains("-" + token + "-");
     }
 
     public static boolean labeledMale(String voiceName) {
@@ -25,22 +28,31 @@ public final class VoiceRanking {
              token(voiceName, "masculine") || token(voiceName, "чоловічий"));
     }
 
-    public static boolean preferredVladimir(String voiceName) {
+    public static String profile(String candidate) {
+        return LADA.equalsIgnoreCase(candidate) ? LADA : DMYTRO;
+    }
+
+    /** Only treat a voice as a named profile when its Android TTS name identifies it. */
+    public static boolean matchesProfile(String voiceName, String wantedProfile) {
         if (voiceName == null) return false;
-        String normalized = voiceName.toLowerCase(Locale.ROOT);
-        return normalized.contains("volodymyr") || normalized.contains("vladimir") ||
-            normalized.contains("володимир") || normalized.contains("владимир");
+        String name = voiceName.toLowerCase(Locale.ROOT);
+        if (LADA.equals(profile(wantedProfile))) {
+            return name.contains("lada") || name.contains("лада");
+        }
+        return name.contains("dmytro") || name.contains("dmitro") ||
+            name.contains("дмитро");
     }
 
     public static int score(String languageTag, String voiceName,
                             boolean networkRequired, int quality) {
         if (!ukrainian(languageTag)) return Integer.MIN_VALUE;
         int score = 100 + quality;
-        if (preferredVladimir(voiceName)) score += 20_000;
         if (languageTag != null &&
             languageTag.replace('_', '-').equalsIgnoreCase("uk-UA")) score += 50;
         if (!networkRequired) score += 30;
         if (labeledMale(voiceName)) score += 10_000;
+        if (matchesProfile(voiceName, DMYTRO)) score += 20_000;
+        if (matchesProfile(voiceName, LADA)) score += 19_000;
         if (token(voiceName, "female") || token(voiceName, "woman")) score -= 500;
         return score;
     }

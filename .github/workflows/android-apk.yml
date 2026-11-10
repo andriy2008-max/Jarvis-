@@ -130,18 +130,18 @@ jobs:
           fi
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" > "$RUNNER_TEMP/jarvis-badging.txt"
           grep -Fq "package: name='$package'" "$RUNNER_TEMP/jarvis-badging.txt"
-          grep -Fq "versionCode='20'" "$RUNNER_TEMP/jarvis-badging.txt"
-          grep -Fq "versionName='0.1.10'" "$RUNNER_TEMP/jarvis-badging.txt"
+          grep -Fq "versionCode='21'" "$RUNNER_TEMP/jarvis-badging.txt"
+          grep -Fq "versionName='0.1.11'" "$RUNNER_TEMP/jarvis-badging.txt"
           mkdir -p android/dist
-          cp "$apk" "android/dist/JARVIS-0.1.10-$variant.apk"
-          (cd android/dist && sha256sum "JARVIS-0.1.10-$variant.apk" > "JARVIS-0.1.10-$variant.sha256")
+          cp "$apk" "android/dist/JARVIS-0.1.11-$variant.apk"
+          (cd android/dist && sha256sum "JARVIS-0.1.11-$variant.apk" > "JARVIS-0.1.11-$variant.sha256")
       - name: Upload verified APK as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: JARVIS-0.1.10-${{ inputs.variant }}-APK
+          name: JARVIS-0.1.11-${{ inputs.variant }}-APK
           path: |
-            android/dist/JARVIS-0.1.10-${{ inputs.variant }}.apk
-            android/dist/JARVIS-0.1.10-${{ inputs.variant }}.sha256
+            android/dist/JARVIS-0.1.11-${{ inputs.variant }}.apk
+            android/dist/JARVIS-0.1.11-${{ inputs.variant }}.sha256
           if-no-files-found: error
       - name: Publish stable signed APK to direct GitHub release
         if: inputs.variant == 'stable'
@@ -150,18 +150,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          test -s 'android/dist/JARVIS-0.1.10-stable.apk'
+          test -s 'android/dist/JARVIS-0.1.11-stable.apk'
           # A version tag is immutable: do not overwrite older release packages.
-          if gh release view 'v0.1.10' --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            echo "::error::Release v0.1.10 already exists. Bump versionCode and versionName for future updates."
+          if gh release view 'v0.1.11' --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error::Release v0.1.11 already exists. Bump versionCode and versionName for future updates."
             exit 1
           fi
-          gh release create 'v0.1.10' \
-            'android/dist/JARVIS-0.1.10-stable.apk' \
-            'android/dist/JARVIS-0.1.10-stable.sha256' \
+          gh release create 'v0.1.11' \
+            'android/dist/JARVIS-0.1.11-stable.apk' \
+            'android/dist/JARVIS-0.1.11-stable.sha256' \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title 'JARVIS 0.1.10 — stable signed Android' \
+            --title 'JARVIS 0.1.11 — stable signed Android' \
             --notes 'Стабільний APK з постійним підписом та ID com.andriy.jarvis.stable. Збережи нотатки з попередніх тестових копій до їх видалення. Наступні stable-версії з більшим versionCode та тим самим сертифікатом оновлюватимуть цей застосунок.' \
             --prerelease
       - name: Clean up signing material

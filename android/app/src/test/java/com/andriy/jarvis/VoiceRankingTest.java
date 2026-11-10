@@ -6,6 +6,7 @@ public final class VoiceRankingTest {
         checks++;
         if (!value) throw new AssertionError("VoiceRanking #" + checks);
     }
+
     public static void main(String[] args) {
         ok(VoiceRanking.ukrainian("uk-UA"));
         ok(VoiceRanking.ukrainian("UK_ua"));
@@ -16,15 +17,23 @@ public final class VoiceRankingTest {
         ok(VoiceRanking.labeledMale("uk_ua_masculine"));
         ok(!VoiceRanking.labeledMale("uk-UA-Female"));
         ok(!VoiceRanking.labeledMale("uk-UA-x-ukd-local"));
-        ok(VoiceRanking.score("uk-UA", "uk-UA-Male", true, 300)
-            > VoiceRanking.score("uk-UA", "uk-UA-female", false, 400));
-        ok(VoiceRanking.preferredVladimir("Vladimir"));
-        ok(VoiceRanking.preferredVladimir("uk-UA-Volodymyr"));
-        ok(VoiceRanking.preferredVladimir("Володимир"));
-        ok(!VoiceRanking.preferredVladimir("Anatol"));
-        ok(VoiceRanking.score("uk-UA", "Vladimir", false, 200)
+        ok(VoiceRanking.profile(null).equals("dmytro"));
+        ok(VoiceRanking.profile("DMyTrO").equals("dmytro"));
+        ok(VoiceRanking.profile("LADA").equals("lada"));
+        ok(VoiceRanking.profile("unknown").equals("dmytro"));
+        ok(VoiceRanking.matchesProfile("uk-UA-Dmytro", VoiceRanking.DMYTRO));
+        ok(VoiceRanking.matchesProfile("uk-UA-Дмитро", VoiceRanking.DMYTRO));
+        ok(VoiceRanking.matchesProfile("uk-UA-Dmitro", VoiceRanking.DMYTRO));
+        ok(VoiceRanking.matchesProfile("uk-UA-Lada", VoiceRanking.LADA));
+        ok(VoiceRanking.matchesProfile("uk-UA-Лада", VoiceRanking.LADA));
+        ok(!VoiceRanking.matchesProfile("uk-UA-Lada", VoiceRanking.DMYTRO));
+        ok(!VoiceRanking.matchesProfile("uk-UA-Dmytro", VoiceRanking.LADA));
+        ok(!VoiceRanking.matchesProfile(null, VoiceRanking.LADA));
+        ok(VoiceRanking.score("uk-UA", "Dmytro", false, 200)
             > VoiceRanking.score("uk-UA", "male", false, 400));
-        ok(VoiceRanking.score("en-US", "male", false, 400) == Integer.MIN_VALUE);
+        ok(VoiceRanking.score("uk-UA", "Lada", false, 200)
+            > VoiceRanking.score("uk-UA", "male", false, 400));
+        ok(VoiceRanking.score("en-US", "Dmytro", false, 400) == Integer.MIN_VALUE);
         ok(VoiceRanking.score("uk-UA", "neural", false, 300)
             > VoiceRanking.score("uk-UA", "neural", true, 300));
         ok(VoiceRanking.score("uk-UA", "normal", false, 400)
