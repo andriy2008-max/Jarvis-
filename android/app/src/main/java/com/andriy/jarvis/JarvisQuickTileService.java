@@ -11,6 +11,7 @@ import android.service.quicksettings.TileService;
 public final class JarvisQuickTileService extends TileService {
     @Override public void onStartListening() {
         super.onStartListening();
+        android.util.Log.i("JARVIS_FLOATING_QA", "tile_listening=true");
         Tile tile = getQsTile();
         if (tile == null) return;
         tile.setState(FloatingJarvisService.isShowing()
