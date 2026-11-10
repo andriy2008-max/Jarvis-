@@ -85,6 +85,7 @@ public final class FloatingJarvisService extends Service {
             return START_NOT_STICKY;
         }
         if (!ACTION_SHOW.equals(intent.getAction()) || closing) return START_NOT_STICKY;
+        android.util.Log.i("JARVIS_FLOATING_QA", "service_onstart=true");
         if (!Settings.canDrawOverlays(this) ||
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             Toast.makeText(this, "Надай дозволи плаваючого вікна та мікрофона Джарвісу.",
@@ -115,8 +116,10 @@ public final class FloatingJarvisService extends Service {
             } else {
                 startForeground(NOTIFICATION, notification);
             }
+            android.util.Log.i("JARVIS_FLOATING_QA", "foreground_started=true");
             showFace();
         } catch (Exception error) {
+            android.util.Log.e("JARVIS_FLOATING_QA", "orb_start_failed", error);
             Toast.makeText(this, "Не вдалося відкрити плаваючий Джарвіс. Перевір дозволи Android.",
                 Toast.LENGTH_LONG).show();
             stopSelf();
@@ -150,6 +153,7 @@ public final class FloatingJarvisService extends Service {
         p.gravity = Gravity.END | Gravity.CENTER_VERTICAL;
         p.x = dp(8);
         p.y = 0;
+        android.util.Log.i("JARVIS_FLOATING_QA", "orb_window_add_start=true");
         windows.addView(face, p);
         showing = true;
         android.util.Log.i("JARVIS_FLOATING_QA", "orb_shown=true");
