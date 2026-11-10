@@ -44,6 +44,18 @@
         android:usesCleartextTraffic="false"
         android:allowBackup="true"
         android:supportsRtl="true">
+        <!-- Data Layer: same package and signing key on watch + phone required.
+             Only the phone handles /request; the watch listens for /reply in foreground. -->
+        <service
+            android:name=".JarvisWearMessageReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data android:scheme="wear" android:host="*"
+                      android:path="/jarvis/phone-control/v1/request" />
+            </intent-filter>
+        </service>
+
         <!-- Android Quick Settings: pressing the tile opens only the circular overlay. -->
         <service
             android:name=".JarvisQuickTileService"
