@@ -7,6 +7,8 @@ on:
       - 'server/jarvis-tts-server/**'
       - 'android/app/src/main/java/com/andriy/jarvis/NeuralSpeechPolicy.java'
       - 'android/app/src/main/java/com/andriy/jarvis/NeuralSpeechClient.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/CommandPatternsTest.java'
       - 'android/app/src/main/java/com/andriy/jarvis/OfflineVoicePackRules.java'
       - 'android/app/src/main/java/com/andriy/jarvis/OfflineVoicePackManager.java'
       - 'android/app/src/main/java/com/andriy/jarvis/OfflineOnnxSynthesizer.java'
@@ -40,12 +42,15 @@ jobs:
         run: |
           mkdir -p /tmp/jarvis-voice-tests
           javac -encoding UTF-8 -d /tmp/jarvis-voice-tests \
+            android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java \
             android/app/src/main/java/com/andriy/jarvis/NeuralSpeechPolicy.java \
             android/app/src/main/java/com/andriy/jarvis/OfflineVoicePackRules.java \
             android/app/src/main/java/com/andriy/jarvis/UkrainianVoiceText.java \
+            android/app/src/test/java/com/andriy/jarvis/CommandPatternsTest.java \
             android/app/src/test/java/com/andriy/jarvis/NeuralSpeechPolicyTest.java \
             android/app/src/test/java/com/andriy/jarvis/OfflineVoicePackRulesTest.java \
             android/app/src/test/java/com/andriy/jarvis/UkrainianVoiceTextTest.java
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.CommandPatternsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.NeuralSpeechPolicyTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.OfflineVoicePackRulesTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.UkrainianVoiceTextTest
