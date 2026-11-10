@@ -67,6 +67,19 @@ public final class AiChatClient {
 
     public String endpoint() { return prefs.getString("endpoint", ""); }
 
+    public String getReasoningEffort() {
+        String value = prefs.getString("reasoning_effort", "medium");
+        return "none".equals(value) || "low".equals(value) ||
+               "medium".equals(value) || "high".equals(value) ? value : "medium";
+    }
+
+    public void setReasoningEffort(String value) {
+        if (!("none".equals(value) || "low".equals(value) ||
+              "medium".equals(value) || "high".equals(value)))
+            throw new IllegalArgumentException("Недопустима глибина міркування ШІ.");
+        prefs.edit().putString("reasoning_effort", value).apply();
+    }
+
     public boolean isConfigured() {
         return AiChatPolicy.isValidEndpoint(endpoint()) && prefs.contains("code_encrypted");
     }
@@ -127,7 +140,7 @@ public final class AiChatClient {
         }
         final String requestMode = mode == null ? "chat" : mode;
         if (!("chat".equals(requestMode) || "web".equals(requestMode) ||
-                "image".equals(requestMode)) ||
+                "image".equals(requestMode) || "analysis".equals(requestMode)) ||
             (attachment != null && "web".equals(requestMode))) {
             ui.post(() -> callback.onComplete(null, "Недоступний режим ШІ."));
             return;
@@ -155,6 +168,7 @@ public final class AiChatClient {
                 JSONObject request = new JSONObject();
                 request.put("message", message);
                 request.put("mode", requestMode);
+                request.put("effort", getReasoningEffort());
                 JSONArray previous = new JSONArray();
                 for (JSONObject turn : context) previous.put(turn);
                 request.put("history", previous);
@@ -172,7 +186,9 @@ public final class AiChatClient {
                         try {
                             history.add(turn("user", attachment == null ? message :
                                 "[Обраний файл] " + message));
-                            history.add(turn("assistant", done.reply));
+                            history.add(turn("assistant",
+                                done.reply.length() > 5000
+                                    ? done.reply.substring(0, 5000) : done.reply));
                             while (history.size() > AiChatPolicy.MAX_CONTEXT_TURNS)
                                 history.remove(0);
                         } catch (Exception ignored) { }
@@ -252,7 +268,7 @@ public final class AiChatClient {
                         throw new Exception("Зображення перевищує ліміт.");
                 }
                 return new AiResponse(
-                    response.length() > 6000 ? response.substring(0, 6000) : response,
+                    response.length() > 12000 ? response.substring(0, 12000) : response,
                     links.toString().trim(), image);
             }
         } catch (java.net.SocketTimeoutException exception) {
