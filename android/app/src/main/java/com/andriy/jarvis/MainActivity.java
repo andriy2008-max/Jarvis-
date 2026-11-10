@@ -1353,8 +1353,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (status != null) status.setText(message);
         // Full-screen watch has no text controls. Show short status/error
         // directly on the face, without replacing words while listening.
-        if (isWatchDevice && face != null && !manualCapture &&
-            !listening && !processing && message != null && !message.trim().isEmpty()) {
+        if (isWatchDevice && face != null && !JarvisPhoneMode.isActive() &&
+            !manualCapture && !listening && !processing && message != null &&
+            (message.startsWith("Не ") || message.startsWith("Немає ") ||
+             message.startsWith("Спочатку ") || message.startsWith("Зв'язок ") ||
+             message.startsWith("На пристрої "))) {
             face.showTranscript(message, false, SystemClock.uptimeMillis() + 3200L);
         }
     }
@@ -2807,6 +2810,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (watchPhoneLink != null) {
                 watchPhoneLink.exit((ok, detail) -> {
                     if (isFinishing() || isDestroyed()) return;
+                    JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                     appendDialogue("Джарвіс", detail);
                     setStatus(detail);
                     if (!ok && voiceEnabled) speakReply(detail);
@@ -2830,6 +2834,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 }
                 watchPhoneLink.enter((ok, detail) -> {
                     if (isFinishing() || isDestroyed()) return;
+                    if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                     appendDialogue("Джарвіс", detail);
                     setStatus(detail);
                     if (!ok && voiceEnabled) speakReply(detail);
@@ -2849,6 +2854,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 }
                 watchPhoneLink.command(raw,(ok, detail) -> {
                     if (isFinishing() || isDestroyed()) return;
+                    if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                     appendDialogue("Джарвіс", detail);
                     setStatus(detail);
                     if (!ok && voiceEnabled) speakReply(detail);
