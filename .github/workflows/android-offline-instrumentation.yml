@@ -64,10 +64,10 @@ jobs:
             adb wait-for-device
             adb install -r android/app/build/outputs/apk/debug/app-debug.apk
             adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-            voiceDir=/sdcard/Android/data/com.andriy.jarvis.preview/files/voice-fixture
-            adb shell mkdir -p "$voiceDir/onnx/full"
-            adb push /tmp/jarvis-voice-fixture/model/manifest.json "$voiceDir/manifest.json"
-            adb push /tmp/jarvis-voice-fixture/model/onnx/full/vits.onnx "$voiceDir/onnx/full/vits.onnx"
+            # emulator-runner executes each script line in a fresh shell.
+            adb shell mkdir -p /sdcard/Android/data/com.andriy.jarvis.preview/files/voice-fixture/onnx/full
+            adb push /tmp/jarvis-voice-fixture/model/manifest.json /sdcard/Android/data/com.andriy.jarvis.preview/files/voice-fixture/manifest.json
+            adb push /tmp/jarvis-voice-fixture/model/onnx/full/vits.onnx /sdcard/Android/data/com.andriy.jarvis.preview/files/voice-fixture/onnx/full/vits.onnx
             adb shell svc wifi disable
             adb shell svc data disable
             adb shell settings put global airplane_mode_on 1
