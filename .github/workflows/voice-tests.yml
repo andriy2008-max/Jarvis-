@@ -1,0 +1,32 @@
+name: Neural voice contract tests
+
+on:
+  push:
+    paths:
+      - '.github/workflows/voice-tests.yml'
+      - 'server/jarvis-tts-server/**'
+      - 'android/app/src/main/java/com/andriy/jarvis/NeuralSpeechPolicy.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/NeuralSpeechPolicyTest.java'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Python server contract (without model download)
+        run: python -m unittest discover -s server/jarvis-tts-server -p 'test_*.py' -v
+      - name: Java policy contract (without APK)
+        run: |
+          mkdir -p /tmp/jarvis-voice-tests
+          javac -encoding UTF-8 -d /tmp/jarvis-voice-tests \
+            android/app/src/main/java/com/andriy/jarvis/NeuralSpeechPolicy.java \
+            android/app/src/test/java/com/andriy/jarvis/NeuralSpeechPolicyTest.java
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.NeuralSpeechPolicyTest
