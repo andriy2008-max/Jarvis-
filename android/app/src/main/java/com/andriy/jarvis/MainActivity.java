@@ -766,8 +766,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (v.getName().equals(preference)) checked = i + 1;
         }
         AlertDialog dialog = new AlertDialog.Builder(this)
-            .setTitle("Голос Джарвіса")
-            .setMessage("Вибери голос українською. Після вибору Джарвіс одразу озвучить приклад. Android не повідомляє стать голосу — деякі назви її не вказують.")
+            .setTitle("Український голос Джарвіса")
             .setSingleChoiceItems(labels, checked, (d, which) -> {
                 String selected = which == 0 ? "" : available.get(which - 1).getName();
                 getPreferences(MODE_PRIVATE).edit().putString("jarvisVoiceName", selected).apply();
