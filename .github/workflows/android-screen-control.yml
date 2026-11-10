@@ -2,18 +2,7 @@ name: Android screen control integration (test only)
 
 # Only temporary debug APKs for CI; does not sign or release Jarvis.
 on:
-  push:
-    paths:
-      - '.github/workflows/android-screen-control.yml'
-      - 'android/app/src/androidTest/java/com/andriy/jarvis/ScreenControl*'
-      - 'android/app/src/androidTest/AndroidManifest.xml'
-      - 'android/app/src/main/java/com/andriy/jarvis/ScreenControl*'
-      - 'android/app/src/main/java/com/andriy/jarvis/ScreenTextInsertion.java'
-      - 'android/app/src/debug/java/com/andriy/jarvis/ScreenControlDebugReceiver.java'
-      - 'android/app/src/debug/AndroidManifest.xml'
-      - 'android/app/src/main/AndroidManifest.xml'
-      - 'android/app/src/main/res/xml/jarvis_screen_accessibility.xml'
-      - 'android/app/src/main/res/values/strings.xml'
+  # Manually triggered only after an explicit user instruction. No APK jobs on push.
   workflow_dispatch:
 
 permissions:
