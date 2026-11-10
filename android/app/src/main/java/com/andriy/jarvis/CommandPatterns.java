@@ -27,6 +27,21 @@ public final class CommandPatterns {
             .replaceAll("[.!?]+$", "").trim();
     }
 
+    /**
+     * Spoken command «Скажи [текст]»: null means another command, empty string
+     * means the user did not supply anything to say. Preserve user punctuation
+     * and case; do not route requested speech through the conversational AI.
+     */
+    public static String spokenText(String raw) {
+        if (raw == null) return null;
+        String text = raw.trim()
+            .replaceFirst("(?iu)^(?:джарвіс|джарвис|jarvis)[,\\s:—-]*", "")
+            .trim();
+        Matcher m = Pattern.compile("(?iu)^скажи(?:[\\s,:—-]+([\\s\\S]*))?$").matcher(text);
+        if (!m.matches()) return null;
+        return m.group(1) == null ? "" : m.group(1).trim();
+    }
+
     /** Null when no timer command (including invalid units) matches; -1 for excessive durations. */
     public static Integer timerSeconds(String command) {
         Matcher m = TIMER.matcher(command);
