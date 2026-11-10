@@ -9,6 +9,11 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
+import android.net.Uri;
+import android.provider.AlarmClock;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
 import android.content.pm.ServiceInfo;
 import android.graphics.PixelFormat;
 import android.media.AudioManager;
@@ -30,7 +35,10 @@ import android.view.WindowManager;
 import android.widget.Toast;
 
 import java.text.DateFormat;
+import java.net.URLEncoder;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -340,6 +348,33 @@ public final class FloatingJarvisService extends Service {
             reply("Обрано голос Лади.");
             return;
         }
+        AssistantIntents.ClockTime alarm = AssistantIntents.alarmTime(normalized);
+        if (alarm != null) {
+            Intent i = new Intent(AlarmClock.ACTION_SET_ALARM);
+            i.putExtra(AlarmClock.EXTRA_HOUR, alarm.hour);
+            i.putExtra(AlarmClock.EXTRA_MINUTES, alarm.minute);
+            i.putExtra(AlarmClock.EXTRA_SKIP_UI, false);
+            reply(openRequestedActivity(i,
+                "Відкрив системний Годинник. Підтверди будильник там."));
+            return;
+        }
+        String phoneApp = AssistantIntents.requestedApp(normalized);
+        if (phoneApp != null) {
+            reply(openInstalledApp(phoneApp));
+            return;
+        }
+        String search = CommandPatterns.searchTerms(normalized);
+        if (search != null) {
+            try {
+                Intent browser = new Intent(Intent.ACTION_VIEW,
+                    Uri.parse("https://www.google.com/search?q=" +
+                        URLEncoder.encode(search, "UTF-8")));
+                reply(openRequestedActivity(browser, "Відкриваю результати пошуку."));
+            } catch (Exception error) {
+                reply("Не вдалося відкрити пошук.");
+            }
+            return;
+        }
         DeviceCommands.Action device = DeviceCommands.parse(normalized);
         if (device != null) {
             reply(performQuickDeviceAction(device));
@@ -356,6 +391,51 @@ public final class FloatingJarvisService extends Service {
             reply("Цю команду я поки не виконую в плаваючому вікні. " +
                 "Можеш ставити таймер, керувати музикою, говорити «Скажи», " +
                 "або підключити ШІ у налаштуваннях основного Джарвіса.");
+        }
+    }
+
+    private String openRequestedActivity(Intent i, String message) {
+        try {
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i); // Explicit user speech action; never automatic.
+            return message;
+        } catch (Exception failure) {
+            return "Android не дозволив відкрити потрібний застосунок.";
+        }
+    }
+
+    private String openInstalledApp(String spoken) {
+        Intent query = new Intent(Intent.ACTION_MAIN);
+        query.addCategory(Intent.CATEGORY_LAUNCHER);
+        try {
+            PackageManager pm = getPackageManager();
+            List<ResolveInfo> launchers = pm.queryIntentActivities(query, 0);
+            List<AppNameMatcher.App> apps = new ArrayList<>();
+            for (ResolveInfo r : launchers) {
+                if (r.activityInfo == null ||
+                    r.activityInfo.packageName == null || r.activityInfo.name == null) continue;
+                CharSequence label = r.loadLabel(pm);
+                if (label != null && label.length() > 0)
+                    apps.add(new AppNameMatcher.App(r.activityInfo.packageName,
+                        r.activityInfo.name, label.toString()));
+                if (r.activityInfo.applicationInfo != null) {
+                    CharSequence appLabel = pm.getApplicationLabel(r.activityInfo.applicationInfo);
+                    if (appLabel != null && appLabel.length() > 0)
+                        apps.add(new AppNameMatcher.App(r.activityInfo.packageName,
+                            r.activityInfo.name, appLabel.toString()));
+                }
+            }
+            AppNameMatcher.Result match = AppNameMatcher.match(spoken, apps);
+            if (match.ambiguous())
+                return "Знайшов кілька застосунків. Назви точніше, який відкрити.";
+            if (!match.found())
+                return "Не знайшов застосунку «" + spoken + "» у меню телефона.";
+            Intent open = new Intent(Intent.ACTION_MAIN);
+            open.addCategory(Intent.CATEGORY_LAUNCHER);
+            open.setClassName(match.app.packageName, match.app.activityName);
+            return openRequestedActivity(open, "Відкриваю " + match.app.label + ".");
+        } catch (Exception denied) {
+            return "Не вдалося отримати список встановлених застосунків.";
         }
     }
 
@@ -378,6 +458,9 @@ public final class FloatingJarvisService extends Service {
                 audio.setStreamVolume(AudioManager.STREAM_MUSIC, 0,
                     AudioManager.FLAG_SHOW_UI);
                 return "Музику вимкнено.";
+            case TORCH_ON:
+            case TORCH_OFF:
+                return switchFlash(action.kind == DeviceCommands.Kind.TORCH_ON);
             case VOLUME_UNMUTE:
                 audio.setStreamVolume(AudioManager.STREAM_MUSIC,
                     Math.max(1, audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC) / 2),
@@ -392,6 +475,26 @@ public final class FloatingJarvisService extends Service {
             return "Команду медіапрогравачу надіслано.";
         } catch (SecurityException denied) {
             return "Android не дозволив керувати відтворенням.";
+        }
+    }
+
+    private String switchFlash(boolean enabled) {
+        if (checkSelfPermission(Manifest.permission.CAMERA) !=
+            PackageManager.PERMISSION_GRANTED)
+            return "Для ліхтарика спочатку дозволь камеру в основному Джарвісі.";
+        try {
+            CameraManager camera = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+            if (camera == null) return "На телефоні немає ліхтарика.";
+            for (String id : camera.getCameraIdList()) {
+                CameraCharacteristics info = camera.getCameraCharacteristics(id);
+                if (Boolean.TRUE.equals(info.get(CameraCharacteristics.FLASH_INFO_AVAILABLE))) {
+                    camera.setTorchMode(id, enabled);
+                    return enabled ? "Ліхтарик увімкнено." : "Ліхтарик вимкнено.";
+                }
+            }
+            return "Не знайшов камеру з ліхтариком.";
+        } catch (Exception error) {
+            return "Не вдалося змінити стан ліхтарика.";
         }
     }
 
