@@ -21,6 +21,10 @@ public final class OfflineSpeechClient {
     private final AtomicInteger generation = new AtomicInteger();
     private MediaPlayer player;
     private File playingFile;
+    // Access these only on the single-thread inference executor.
+    private OfflineOnnxSynthesizer cachedSynthesizer;
+    private long cachedManifestModified;
+    private long cachedManifestBytes;
     private volatile boolean closed;
 
     public OfflineSpeechClient(Context context, OfflineVoicePackManager packages) {
@@ -41,14 +45,24 @@ public final class OfflineSpeechClient {
             final long startedAt = SystemClock.elapsedRealtime();
             try {
                 if (!active(id)) return;
-                // Model initialization and synthesis are CPU-intensive; both run in background.
-                try (OfflineOnnxSynthesizer synth = new OfflineOnnxSynthesizer(directory)) {
-                    wav = synth.synthesize(text, speaker, audioCache, () -> {
-                        if (!active(id)) throw new java.util.concurrent.CancellationException();
-                        if (SystemClock.elapsedRealtime() - startedAt > 65000L)
-                            throw new Exception("Офлайн-озвучення надто повільне на цьому пристрої.");
-                    });
+                // Keep ONNX sessions warm across replies to avoid loading ~145 MB
+                // from disk for every short command. Replace after model upgrade.
+                File manifest = new File(directory, "manifest.json");
+                if (!manifest.isFile())
+                    throw new Exception("Офлайн-модель більше не встановлена.");
+                if (cachedSynthesizer == null ||
+                    cachedManifestModified != manifest.lastModified() ||
+                    cachedManifestBytes != manifest.length()) {
+                    discardCachedSynthesizer();
+                    cachedSynthesizer = new OfflineOnnxSynthesizer(directory);
+                    cachedManifestModified = manifest.lastModified();
+                    cachedManifestBytes = manifest.length();
                 }
+                wav = cachedSynthesizer.synthesize(text, speaker, audioCache, () -> {
+                    if (!active(id)) throw new java.util.concurrent.CancellationException();
+                    if (SystemClock.elapsedRealtime() - startedAt > 65000L)
+                        throw new Exception("Офлайн-озвучення надто повільне на цьому пристрої.");
+                });
                 if (!active(id)) { wav.delete(); return; }
                 final File ready = wav;
                 main.post(() -> {
@@ -56,6 +70,10 @@ public final class OfflineSpeechClient {
                     play(ready, id, callback);
                 });
             } catch (Exception | LinkageError error) {
+                // If ONNX actually failed, reopen model sessions on next request.
+                // Cancellation leaves the healthy cache intact.
+                if (!(error instanceof java.util.concurrent.CancellationException))
+                    discardCachedSynthesizer();
                 if (wav != null) wav.delete();
                 final String reason = error.getMessage() == null ?
                     "Цю ONNX-модель не вдалося запустити на телефоні." : error.getMessage();
@@ -120,9 +138,22 @@ public final class OfflineSpeechClient {
         }
     }
 
+    private void discardCachedSynthesizer() {
+        if (cachedSynthesizer != null) {
+            try { cachedSynthesizer.close(); } catch (Exception ignored) {}
+            cachedSynthesizer = null;
+        }
+        cachedManifestModified = 0;
+        cachedManifestBytes = 0;
+    }
+
     public void close() {
+        if (closed) return;
         closed = true;
         stop();
-        executor.shutdownNow();
+        // Close sessions on the same executor that owns them: no concurrent
+        // ORT session shutdown while the native runtime is synthesizing.
+        executor.execute(this::discardCachedSynthesizer);
+        executor.shutdown();
     }
 }
