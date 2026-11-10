@@ -1,0 +1,67 @@
+name: Verify stable Jarvis 0.1.8 updates in place to signed 0.1.14 QA
+
+on:
+  push:
+    paths:
+      - '.github/workflows/android-inplace-upgrade-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [30, 35]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve BOTH original stable and signed update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/jarvis-old /tmp/jarvis-new
+          gh release download v0.1.8 --repo "$GITHUB_REPOSITORY" \
+            --pattern 'JARVIS-0.1.8-stable.apk' --dir /tmp/jarvis-old
+          gh run download 42799355295 --repo "$GITHUB_REPOSITORY" \
+            --name JARVIS-0.1.14-SIGNED-update-compatible-PHONE-QA \
+            --dir /tmp/jarvis-new
+          (cd /tmp/jarvis-new && sha256sum -c JARVIS-0.1.14-stable-phone-QA.sha256)
+      - name: Check both certificates and installed package metadata
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'build-tools;35.0.0' >/dev/null
+          for apk in /tmp/jarvis-old/*.apk /tmp/jarvis-new/*.apk; do
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$apk"
+            "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" | grep -F "package: name='com.andriy.jarvis.stable'"
+            actual="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1)"
+            expected="$(tr -d '[:space:]' < android/RELEASE-CERT-SHA256.txt | tr '[:upper:]' '[:lower:]')"
+            test "$actual" = "$expected"
+          done
+      - name: Enable KVM
+        run: test -e /dev/kvm && sudo chmod 666 /dev/kvm
+      - name: Perform real Android package-manager in-place upgrade (NO uninstall)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_4
+          ram-size: 3072M
+          disk-size: 4096M
+          disable-animations: true
+          script: |
+            adb wait-for-device
+            adb install -r /tmp/jarvis-old/JARVIS-0.1.8-stable.apk
+            adb shell dumpsys package com.andriy.jarvis.stable | grep -m1 versionCode
+            adb install -r /tmp/jarvis-new/JARVIS-0.1.14-stable-phone-QA.apk
+            adb shell dumpsys package com.andriy.jarvis.stable | grep -m1 'versionCode=24'
+            adb shell pm list packages | grep -x 'package:com.andriy.jarvis.stable'
+            adb shell pm list packages | grep -qv 'package:com.andriy.jarvis.preview' || true
+            adb shell am start -n com.andriy.jarvis.stable/com.andriy.jarvis.MainActivity
+            adb shell dumpsys activity activities | grep -F 'com.andriy.jarvis.stable' | head -12 || true
