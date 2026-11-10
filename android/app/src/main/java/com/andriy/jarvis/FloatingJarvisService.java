@@ -7,6 +7,8 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
+import android.content.res.Configuration;
+import android.graphics.Point;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -30,6 +32,8 @@ import android.speech.SpeechRecognizer;
 import android.speech.tts.TextToSpeech;
 import android.view.Gravity;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
+import android.view.ViewConfiguration;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Toast;
@@ -49,6 +53,8 @@ import java.util.Locale;
 public final class FloatingJarvisService extends Service {
     public static final String ACTION_SHOW = "com.andriy.jarvis.FLOAT_SHOW";
     public static final String ACTION_CLOSE = "com.andriy.jarvis.FLOAT_CLOSE";
+    public static final String ACTION_RESIZE = "com.andriy.jarvis.FLOAT_RESIZE";
+    private static final String ORB_PREFS = "jarvis_orb";
     private static final String CHANNEL = "jarvis_floating_control";
     private static final int NOTIFICATION = 81740;
     private static volatile boolean showing;
@@ -56,6 +62,9 @@ public final class FloatingJarvisService extends Service {
 
     private WindowManager windows;
     private JarvisOrbView face;
+    private WindowManager.LayoutParams faceParams;
+    private int displayWidth;
+    private int displayHeight;
     private SpeechRecognizer recognizer;
     private boolean listening;
     private boolean recording;
@@ -90,6 +99,10 @@ public final class FloatingJarvisService extends Service {
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null || ACTION_CLOSE.equals(intent.getAction())) {
             stopSelf();
+            return START_NOT_STICKY;
+        }
+        if (ACTION_RESIZE.equals(intent.getAction())) {
+            if (face != null && !closing) resizeFace();
             return START_NOT_STICKY;
         }
         if (!ACTION_SHOW.equals(intent.getAction()) || closing) return START_NOT_STICKY;
@@ -153,22 +166,133 @@ public final class FloatingJarvisService extends Service {
             stopSelf();
             return true;
         });
-        WindowManager.LayoutParams p = new WindowManager.LayoutParams(
-            dp(112), dp(112), WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        int diameter = dp(JarvisOrbPlacement.supportedSize(
+            getSharedPreferences(ORB_PREFS, MODE_PRIVATE).getInt("diameter_dp", 112)));
+        faceParams = new WindowManager.LayoutParams(
+            diameter, diameter, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT);
-        p.gravity = Gravity.END | Gravity.CENTER_VERTICAL;
-        p.x = dp(8);
-        p.y = 0;
+        faceParams.gravity = Gravity.TOP | Gravity.START;
+        updateDisplayBounds();
+        restorePosition();
+
+        // Tap = listen, swipe/drag = move. Long-press retains the existing
+        // "close Jarvis" action; moving never starts the microphone.
+        face.setOnTouchListener(new View.OnTouchListener() {
+            float downRawX, downRawY;
+            int startingX, startingY;
+            boolean dragging, longPressed;
+            final int slop = ViewConfiguration.get(FloatingJarvisService.this)
+                .getScaledTouchSlop();
+            Runnable holdAction;
+
+            @Override public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getActionMasked()) {
+                    case MotionEvent.ACTION_DOWN:
+                        downRawX = event.getRawX();
+                        downRawY = event.getRawY();
+                        startingX = faceParams.x;
+                        startingY = faceParams.y;
+                        dragging = false;
+                        longPressed = false;
+                        holdAction = () -> {
+                            if (!dragging && !closing && face != null) {
+                                longPressed = true;
+                                v.performLongClick();
+                            }
+                        };
+                        ui.postDelayed(holdAction, ViewConfiguration.getLongPressTimeout());
+                        return true;
+                    case MotionEvent.ACTION_MOVE:
+                        if (longPressed || faceParams == null) return true;
+                        float dx = event.getRawX() - downRawX;
+                        float dy = event.getRawY() - downRawY;
+                        if (!dragging && Math.hypot(dx, dy) > slop) {
+                            dragging = true;
+                            ui.removeCallbacks(holdAction);
+                        }
+                        if (dragging && windows != null) {
+                            updateDisplayBounds();
+                            faceParams.x = JarvisOrbPlacement.clamp(
+                                startingX + Math.round(dx), 0,
+                                Math.max(0, displayWidth - faceParams.width));
+                            faceParams.y = JarvisOrbPlacement.clamp(
+                                startingY + Math.round(dy), 0,
+                                Math.max(0, displayHeight - faceParams.height));
+                            try { windows.updateViewLayout(face, faceParams); }
+                            catch (IllegalArgumentException ignored) { }
+                        }
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                        if (holdAction != null) ui.removeCallbacks(holdAction);
+                        if (dragging) persistPosition();
+                        else if (!longPressed && !closing) v.performClick();
+                        return true;
+                    case MotionEvent.ACTION_CANCEL:
+                        if (holdAction != null) ui.removeCallbacks(holdAction);
+                        if (dragging) persistPosition();
+                        return true;
+                    default:
+                        return true;
+                }
+            }
+        });
         android.util.Log.i("JARVIS_FLOATING_QA", "orb_window_add_start=true");
-        windows.addView(face, p);
+        windows.addView(face, faceParams);
         showing = true;
         android.util.Log.i("JARVIS_FLOATING_QA", "orb_shown=true");
         try {
             android.service.quicksettings.TileService.requestListeningState(this,
                 new android.content.ComponentName(this, JarvisQuickTileService.class));
         } catch (Exception ignored) { }
+    }
+
+    private void updateDisplayBounds() {
+        Point size = new Point();
+        // Available for all Jarvis Android versions (API 26+).
+        windows.getDefaultDisplay().getRealSize(size);
+        displayWidth = Math.max(1, size.x);
+        displayHeight = Math.max(1, size.y);
+    }
+
+    private void restorePosition() {
+        if (faceParams == null) return;
+        int maxX = Math.max(0, displayWidth - faceParams.width);
+        int maxY = Math.max(0, displayHeight - faceParams.height);
+        float horizontal = getSharedPreferences(ORB_PREFS, MODE_PRIVATE)
+            .getFloat("position_x", 0.97f);
+        float vertical = getSharedPreferences(ORB_PREFS, MODE_PRIVATE)
+            .getFloat("position_y", 0.5f);
+        faceParams.x = JarvisOrbPlacement.fromFraction(horizontal, maxX);
+        faceParams.y = JarvisOrbPlacement.fromFraction(vertical, maxY);
+    }
+
+    private void persistPosition() {
+        if (faceParams == null) return;
+        getSharedPreferences(ORB_PREFS, MODE_PRIVATE).edit()
+            .putFloat("position_x", JarvisOrbPlacement.fraction(faceParams.x,
+                Math.max(0, displayWidth - faceParams.width)))
+            .putFloat("position_y", JarvisOrbPlacement.fraction(faceParams.y,
+                Math.max(0, displayHeight - faceParams.height)))
+            .apply();
+    }
+
+    private void resizeFace() {
+        if (face == null || faceParams == null || windows == null) return;
+        updateDisplayBounds();
+        int diameter = dp(JarvisOrbPlacement.supportedSize(
+            getSharedPreferences(ORB_PREFS, MODE_PRIVATE).getInt("diameter_dp", 112)));
+        faceParams.width = diameter;
+        faceParams.height = diameter;
+        restorePosition();
+        try { windows.updateViewLayout(face, faceParams); }
+        catch (IllegalArgumentException ignored) { }
+    }
+
+    @Override public void onConfigurationChanged(Configuration config) {
+        super.onConfigurationChanged(config);
+        if (face != null && faceParams != null && windows != null) resizeFace();
     }
 
     private void setFace(String state) {
@@ -223,6 +347,7 @@ public final class FloatingJarvisService extends Service {
                     @Override public void onError(int error) {
                         recording = false;
                         listening = false;
+                        if (face != null) face.clearTranscript();
                         setFace("idle");
                         if (!closing) message("Не почув команди. Натисни обличчя ще раз.");
                     }
@@ -233,22 +358,32 @@ public final class FloatingJarvisService extends Service {
                         java.util.ArrayList<String> list =
                             results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                         if (list == null || list.isEmpty() || list.get(0).trim().isEmpty()) {
+                            if (face != null) face.clearTranscript();
                             setFace("idle");
                             message("Не почув команди. Спробуй ще раз.");
                             return;
                         }
+                        if (face != null) face.updateTranscript(list.get(0), true);
                         executeCommand(list.get(0));
                     }
-                    @Override public void onPartialResults(Bundle results) {}
+                    @Override public void onPartialResults(Bundle results) {
+                        if (!recording || closing || face == null || results == null) return;
+                        ArrayList<String> heard =
+                            results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                        if (heard != null && !heard.isEmpty() && heard.get(0) != null)
+                            face.updateTranscript(heard.get(0), false);
+                    }
                     @Override public void onEvent(int type, Bundle params) {}
                 });
             }
             stopSpeech();
+            if (face != null) face.beginTranscript();
             Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
             i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                 RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
             i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "uk-UA");
             i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+            i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
             // Recognition engines may ignore these hints; don't claim
             // that silence timing is guaranteed by Android.
             i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1800L);
@@ -260,6 +395,7 @@ public final class FloatingJarvisService extends Service {
         } catch (Exception exception) {
             recording = false;
             listening = false;
+            if (face != null) face.clearTranscript();
             setFace("idle");
             message("Не вдалося ввімкнути мікрофон. Повтори натискання.");
         }
@@ -564,10 +700,13 @@ public final class FloatingJarvisService extends Service {
             catch (Exception ignored) { }
             recognizer = null;
         }
+        ui.removeCallbacksAndMessages(null);
+        if (face != null) face.clearTranscript();
         if (face != null && windows != null) {
             try { windows.removeView(face); } catch (Exception ignored) { }
             face = null;
         }
+        faceParams = null;
         if (ai != null) ai.close();
         if (offline != null) offline.close();
         if (neural != null) neural.close();
