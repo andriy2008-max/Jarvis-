@@ -520,9 +520,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
         else aiResetParams.leftMargin = dp(8);
         aiControls.addView(aiResetButton, aiResetParams);
 
-        // Accessibility is powerful; a separate, explicitly acknowledged opt-in.
+        // Lite APK deliberately has NO accessibility service: do not misrepresent it.
         Button screenControlButton = secondaryButton(
-            "🖐 Керування екраном — дозвіл і запуск", this::showScreenControlConsent);
+            getResources().getBoolean(R.bool.screen_control_available)
+                ? "🖐 Керування екраном — дозвіл і запуск"
+                : "🛡 Lite: керування екраном недоступне",
+            this::showScreenControlConsent);
         LinearLayout.LayoutParams screenControlParams = new LinearLayout.LayoutParams(-1, -2);
         screenControlParams.topMargin = dp(8);
         chatPanel.addView(screenControlButton, screenControlParams);
@@ -1020,6 +1023,17 @@ public final class MainActivity extends Activity implements RecognitionListener 
      * it in the OS and explicitly turns on screen control here.
      */
     private void showScreenControlConsent() {
+        if (!getResources().getBoolean(R.bool.screen_control_available)) {
+            AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Джарвіс Lite — без доступу до екрана")
+                .setMessage("Цей тестовий APK не містить служби спеціальних можливостей. " +
+                    "Голосові команди, таймер та офлайн-голоси залишаються доступними. " +
+                    "Натискання кнопок в інших застосунках не підтримується. " +
+                    "Для цієї функції потрібна окрема повна версія з перевіреним способом встановлення.")
+                .setPositiveButton("Зрозуміло", null).create();
+            showDialogWithoutWake(dialog);
+            return;
+        }
         boolean connected = ScreenControlAccessibilityService.isConnected();
         String disclosure =
             "Джарвіс зможе читати назви видимих кнопок і виконувати окремі " +
@@ -2027,6 +2041,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 return;
             }
         } else if (screenCommand != null) {
+            if (!getResources().getBoolean(R.bool.screen_control_available)) {
+                reply = "У Джарвіс Lite керування іншими програмами вимкнено. Голосові команди, таймер і озвучення доступні.";
+            } else {
             switch (screenCommand.kind) {
                 case ENABLE:
                 case SETTINGS:
@@ -2043,6 +2060,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 default:
                     reply = ScreenControlAccessibilityService.perform(screenCommand);
                     break;
+            }
             }
         } else if (deviceCommand != null) {
             reply = deviceActions == null ? "Керування пристроєм ще не готове." : deviceActions.perform(deviceCommand);
