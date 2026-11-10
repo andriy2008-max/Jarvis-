@@ -2104,11 +2104,38 @@ public final class MainActivity extends Activity implements RecognitionListener 
         showDialogWithoutWake(dialog);
     }
 
+    private JarvisSequenceExecutor commandSequenceExecutor;
+
     private void processCommand(String raw) {
         if (raw == null || raw.trim().isEmpty()) return;
         appendDialogue("Ти", raw.trim());
         String command = CommandPatterns.normalize(raw);
         if (command.isEmpty()) return;
+
+        // Complex commands are parsed and validated as a complete plan BEFORE
+        // opening any app. This prevents partial execution on malformed speech.
+        JarvisCommandSequence.Plan plan = JarvisCommandSequence.parse(raw);
+        if (plan != null && (!plan.valid() || plan.multiple())) {
+            if (!plan.valid()) {
+                appendDialogue("Джарвіс", plan.error);
+                setStatus(plan.error);
+                speakReply(plan.error);
+                return;
+            }
+            if (commandSequenceExecutor == null)
+                commandSequenceExecutor = new JarvisSequenceExecutor(this);
+            commandSequenceExecutor.start(plan, new JarvisSequenceExecutor.Listener() {
+                @Override public void onProgress(int step, int total, String description) {
+                    setStatus("Крок " + step + "/" + total + ": " + description);
+                }
+                @Override public void onFinished(boolean success, String summary) {
+                    appendDialogue("Джарвіс", summary);
+                    setStatus(summary);
+                    speakReply(summary);
+                }
+            });
+            return;
+        }
         String directSpeech = CommandPatterns.spokenText(raw);
 
         Integer requestedTimer = CommandPatterns.timerSeconds(command);
@@ -2338,6 +2365,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     protected void onDestroy() {
+        if (commandSequenceExecutor != null) commandSequenceExecutor.cancel();
         cancelAutoWakeSchedule();
         wakeConversation.end();
         // Never cancel AlarmManager timers when Android destroys the UI.
