@@ -1,84 +1,87 @@
-# JARVIS offline voices — technical status for version 0.1.13
+# JARVIS offline voices — Android QA status (code 0.1.14)
 
-## Required behavior
+**Updated 2026-11-10. This is a test-ready implementation, not a physical-phone-certified stable release.**
 
-The small Android APK contains ONNX Runtime and the native inference code, but **does not contain the model weights**. After the user installs a verified, shared Dmytro/Lada VITS model pack once, all TTS generation can occur on the phone without Internet, PC, cloud, or paid API. The pack is kept in app-private no-backup files and remains on disk through in-place updates. Speech recognition / free-form AI chat have separate connectivity requirements.
+## Architecture and assets
 
-## Android emulator verification — PASSED on 2026-11-10
+- One native ONNX Runtime VITS speech engine shared by **Dmytro** and **Lada**, original [robinhad/ukrainian-tts v6.0.0](https://github.com/robinhad/ukrainian-tts/releases/tag/v6.0.0).
+- Model graph: `onnx/full/vits.onnx` (145,115,169 bytes); model archive: 145,123,420 bytes. Audio sampling rate 22,050 Hz. Each speaker has a separate 192-dimensional embedding.
+- The APK includes the Android inference engine and player, **not** the 145MB voice data. The user explicitly downloads the model once, keeps it in app-private no-backup storage and can generate speech offline afterwards.
+- The model's **MIT license** and attribution are included in [THIRD_PARTY_UKRAINIAN_TTS_LICENSE.txt](THIRD_PARTY_UKRAINIAN_TTS_LICENSE.txt).
 
-[GitHub Actions run 42785778308](https://github.com/andriy2008-max/Jarvis-/actions/runs/42785778308) completed **successfully on both Android API 30 (Android 11) and API 35 (Android 15)** using the actual 145 MB VITS graph and both 192-element xvectors.
+## Download for Android phone QA
 
-Each emulator was placed into airplane mode with Wi-Fi/mobile data disabled. The instrumentation tests validated model file checksums **on Android**, then ran both original voices through the production `OfflineOnnxSynthesizer`, verified their two WAVs contain different, non-silent audio, and used Android `MediaPlayer` to decode/play them. A second test re-installed the **same** debug app ID via `adb install -r` and verified the existing model remained readable and could synthesize again without a network connection. The upgrade test verifies data persistence, **not** the production stable signing certificate.
+The original verified graph is now published as a **PUBLIC EXPERIMENTAL PRERELEASE**, not as stable:
 
-| Measure (emulator, not physical phone) | Android 11 API 30 | Android 15 API 35 |
-|---|---:|---:|
-| VITS session load | 560 ms | 1287 ms |
-| Process PSS after model load | 229,265 KB | 230,547 KB |
-| Both original voices offline | Passed | Passed |
-| Android MediaPlayer WAV handling | Passed | Passed |
-| Model survives same-package app update | Passed | Passed |
+[Experimental Dmytro + Lada VITS model release](https://github.com/andriy2008-max/Jarvis-/releases/tag/jarvis-offline-voices-v6-experimental)
 
-The test-only workflow is [`.github/workflows/android-offline-instrumentation.yml`](../.github/workflows/android-offline-instrumentation.yml) and uses temporary debug/test APKs; **it did not build or publish a user-facing stable APK**. A prior, simpler Android 11 verification also passed in [run 42784881537](https://github.com/andriy2008-max/Jarvis-/actions/runs/42784881537).
+- APK download registry: [offline-voices.json](offline-voices.json). `ready:true` only indicates *opt-in QA availability* (`channel:android-qa-prerelease`); it **does not** mean physical ARM64 phone certification.
+- ZIP SHA-256: `12fdd6521ae864f5eafac2d5a205d32f299ba65229800dafbd647b4a3ff8e0d5`.
+- The user opens the offline voice pack settings and presses Download once. The app fetches the registry over HTTPS, validates the complete ZIP SHA-256, checks archive safety, verifies every ONNX file SHA-256 and installs atomically.
+- Leave sufficient free space for a 145MB ZIP plus extracted model and temporary files. Allow the download to complete while Jarvis is open. Use Wi-Fi.
+- No computer, RunPod or TTS server is required to *generate* speech after installation. **Speech recognition and conversational AI are separate and may still require connectivity.**
+- Do not mirror this ZIP or replace its URL without updating the pinned SHA-256.
 
-**Still open:** ARM64 physical-phone validation (speaker quality, memory and CPU on actual hardware); stable APK install/upgrade signed with the original keystore; and exercising an actual HTTPS one-time download via a user-accessible official pack release. The existing binary is **draft**, not publicly downloadable. The production one-tap registry stays `ready:false` until the user-facing rollout is deliberately enabled.
+## Automated verification — actual Android, no mock voice signals
 
-## What has been proven
+**PASS**: [Android 11 and 15 offline voice inference run](https://github.com/andriy2008-max/Jarvis-/actions/runs/42785778308) with the real graph, speaker embeddings and airplane mode.
 
-1. Real **robinhad/ukrainian-tts v6.0.0** weights were downloaded and exported by `espnet_onnx`. This checkpoint exports a **single VITS graph** (not Tacotron2, despite an older source-tree config).
-2. Both named speaker xvectors synthesized a non-empty WAV through **Python ONNX Runtime** in [the completed export workflow](https://github.com/andriy2008-max/Jarvis-/actions/runs/42779515189).
-3. The actual ZIP was checked with SHA-256 and its graph inspected. The ONNX inputs are `text`: int64[dynamic], `spembs`: float32[192]; the output `wav` is float32[dynamic]. Both voices use the **same** 145,115,169-byte graph. Sample rate 22,050 Hz. Tokens count: 50.
-4. **Java ONNX Runtime 1.20.0** loaded the real ONNX graph and synthesized independently with both xvectors in [the Java test run](https://github.com/andriy2008-max/Jarvis-/actions/runs/42780780000). These are **Linux runner** measurements, not Android-device measurements.
-5. The verified 145 MB ZIP is preserved in a **draft GitHub Release** `jarvis-offline-voices-v6-experimental` so the temporary Actions artifact can expire without losing the data. SHA-256: `12fdd6521ae864f5eafac2d5a205d32f299ba65229800dafbd647b4a3ff8e0d5`. **Do not publish until Android testing.**
-6. Android source has the single-graph VITS inference implementation `OfflineOnnxSynthesizer`, cached sessions and WAV playback `OfflineSpeechClient`, a checked ZIP installer `OfflineVoicePackManager`, and an opt-in fallback path: offline → private HTTPS TTS server → system Android TTS. Android 11/15 **emulator** inference is now verified; physical ARM64 Android device testing remains.
+Each Android emulator validated the real model hash, synthesized different non-silent audio from both voices, played WAV via `MediaPlayer`, and reloaded the model after same-package debug APK update. These test conditions were on **x86_64 emulator**, not a physical ARM64 phone.
 
-## Android release gate — incomplete
+| Measure | Android 11 emulator | Android 15 emulator |
+| --- | ---: | ---: |
+| Model session load | 560 ms | 1287 ms |
+| Process PSS after load | 229,265 KB | 230,547 KB |
+| Offline Dmytro + Lada synthesis | PASS | PASS |
+| Android WAV decoding | PASS | PASS |
+| Model retained on same-package debug update | PASS | PASS |
 
-- Verify ARM64 ONNX Runtime can load and execute this exact graph on a **physical** phone; x86_64 Android 11/15 emulator already passed.
-- Listen to both speakers on a real phone and verify pronunciation, stress, numbers and punctuation. Airplane-mode synthesis passed on emulators.
-- Measure physical-phone load latency, speech quality, RAM, cancellation, background behavior and battery usage; preliminary emulator PSS and decoding are recorded above.
-- Confirm **stable signed** in-place upgrade keeps installed voice pack and original application ID/signing key (debug update preservation already passed).
-- Re-test Wear OS separately (model may exceed available RAM or run too slowly).
-- The one-tap [official pack registry](offline-voices.json) is intentionally `ready:false`. The draft release has no public direct download URL. The app must not claim voices are ready to install before these checks pass.
-- No user-facing APK is being assembled yet, per user request to add more changes first.
+Additional verified stages:
+- [True Python ONNX synthesis for both voices](https://github.com/andriy2008-max/Jarvis-/actions/runs/42779515189).
+- [Java ONNX Runtime synthesis for both voices](https://github.com/andriy2008-max/Jarvis-/actions/runs/42780780000).
+- [Source/Java regression and Android compilation](https://github.com/andriy2008-max/Jarvis-/actions/runs/42796360374).
+- Model SHA, graph shape and metadata inspected independently during [artifact preservation](https://github.com/andriy2008-max/Jarvis-/actions/runs/42780287892).
 
-## Pack format
+## Phone QA APK
 
-ZIP entries:
-- `manifest.json`
-- `onnx/full/vits.onnx`
+A **0.1.14 signed QA APK** with `versionCode=24` and application ID `com.andriy.jarvis.stable` was successfully assembled and verified against the original certificate pinned in [RELEASE-CERT-SHA256.txt](RELEASE-CERT-SHA256.txt).
 
-Manifest critical fields:
+- [Signed QA APK action and downloadable artifact](https://github.com/andriy2008-max/Jarvis-/actions/runs/42799355295).
+- Original *stable public* release remains 0.1.8. The signed QA artifact is **not** a new stable GitHub release.
+- The QA APK has a **same-certificate stable package ID** to update the existing program rather than creating the `.preview` app.
+- GitHub Actions did not allow creating a new public APK release (`403: Resource not accessible by integration`), so the temporary artifact and the direct signed APK supplied in the conversation are the available test downloads.
+- A separate Android 11/15 system package-manager test verifies upgrading the real 0.1.8 stable APK to this QA build: [upgrade test](https://github.com/andriy2008-max/Jarvis-/actions/runs/42800938799).
+
+## Screen control: separate Android feature
+
+[Android 11 and 15 real external-app click/scroll integration tests PASSED](https://github.com/andriy2008-max/Jarvis-/actions/runs/42800347706), using a **debug-only** receiver protected by `android.permission.DUMP`. This receiver is NOT included in the signed release APK.
+
+The production service `ScreenControlAccessibilityService` requires the user to manually enable accessibility and explicitly start a session. It finds a unique safe control by its accessible text, `contentDescription` or resource ID and uses local Ukrainian/English intent synonyms, not screenshots or a freely autonomous AI agent. It refuses ambiguous, protected or sensitive actions. Holding the visible floating microphone stops the session.
+
+Unlabeled graphic-only icons without any accessibility metadata still require **explicit-consent screen capture plus visual AI**; this is not currently implemented.
+
+## Still NOT complete
+
+- Physical ARM64 Android QA: performance, battery, audio quality, background playback and pronunciation of difficult Ukrainian words/number forms.
+- User verification that signed 0.1.14 upgrades the exact already-installed APK and preserves their settings/data, and that the voice pack downloads reliably on their own network.
+- Manual accessibility permission and microphone recognition behavior on a physical device; system prompts and restrictions differ by OS/vendor.
+- Wear OS RAM/performance testing: the 145MB model may be too large for some watches.
+- Stable rollout only after explicit phone QA approval, final version bump and comprehensive regression tests (including background timer).
+
+## Manifest summary
 
 ```json
 {
   "format": "jarvis-espnet-onnx-v1",
-  "upstream": "robinhad/ukrainian-tts@v6.0.0",
   "architecture": "espnet-exported-vits",
   "sample_rate": 22050,
   "voices": ["dmytro", "lada"],
-  "tokens": ["<blank>", "<unk>", "+", "<space>"],
-  "spembs": {"dmytro": ["192 float numbers"], "lada": ["192 float numbers"]},
   "synthesis": {"model_type": "VITS", "graph": "onnx/full/vits.onnx"},
-  "files": [{
-    "path": "onnx/full/vits.onnx",
-    "bytes": 145115169,
-    "sha256": "64 hex characters"
-  }],
   "smoke_verified": true,
   "offline_runtime_verified_on_android": false
 }
 ```
 
-Example is abbreviated: the real metadata contains 50 tokens, numeric voice vectors, and actual file hash.
+The last field remains false in the archive, because it was exported *before* Android emulator testing and is not intended to claim physical device certification. Runtime validation is recorded in CI above. The `UkrainianVoiceText` Android preprocessor handles ordinary numbers and basic stress; it is **not** the full upstream linguistic dictionary.
 
-The Android installer validates HTTPS URL and outer ZIP SHA-256, prevents ZIP traversal and size bombs, and verifies every listed ONNX file and required inputs. The `UkrainianVoiceText` preprocessor implements deterministic number wording, explicit acute accents and common word stress. **It is not a replacement for the upstream complete morphological stress dictionary**, so quality work remains.
-
-## Reproducing export
-
-Use `.github/workflows/export-uktts-onnx.yml` for the tested Python 3.10 and legacy ESPnet dependency matrix. Do not use a random latest SciPy, ONNX or PyTorch install. Python export entry point: `tools/voice-export/export_voice_pack.py`.
-
-The verified binary lives in a **draft** release and is not yet available for one-tap in-app download. Do not set `ready:true` without the Android release gate. The original checkpoint `model.pth` is ~446 MB but the exported VITS graph is 145 MB.
-
-## Signing
-
-The stable application ID remains `com.andriy.jarvis.stable`, with a persistent, user-owned keystore. Preview and stable builds must not be confused. Only sign and publish a user-facing APK after the remaining requested changes and tests.
+The original `model.pth` was about 446MB and exported to the single VITS graph; the old source-tree Tacotron2 config should not be used to infer the v6 checkpoint's architecture.
