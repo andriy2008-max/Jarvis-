@@ -57,7 +57,14 @@ public final class ScreenControlInstrumentedTest {
         String changed = ScreenControlAccessibilityService.perform(
             ScreenControlCommands.parse("натисни кнопку тестова кнопка"));
         assertTrue("Test button must have changed after actual click: " + changed,
-            changed.contains("Не знайшов"));
+            changed.contains("Не зміг"));
+
+        // Semantic matching: Ukrainian request, icon-only button, English contentDescription.
+        final String[] semanticClick = new String[1];
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() ->
+            semanticClick[0] = ScreenControlAccessibilityService.perform(
+                ScreenControlCommands.parse("відкрий пошук")));
+        assertEquals("Знайшов потрібну кнопку й натиснув.", semanticClick[0]);
 
         // One deliberate scroll of the separate test app.
         String scroll = ScreenControlAccessibilityService.perform(
