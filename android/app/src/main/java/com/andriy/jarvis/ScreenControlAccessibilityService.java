@@ -38,12 +38,12 @@ import java.util.Set;
  * Only user-provided exact button labels, explicit scroll/back and stop work.
  */
 public final class ScreenControlAccessibilityService extends AccessibilityService {
-    private static WeakReference<ScreenControlAccessibilityService> connected =
+    private static volatile WeakReference<ScreenControlAccessibilityService> connected =
         new WeakReference<>(null);
     private static final int MAX_SCAN = 600;
     private static final int MAX_MATCHES = 3;
 
-    private boolean sessionActive;
+    private volatile boolean sessionActive;
     private WindowManager windows;
     private View buttonOverlay;
     private SpeechRecognizer recognizer;
@@ -62,7 +62,9 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             return "Спочатку ввімкни службу «Джарвіс — керування екраном» у Спеціальних можливостях Android.";
         s.sessionActive = true;
         s.showOverlay();
-        return "Керування екраном увімкнено. Відкрий потрібну програму й натисни плаваючий мікрофон Джарвіса. Довго натисни на нього, щоб зупинити.";
+        return s.sessionActive
+            ? "Керування екраном увімкнено. Відкрий потрібну програму й натисни плаваючий мікрофон Джарвіса. Довго натисни на нього, щоб зупинити."
+            : "Не вдалося показати плаваючу кнопку. Режим вимкнено.";
     }
 
     public static String stop() {
@@ -156,6 +158,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             buttonOverlay = bubble;
         } catch (Exception error) {
             sessionActive = false;
+            android.util.Log.e("JARVIS_SCREEN_CONTROL", "Accessibility overlay failed", error);
             toast("Не вдалося показати кнопку керування екраном.");
         }
     }
