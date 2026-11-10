@@ -51,6 +51,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     private SpeechRecognizer recognizer;
     private boolean recording;
     private final Handler main = new Handler(Looper.getMainLooper());
+    private JarvisSequenceExecutor sequences;
 
     public static boolean isConnected() { return connected.get() != null; }
     public static boolean isSessionActive() {
@@ -154,6 +155,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
 
     private void stopSession() {
         sessionActive = false;
+        if (sequences != null) sequences.cancel();
         stopListening();
         if (buttonOverlay != null && windows != null) {
             try { windows.removeView(buttonOverlay); } catch (Exception ignored) {}
@@ -216,6 +218,10 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
 
     private void recordOneCommand() {
         if (!sessionActive) return;
+        if (sequences != null && sequences.isRunning()) {
+            sequences.cancel(); // same button is an immediate stop
+            return;
+        }
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             toast("Надай Джарвісу доступ до мікрофона в налаштуваннях застосунку.");
             return;
@@ -250,8 +256,34 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                         }
                         // Preserve case/punctuation: "Напиши..." is literal dictation,
                         // unlike navigation commands which normalize inside the parser.
+                        String raw = phrases.get(0);
+                        JarvisCommandSequence.Plan plan = JarvisCommandSequence.parse(raw);
+                        if (plan != null &&
+                            (!plan.valid() || plan.multiple() ||
+                            plan.steps.get(0).kind == JarvisCommandSequence.Kind.OPEN_APP ||
+                            plan.steps.get(0).kind == JarvisCommandSequence.Kind.MEDIA_VOLUME)) {
+                            if (!plan.valid()) {
+                                toast(plan.error);
+                                return;
+                            }
+                            if (sequences == null)
+                                sequences = new JarvisSequenceExecutor(
+                                    ScreenControlAccessibilityService.this);
+                            sequences.start(plan, new JarvisSequenceExecutor.Listener() {
+                                @Override public void onProgress(int step, int total,
+                                                                 String description) {
+                                    if (sessionActive)
+                                        toast("Крок " + step + "/" + total + ": " + description);
+                                }
+                                @Override public void onFinished(boolean success,
+                                                                 String summary) {
+                                    if (sessionActive) toast(summary);
+                                }
+                            });
+                            return;
+                        }
                         ScreenControlCommands.Action action =
-                            ScreenControlCommands.parse(phrases.get(0));
+                            ScreenControlCommands.parse(raw);
                         if (action == null) {
                             toast("Скажи «Напиши Привіт», «Відкрий пошук», «Прокрути вниз» або «Назад».");
                         } else if (action.kind == ScreenControlCommands.Kind.DISABLE) {
