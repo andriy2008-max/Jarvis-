@@ -24,6 +24,9 @@ jobs:
       - name: Install official upstream and ONNX tooling
         run: |
           python -m pip install --upgrade pip
+          # ESPnet 202301 needs a legacy CPU-compatible PyTorch & matching audio backend.
+          # Avoid pulling the many-gigabyte latest CUDA PyTorch.
+          python -m pip install --index-url https://download.pytorch.org/whl/cpu torch==2.1.2+cpu torchaudio==2.1.2+cpu
           python -m pip install -r server/jarvis-tts-server/requirements.txt
           python -m pip install espnet_onnx onnx onnxruntime pyyaml
           # ESPnet 202301 expects the SciPy 1.x signal API; a newer SciPy removed kaiser.
