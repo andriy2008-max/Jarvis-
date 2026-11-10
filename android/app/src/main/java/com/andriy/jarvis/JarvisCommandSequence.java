@@ -45,7 +45,7 @@ public final class JarvisCommandSequence {
     // Splits only at a recognized *next command*, never just at "і".
     // Therefore "напиши Добрий день і гарного настрою" stays literal text.
     private static final Pattern NEXT = Pattern.compile(
-        "(?iu)\\s+(?:(?:і|а|потім|тоді|далі|після цього)\\s+)?(?=" +
+        "(?iu)\\s+(?:(?:і|а|потім|тоді|далі|після цього)\\s+)*(?=" +
         "(?:відкрий|запусти|натисни|нажми|торкнись|торкнися|напиши)\\s+" +
         "|(?:постав|встанови|зроби|зміни|задай)\\s+(?:медіа\\s*)?(?:гучність|звук)\\b)");
 
@@ -99,6 +99,7 @@ public final class JarvisCommandSequence {
         String normalized = part.toLowerCase(Locale.forLanguageTag("uk-UA"))
             .replaceAll("\\s+", " ").trim();
         String app = AssistantIntents.requestedApp(normalized);
+        if (app != null) app = app.replaceAll("[,;.!?]+$", "").trim();
         if (app != null && !app.isEmpty() &&
             !ScreenControlCommands.isSensitiveLabel(app))
             return new Step(Kind.OPEN_APP, app, -1);
