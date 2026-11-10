@@ -128,6 +128,14 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             return "Спочатку скажи: увімкни керування екраном.";
         switch (action.kind) {
             case CLICK: return s.clickNamed(action.label);
+            case LONG_PRESS:
+                return JarvisPhoneMode.isActive() ?
+                    s.longPressNamed(action.label) :
+                    "Спочатку скажи «Телефон», щоб увімкнути довге натискання.";
+            case SWIPE_UP: case SWIPE_DOWN: case SWIPE_LEFT: case SWIPE_RIGHT:
+                return JarvisPhoneMode.isActive() ?
+                    s.swipeCenterToEdge(action.kind) :
+                    "Спочатку скажи «Телефон», щоб керувати свайпами.";
             case TYPE_TEXT: return s.writeToFocusedField(action.label);
             case SCROLL_DOWN: return s.scroll(true);
             case SCROLL_UP: return s.scroll(false);
@@ -144,6 +152,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         connected = new WeakReference<>(this);
         // No automatic activation after install, process restart or service restart.
         sessionActive = false;
+        JarvisPhoneMode.setActive(false);
     }
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -156,6 +165,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
 
     private void stopSession() {
         sessionActive = false;
+        JarvisPhoneMode.setActive(false);
         if (sequences != null) sequences.cancel();
         if (spotifyPlayback != null) spotifyPlayback.cancel();
         stopListening();
@@ -259,6 +269,17 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                         // Preserve case/punctuation: "Напиши..." is literal dictation,
                         // unlike navigation commands which normalize inside the parser.
                         String raw = phrases.get(0);
+                        JarvisPhoneMode.Transition mode = JarvisPhoneMode.transition(raw);
+                        if (mode == JarvisPhoneMode.Transition.ENTER) {
+                            toast(JarvisPhoneModeManager.enter(
+                                ScreenControlAccessibilityService.this, false));
+                            return;
+                        }
+                        if (mode == JarvisPhoneMode.Transition.EXIT &&
+                            JarvisPhoneMode.isActive()) {
+                            toast(JarvisPhoneModeManager.exit());
+                            return;
+                        }
                         if (spotifyPlayback != null && spotifyPlayback.isRunning()) {
                             String request = CommandPatterns.normalize(raw);
                             if (request.equals("скасуй spotify") ||
@@ -316,6 +337,11 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                         } else if (action.kind == ScreenControlCommands.Kind.STATUS) {
                             toast(isSessionActive() ? "Керування активне." : "Керування вимкнене.");
                         } else if (action.kind == ScreenControlCommands.Kind.CLICK ||
+                            action.kind == ScreenControlCommands.Kind.LONG_PRESS ||
+                            action.kind == ScreenControlCommands.Kind.SWIPE_UP ||
+                            action.kind == ScreenControlCommands.Kind.SWIPE_DOWN ||
+                            action.kind == ScreenControlCommands.Kind.SWIPE_LEFT ||
+                            action.kind == ScreenControlCommands.Kind.SWIPE_RIGHT ||
                             action.kind == ScreenControlCommands.Kind.TYPE_TEXT ||
                             action.kind == ScreenControlCommands.Kind.SCROLL_DOWN ||
                             action.kind == ScreenControlCommands.Kind.SCROLL_UP ||
@@ -646,6 +672,104 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
 
         return best.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
             ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
+    }
+
+    private String longPressNamed(String label) {
+        if (label == null || label.trim().isEmpty() ||
+            ScreenControlCommands.isSensitiveLabel(label))
+            return "Довге натискання на платежі, видалення або підтвердження заборонене.";
+        AccessibilityNodeInfo root = currentExternalRoot();
+        if (root == null) return "Відкрий програму, якою хочеш керувати.";
+        ArrayDeque<AccessibilityNodeInfo> queue = new ArrayDeque<>();
+        queue.add(root);
+        ArrayList<AccessibilityNodeInfo> choices = new ArrayList<>();
+        ArrayList<ScreenTargetMatcher.Target> targets = new ArrayList<>();
+        java.util.HashSet<String> boundsSeen = new java.util.HashSet<>();
+        int scanned = 0;
+        while (!queue.isEmpty()) {
+            if (++scanned > MAX_SCAN) return "Елементів екрана надто багато. Не натискатиму навмання.";
+            AccessibilityNodeInfo node = queue.removeFirst();
+            if (!node.isVisibleToUser() || node.isPassword()) continue;
+            AccessibilityNodeInfo control = clickable(node);
+            if (control != null && control.isEnabled()) {
+                Rect rect = new Rect();
+                control.getBoundsInScreen(rect);
+                if (rect.width() > 0 && rect.height() > 0 &&
+                    boundsSeen.add(rect.toShortString())) {
+                    choices.add(control);
+                    targets.add(new ScreenTargetMatcher.Target(
+                        asString(node.getText()),asString(node.getContentDescription()),
+                        node.getViewIdResourceName(),asString(control.getText()),
+                        asString(control.getContentDescription()),
+                        control.getViewIdResourceName()));
+                }
+            }
+            for (int i = 0; i < node.getChildCount(); i++) {
+                AccessibilityNodeInfo child = node.getChild(i);
+                if (child != null) queue.addLast(child);
+            }
+        }
+        ScreenTargetMatcher.Selection selected = ScreenTargetMatcher.select(label,targets);
+        if (selected.ambiguous)
+            return "Знайшов декілька відповідних кнопок. Уточни назву.";
+        if (selected.index < 0) return "Не знайшов кнопку «" + label +
+            "». Без назви або опису не натискатиму навмання.";
+        AccessibilityNodeInfo node = choices.get(selected.index);
+        if (!sessionActive || currentExternalRoot() == null ||
+            !node.isVisibleToUser() || !node.isEnabled() ||
+            ScreenTargetMatcher.dangerous(targets.get(selected.index)))
+            return "Екран змінився або цю кнопку заборонено натискати.";
+        if (node.isLongClickable() &&
+            node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK))
+            return "Виконав довге натискання на «" + label + "».";
+        // Some apps expose only CLICK even when they accept a physical hold.
+        // The fallback is permitted solely on one uniquely labelled button.
+        Rect area = new Rect();
+        node.getBoundsInScreen(area);
+        if (area.width() < 12 || area.height() < 12)
+            return "Кнопка замала для безпечного довгого натискання.";
+        Path finger = new Path();
+        finger.moveTo(area.centerX(),area.centerY());
+        GestureDescription.Builder gesture = new GestureDescription.Builder();
+        gesture.addStroke(new GestureDescription.StrokeDescription(finger, 0, 830));
+        return dispatchGesture(gesture.build(), null, null) ?
+            "Надіслав довге натискання на «" + label + "»." :
+            "Android відхилив довге натискання.";
+    }
+
+    /** One stroke from the actual visible screen center to the requested edge. */
+    private String swipeCenterToEdge(ScreenControlCommands.Kind kind) {
+        AccessibilityNodeInfo root = currentExternalRoot();
+        if (root == null) return "Відкрий програму, якою хочеш керувати.";
+        Rect bounds = new Rect();
+        root.getBoundsInScreen(bounds);
+        if (bounds.width() < 110 || bounds.height() < 140)
+            return "Не вдалося визначити активну область екрана.";
+        float centerX = bounds.exactCenterX(), centerY = bounds.exactCenterY();
+        float marginX = Math.max(20f, bounds.width() * .08f);
+        float marginY = Math.max(20f, bounds.height() * .08f);
+        float endX = centerX, endY = centerY;
+        String direction;
+        switch (kind) {
+            case SWIPE_UP: endY = bounds.top + marginY; direction = "вгору"; break;
+            case SWIPE_DOWN: endY = bounds.bottom - marginY; direction = "вниз"; break;
+            case SWIPE_LEFT: endX = bounds.left + marginX; direction = "вліво"; break;
+            case SWIPE_RIGHT: endX = bounds.right - marginX; direction = "вправо"; break;
+            default: return "Напрямок свайпа не визначений.";
+        }
+        // Revalidate foreground and authorization just before dispatch.
+        AccessibilityNodeInfo current = currentExternalRoot();
+        if (!sessionActive || !JarvisPhoneMode.isActive() || current == null ||
+            !asString(root.getPackageName()).equals(asString(current.getPackageName())))
+            return "Вікно змінилося. Свайп зупинено.";
+        Path gesturePath = new Path();
+        gesturePath.moveTo(centerX,centerY);
+        gesturePath.lineTo(endX,endY);
+        GestureDescription.Builder gesture = new GestureDescription.Builder();
+        gesture.addStroke(new GestureDescription.StrokeDescription(gesturePath,0,410));
+        return dispatchGesture(gesture.build(),null,null) ?
+            "Виконую свайп " + direction + " від центра екрана." :
+            "Android не дозволив свайп " + direction + ".";
     }
 
     /**
