@@ -516,6 +516,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
         else aiResetParams.leftMargin = dp(8);
         aiControls.addView(aiResetButton, aiResetParams);
 
+        // Accessibility is powerful; a separate, explicitly acknowledged opt-in.
+        Button screenControlButton = secondaryButton(
+            "🖐 Керування екраном — дозвіл і запуск", this::showScreenControlConsent);
+        LinearLayout.LayoutParams screenControlParams = new LinearLayout.LayoutParams(-1, -2);
+        screenControlParams.topMargin = dp(8);
+        chatPanel.addView(screenControlButton, screenControlParams);
+
         // Web quick-command chips, in responsive two-column rows.
         LinearLayout examplesPanel = panel();
         LinearLayout.LayoutParams exParams = new LinearLayout.LayoutParams(-1, -2);
@@ -533,7 +540,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "🔦 Увімкни ліхтарик", "⏸ Пауза музики",
             "🔉 Гучність 50%", "☀ Налаштування екрана",
             "💬 Поговорімо", "🤔 Поясни мені",
-            "🗣 Скажи фразу", "💬 Скажи слово"
+            "🗣 Скажи фразу", "💬 Скажи слово",
+            "🖐 Керування екраном", "⏹ Зупини керування"
         };
         String[] commands = {
             "Котра година", "Відкрий YouTube",
@@ -546,7 +554,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "Увімкни ліхтарик", "Постав музику на паузу",
             "Постав гучність на 50%", "Відкрий налаштування екрана",
             "Привіт, Джарвіс", "Поясни простими словами, як працює штучний інтелект",
-            "Скажи Привіт, як справи?", "Джарвіс, скажи Дякую"
+            "Скажи Привіт, як справи?", "Джарвіс, скажи Дякую",
+            "Увімкни керування екраном", "Зупини керування екраном"
         };
         for (int i = 0; i < examples.length; i += 2) {
             LinearLayout row = new LinearLayout(this);
@@ -999,6 +1008,47 @@ public final class MainActivity extends Activity implements RecognitionListener 
         showDialogWithoutWake(dialog);
     }
 
+    /**
+     * Prominent disclosure before the user opens Android Accessibility settings
+     * or activates a session. The service does nothing until the user enables
+     * it in the OS and explicitly turns on screen control here.
+     */
+    private void showScreenControlConsent() {
+        boolean connected = ScreenControlAccessibilityService.isConnected();
+        String disclosure =
+            "Джарвіс зможе читати назви видимих кнопок і виконувати окремі " +
+            "команди натискання, прокручування та повернення назад.\n\n" +
+            "Служба спеціальних можливостей має широкий доступ до вмісту " +
+            "екрана, тому вмикай її лише якщо довіряєш Джарвісу. " +
+            "Ми не надсилаємо вміст екрана на сервер ШІ та не зберігаємо його.\n\n" +
+            "Дії виконуються лише після твоєї команди. Платежі, видалення, " +
+            "надсилання та підтвердження заблоковані в цій версії. " +
+            "Для зупинки скажи «Зупини керування екраном» або " +
+            "утримуй плаваючу кнопку Джарвіса.\n\n" +
+            (connected ? "Дозвіл Android уже ввімкнений. Запустити режим?"
+                       : "Наступний крок: вручну ввімкнути службу Джарвіса " +
+                         "в розділі «Спеціальні можливості» Android.");
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Керування екраном — доступ і приватність")
+            .setMessage(disclosure)
+            .setNegativeButton("Скасувати", null)
+            .setPositiveButton(connected ? "Увімкнути режим" : "Відкрити налаштування",
+                (d, which) -> {
+                    if (connected) {
+                        String result = ScreenControlAccessibilityService.start();
+                        appendDialogue("Джарвіс", result);
+                        setStatus(result);
+                    } else {
+                        try {
+                            startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+                        } catch (Exception error) {
+                            setStatus("Не вдалося відкрити спеціальні можливості Android.");
+                        }
+                    }
+                }).create();
+        showDialogWithoutWake(dialog);
+    }
+
     private void showWatchTextInput() {
         EditText editor = new EditText(this);
         editor.setSingleLine(false);
@@ -1016,7 +1066,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private void showWatchActions() {
         final String[] actions = {
             "Підключення до ШІ", "Новий діалог", "Показати нотатки",
-            "Що ти вмієш?", "Введення текстом", "Голосова активація", "Дмитро / Лада"
+            "Що ти вмієш?", "Введення текстом", "Голосова активація", "Дмитро / Лада",
+            "Керування екраном"
         };
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Джарвіс — дії")
             .setItems(actions, (d, which) -> {
@@ -1034,6 +1085,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         }
                         break;
                     case 6: showVoiceSettings(); break;
+                    case 7: showScreenControlConsent(); break;
                     default: break;
                 }
             }).create();
@@ -1948,6 +2000,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         AssistantIntents.Reminder reminder = AssistantIntents.reminder(command);
         String requestedApp = AssistantIntents.requestedApp(command);
         DeviceCommands.Action deviceCommand = DeviceCommands.parse(command);
+        ScreenControlCommands.Action screenCommand = ScreenControlCommands.parse(command);
         boolean silentReply = false;
         String reply;
 
@@ -1966,6 +2019,24 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 setStatus("Озвучую задану фразу");
                 speakReply(directSpeech);
                 return;
+            }
+        } else if (screenCommand != null) {
+            switch (screenCommand.kind) {
+                case ENABLE:
+                case SETTINGS:
+                    showScreenControlConsent();
+                    return;
+                case DISABLE:
+                    reply = ScreenControlAccessibilityService.stop();
+                    break;
+                case STATUS:
+                    reply = ScreenControlAccessibilityService.isSessionActive()
+                        ? "Режим керування екраном увімкнено."
+                        : "Керування екраном вимкнено. Скажи: увімкни керування екраном.";
+                    break;
+                default:
+                    reply = ScreenControlAccessibilityService.perform(screenCommand);
+                    break;
             }
         } else if (deviceCommand != null) {
             reply = deviceActions == null ? "Керування пристроєм ще не готове." : deviceActions.perform(deviceCommand);
@@ -2100,7 +2171,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             askAi(raw);
             return;
         } else if (command.contains("що ти вмієш") || command.equals("допомога") || command.equals("команди")) {
-            reply = "Я вмію: команди телефону, нотатки, таймери, будильники, запуск програм, музику, гучність, ліхтарик, озвучення будь-якої фрази командою «Скажи...» та розмову з ШІ (після підключення сервера). Спробуй: скажи Привіт, як справи?";
+            reply = "Я вмію: команди телефону, нотатки, таймери, будильники, запуск програм, музику, гучність, ліхтарик, керування екраном після ручного дозволу, озвучення будь-якої фрази командою «Скажи...» та розмову з ШІ (після підключення сервера). Спробуй: скажи Привіт, як справи?";
         } else if (command.contains("дякую")) {
             reply = "Завжди радий допомогти.";
         } else {
