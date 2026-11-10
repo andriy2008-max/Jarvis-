@@ -176,12 +176,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 applyPreferredVoice();
                 tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     @Override public void onStart(String id) {
-                        runOnUiThread(() -> {
-                            if (id != null && id.equals(activeTtsId) && voiceEnabled) {
-                                JarvisSpeechMouth.startSystemTts();
-                                markSpeaking();
-                            }
-                        });
+                        if (id != null && id.equals(activeTtsId) && voiceEnabled) {
+                            // Start the audio clock immediately. Word-range callbacks
+                            // can arrive before the main-thread animation update.
+                            JarvisSpeechMouth.startSystemTts();
+                            runOnUiThread(() -> {
+                                if (id.equals(activeTtsId) && voiceEnabled)
+                                    markSpeaking();
+                            });
+                        }
                     }
                     @Override public void onDone(String id) {
                         if (id != null && id.equals(activeTtsId)) endSpeaking();
@@ -1934,10 +1937,22 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (!manualHypothesis.isEmpty()) {
                 if (manualTranscript.length() > 0) manualTranscript.append(' ');
                 manualTranscript.append(manualHypothesis);
-                observedManualWords(manualTranscript.toString());
+                if (autoSilenceStop)
+                    speechPause.sawWords(manualTranscript.toString(), SystemClock.uptimeMillis());
+                else
+                    observedManualWords(manualTranscript.toString());
                 manualHypothesis = "";
             }
             if (manualStopRequested) {
+                if (autoSilenceStop && !speechPause.expired(
+                    SystemClock.uptimeMillis(), speechPauseSeconds())) {
+                    autoSilenceStop = false;
+                    manualStopRequested = false;
+                    cancelSilenceCheck();
+                    scheduleSilenceCheck();
+                    scheduleManualRestart(350L);
+                    return;
+                }
                 finishManualCapture();
                 return;
             }
