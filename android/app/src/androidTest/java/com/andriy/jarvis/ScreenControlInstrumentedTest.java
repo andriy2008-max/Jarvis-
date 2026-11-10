@@ -2,9 +2,12 @@ package com.andriy.jarvis;
 
 import static org.junit.Assert.*;
 
+import android.app.Instrumentation;
+import android.app.UiAutomation;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.os.SystemClock;
+import android.os.ParcelFileDescriptor;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
@@ -19,12 +22,33 @@ import org.junit.runner.RunWith;
 @RunWith(AndroidJUnit4.class)
 public final class ScreenControlInstrumentedTest {
     @Test public void explicitlyNamedClickAndStopOnExternalScreen() throws Exception {
-        // Android binds enabled accessibility services asynchronously, especially
-        // after first installation on a fresh emulator.
+        // Instrumentation attaches UiAutomation; without this explicit flag it
+        // SUPPRESSES ordinary accessibility services, including Jarvis.
+        // This is an instrumentation-only permission, NOT production code.
+        Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+        UiAutomation automation = instrumentation.getUiAutomation(
+            UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES);
+        assertNotNull("Test UiAutomation could not connect", automation);
+        // Repair a service binding that was interrupted when AndroidJUnitRunner
+        // replaced the app process. Only this test turns settings on via shell.
+        try (ParcelFileDescriptor off = automation.executeShellCommand(
+                 "settings put secure accessibility_enabled 0")) {
+            assertNotNull(off);
+        }
+        SystemClock.sleep(500);
+        try (ParcelFileDescriptor on = automation.executeShellCommand(
+                 "settings put secure enabled_accessibility_services " +
+                 "com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlAccessibilityService")) {
+            assertNotNull(on);
+        }
+        try (ParcelFileDescriptor enabled = automation.executeShellCommand(
+                 "settings put secure accessibility_enabled 1")) {
+            assertNotNull(enabled);
+        }
         for (int attempt = 0;
-             attempt < 50 && !ScreenControlAccessibilityService.isConnected();
+             attempt < 90 && !ScreenControlAccessibilityService.isConnected();
              attempt++) SystemClock.sleep(200);
-        assertTrue("AccessibilityService never connected after 10 seconds; inspect dumpsys accessibility",
+        assertTrue("AccessibilityService never connected after UiAutomation non-suppressing setup; inspect dumpsys accessibility",
             ScreenControlAccessibilityService.isConnected());
         Intent external = new Intent();
         external.setComponent(new ComponentName(
