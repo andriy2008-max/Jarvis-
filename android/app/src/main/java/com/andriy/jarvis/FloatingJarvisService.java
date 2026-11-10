@@ -828,6 +828,29 @@ public final class FloatingJarvisService extends Service {
             return;
         }
 
+        if (normalized.startsWith("обчисли через python") ||
+            normalized.startsWith("перевір через python") ||
+            normalized.startsWith("проаналізуй дані")) {
+            speakWithAi(raw, "analysis");
+            return;
+        }
+        if (normalized.startsWith("намалюй ") ||
+            normalized.startsWith("створи зображення ") ||
+            normalized.startsWith("згенеруй зображення ")) {
+            String prompt = normalized.replaceFirst(
+                "^(?:намалюй|створи зображення|згенеруй зображення)\\s+", "").trim();
+            if (prompt.isEmpty()) { reply("Назви, що потрібно намалювати."); return; }
+            try {
+                Intent show = new Intent(this, MainActivity.class);
+                show.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                show.putExtra(MainActivity.EXTRA_AI_IMAGE_PROMPT, prompt);
+                startActivity(show);
+                message("Відкриваю створення зображення у головному Джарвісі.");
+            } catch (Exception error) {
+                reply("Для генерації зображень відкрий основний Джарвіс.");
+            }
+            return;
+        }
         if (WorldNewsCommands.requestsWorldNews(normalized)) {
             if (JarvisSearchRouting.addressedToJarvis(raw)) {
                 readWorldNews();
@@ -954,6 +977,31 @@ public final class FloatingJarvisService extends Service {
         }
     }
 
+    private void speakWithAi(String query, String mode) {
+        if (ai == null || !ai.isConfigured()) {
+            reply("Налаштуй ШІ-сервер у головному Джарвісі.");
+            return;
+        }
+        if (aiBusy) {
+            message("ШІ ще відповідає на попереднє запитання.");
+            return;
+        }
+        aiBusy = true;
+        setFace("thinking");
+        ai.sendDetailed(query, mode, null, (result, error) -> {
+            aiBusy = false;
+            if (closing) return;
+            if (error != null || result == null) {
+                reply(error == null ? "ШІ не повернув відповіді." : error);
+                return;
+            }
+            if (result.sources != null && !result.sources.isEmpty()) {
+                message("Джерела: " + result.sources);
+            }
+            reply(result.reply);
+        });
+    }
+
     /** Browser results must NEVER speak, including the opening acknowledgement. */
     private void openSearchSilently(String query) {
         Intent browser = new Intent(Intent.ACTION_VIEW,
@@ -965,6 +1013,10 @@ public final class FloatingJarvisService extends Service {
 
     /** Jarvis-addressed searches use live web snippets, then configured AI if available. */
     private void searchInformationWithVoice(String query) {
+        if (ai != null && ai.isConfigured()) {
+            speakWithAi(query, "web");
+            return;
+        }
         if (webSearchBusy || aiBusy) {
             message("Я ще шукаю відповідь на попереднє запитання.");
             return;
@@ -1004,6 +1056,10 @@ public final class FloatingJarvisService extends Service {
 
     /** Live headlines can be read through the orb without configuring AI. */
     private void readWorldNews() {
+        if (ai != null && ai.isConfigured()) {
+            speakWithAi("Знайди найважливіші свіжі новини світу з джерелами.", "web");
+            return;
+        }
         if (newsBusy) {
             message("Я вже шукаю світові новини.");
             return;
