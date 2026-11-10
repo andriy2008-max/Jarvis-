@@ -34,6 +34,10 @@ on:
       - 'android/app/src/main/java/com/andriy/jarvis/SystemToggleActions.java'
       - 'android/app/src/test/java/com/andriy/jarvis/DeviceCommandsTest.java'
       - 'android/app/src/main/java/com/andriy/jarvis/ScreenControlCommands.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisPhoneMode.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisPhoneModeManager.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisPixelPhone.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/JarvisPhoneModeTest.java'
       - 'android/app/src/main/java/com/andriy/jarvis/ScreenTextInsertion.java'
       - 'android/app/src/test/java/com/andriy/jarvis/ScreenTextInsertionTest.java'
       - 'android/app/src/main/java/com/andriy/jarvis/ScreenTargetMatcher.java'
@@ -118,6 +122,7 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/JarvisTranscriptCorrection.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisOrbPlacement.java \
             android/app/src/main/java/com/andriy/jarvis/ScreenControlCommands.java \
+            android/app/src/main/java/com/andriy/jarvis/JarvisPhoneMode.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisCommandSequence.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisSequenceEngine.java \
             android/app/src/main/java/com/andriy/jarvis/AssistantIntents.java \
@@ -142,6 +147,7 @@ jobs:
             android/app/src/test/java/com/andriy/jarvis/JarvisTranscriptCorrectionTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisOrbPlacementTest.java \
             android/app/src/test/java/com/andriy/jarvis/ScreenControlCommandsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/JarvisPhoneModeTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisCommandSequenceTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisSequenceEngineTest.java \
             android/app/src/test/java/com/andriy/jarvis/ScreenTextInsertionTest.java \
@@ -164,6 +170,7 @@ jobs:
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisTranscriptCorrectionTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisOrbPlacementTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.ScreenControlCommandsTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisPhoneModeTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisCommandSequenceTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisSequenceEngineTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.ScreenTextInsertionTest
