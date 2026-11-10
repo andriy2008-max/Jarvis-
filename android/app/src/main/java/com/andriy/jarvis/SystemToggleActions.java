@@ -70,7 +70,7 @@ public final class SystemToggleActions {
             case BATTERY_SAVER_ON:
             case BATTERY_SAVER_OFF:
                 return openSettings(context, "енергозбереження",
-                    Settings.ACTION_BATTERY_SAVER_SETTINGS, Settings.ACTION_BATTERY_SETTINGS);
+                    Settings.ACTION_BATTERY_SAVER_SETTINGS, "android.intent.action.POWER_USAGE_SUMMARY");
             case DARK_MODE_ON:
             case DARK_MODE_OFF:
                 return openSettings(context, "темної теми", Settings.ACTION_DISPLAY_SETTINGS);
