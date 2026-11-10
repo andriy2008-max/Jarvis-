@@ -1,0 +1,104 @@
+name: Signed Jarvis Lite phone QA APK (no Accessibility)
+
+# Temporary test APK with no accessibility service. Never published as stable.
+on:
+  push:
+    paths:
+      - '.github/workflows/build-signed-lite-qa-apk.yml'
+      - 'android/app/src/lite/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  signed-lite-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Prepare Android SDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Restore original stable signing certificate
+        env:
+          KEYSTORE_BASE64: ${{ secrets.JARVIS_SIGNING_KEYSTORE_BASE64 }}
+          JARVIS_RELEASE_STORE_PASSWORD: ${{ secrets.JARVIS_RELEASE_STORE_PASSWORD }}
+          JARVIS_RELEASE_KEY_ALIAS: ${{ secrets.JARVIS_RELEASE_KEY_ALIAS }}
+          JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${KEYSTORE_BASE64:?Stable keystore secret is missing}"
+          : "${JARVIS_RELEASE_STORE_PASSWORD:?Missing store password}"
+          : "${JARVIS_RELEASE_KEY_ALIAS:?Missing signing alias}"
+          : "${JARVIS_RELEASE_KEY_PASSWORD:?Missing key password}"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/jarvis-stable.jks"
+          chmod 600 "$RUNNER_TEMP/jarvis-stable.jks"
+          echo "JARVIS_RELEASE_STORE_FILE=$RUNNER_TEMP/jarvis-stable.jks" >> "$GITHUB_ENV"
+      - name: Build Jarvis Lite and run unit tests
+        env:
+          JARVIS_RELEASE_STORE_PASSWORD: ${{ secrets.JARVIS_RELEASE_STORE_PASSWORD }}
+          JARVIS_RELEASE_KEY_ALIAS: ${{ secrets.JARVIS_RELEASE_KEY_ALIAS }}
+          JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
+        run: gradle -p android --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleLite
+      - name: Verify stable signing, package and NO accessibility service
+        run: |
+          set -euo pipefail
+          apk=android/app/build/outputs/apk/lite/app-lite.apk
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+          actual="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1)"
+          expected="$(tr -d '[:space:]' < android/RELEASE-CERT-SHA256.txt | tr '[:upper:]' '[:lower:]')"
+          test "$actual" = "$expected"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" > "$RUNNER_TEMP/lite-badging.txt"
+          grep -Fq "package: name='com.andriy.jarvis.stable'" "$RUNNER_TEMP/lite-badging.txt"
+          grep -Fq "versionCode='24'" "$RUNNER_TEMP/lite-badging.txt"
+          grep -Fq "versionName='0.1.14-lite'" "$RUNNER_TEMP/lite-badging.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump xmltree "$apk" AndroidManifest.xml > "$RUNNER_TEMP/lite-manifest.txt"
+          if grep -Eiq 'ScreenControlAccessibilityService|BIND_ACCESSIBILITY_SERVICE|android.accessibilityservice.AccessibilityService' "$RUNNER_TEMP/lite-manifest.txt"; then
+            echo "::error::Lite variant unexpectedly declares AccessibilityService"
+            exit 1
+          fi
+          echo 'Verified Lite variant has no declared accessibility service.'
+          mkdir -p android/dist
+          cp "$apk" android/dist/JARVIS-0.1.14-lite-signed-phone-QA.apk
+          (cd android/dist && sha256sum JARVIS-0.1.14-lite-signed-phone-QA.apk > JARVIS-0.1.14-lite-signed-phone-QA.sha256)
+          cat > android/dist/README-LITE-QA.txt <<'TXT'
+          JARVIS 0.1.14-LITE — TEST BUILD, NOT A FINAL RELEASE
+
+          Signed with the ORIGINAL Jarvis stable keystore, package ID
+          com.andriy.jarvis.stable, versionCode 24, versionName 0.1.14-lite.
+          It is intended to UPDATE the existing stable Jarvis app.
+          This build REMOVES the AccessibilityService declaration entirely,
+          and DOES NOT control other apps or read their screens.
+
+          Features for testing: "Say ..." command, Dmytro/Lada one-time
+          experimental 145MB offline voice model, timers and existing Jarvis UI.
+          It is NOT guaranteed to install; Google Play Protect may still
+          evaluate the APK. Never disable Play Protect to install this file.
+
+          Do not try to install over already-installed versionCode 24 that is
+          from a different QA build; Android may reject a same-code update.
+          Keep the signing keystore and other secrets private.
+          TXT
+      - name: Upload the verified Lite QA artifact for user testing
+        uses: actions/upload-artifact@v4
+        with:
+          name: JARVIS-0.1.14-LITE-signed-no-accessibility
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            android/dist/JARVIS-0.1.14-lite-signed-phone-QA.apk
+            android/dist/JARVIS-0.1.14-lite-signed-phone-QA.sha256
+            android/dist/README-LITE-QA.txt
+      - name: Erase signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/jarvis-stable.jks"
