@@ -7,7 +7,7 @@ import java.util.List;
 
 /** No Android dependencies: validates the remote endpoint and bounds chat context. */
 public final class AiChatPolicy {
-    public static final int MAX_MESSAGE_CHARS = 2000;
+    public static final int MAX_MESSAGE_CHARS = 4000;
     public static final int MAX_CONTEXT_TURNS = 14;
     private AiChatPolicy() { }
 
