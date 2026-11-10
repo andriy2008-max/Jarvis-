@@ -78,6 +78,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private boolean recognizerUsesOnDevice;
     private TextToSpeech tts;
     private NeuralSpeechClient neuralSpeech;
+    private OfflineVoicePackManager offlinePacks;
     private String activeTtsId;
     private DeviceActions deviceActions;
     private final WakeConversation wakeConversation = new WakeConversation();
@@ -131,6 +132,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         loadNotes();
         aiChatClient = new AiChatClient(this);
         neuralSpeech = new NeuralSpeechClient(this);
+        offlinePacks = new OfflineVoicePackManager(this);
         buildInterface();
         deviceActions = new DeviceActions(this);
 
@@ -814,7 +816,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             .setMessage("Профіль збережено. Для справжнього голосу " + label +
                 " потрібно підключити особистий HTTPS TTS-сервер. Без нього працює системний голос Android.")
             .setNegativeButton("Закрити", null)
-            .setNeutralButton("Рушій TTS", (d, w) -> showNeuralTtsSettings())
+            .setNeutralButton("Офлайн-пакет", (d, w) -> showOfflineVoiceSettings())
             .setPositiveButton("Зразок " + label, (d, w) -> openOriginalVoicePreview(profile))
             .create();
         showDialogWithoutWake(alert);
@@ -847,8 +849,76 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 selectVoiceProfile(which == 1 ? VoiceRanking.LADA : VoiceRanking.DMYTRO);
             })
             .setNegativeButton("Закрити", null)
-            .setNeutralButton("Рушій TTS", (d, w) -> showNeuralTtsSettings())
+            .setNeutralButton("Офлайн-пакет", (d, w) -> showOfflineVoiceSettings())
             .create();
+        showDialogWithoutWake(dialog);
+    }
+
+    /** Prototype installer: models are checked/persisted, local ONNX inference is NOT active yet. */
+    private void showOfflineVoiceSettings() {
+        if (offlinePacks == null) return;
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(18), dp(8), dp(18), dp(8));
+
+        String state = offlinePacks.hasInstalledFiles()
+            ? "Пакет збережено. Офлайн-озвучення ще не активоване: очікується перевірка конвертації ONNX на Android."
+            : "Пакет ще не встановлено. Потрібен конвертований ONNX ZIP, не оригінальний model.pth.";
+        TextView description = makeText(
+            state + "\nОбидва голоси використовують одну модель. Для безпечного встановлення потрібне " +
+            "HTTPS-посилання та SHA-256 від перевіреного випуску. Сам пакет не входить до APK.",
+            13, MUTED, Gravity.START, false);
+        form.addView(description, new LinearLayout.LayoutParams(-1, -2));
+
+        EditText link = new EditText(this);
+        link.setSingleLine(true);
+        link.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        link.setHint("https://.../jarvis-uktts-v6-onnx.zip");
+        form.addView(link, new LinearLayout.LayoutParams(-1, -2));
+
+        EditText sha = new EditText(this);
+        sha.setSingleLine(true);
+        sha.setInputType(InputType.TYPE_CLASS_TEXT);
+        sha.setHint("SHA-256 з перевіреного релізу (64 символи)");
+        form.addView(sha, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView progress = makeText(
+            "Перевіреного ONNX-релізу поки немає. Це підготовлений механізм завантаження, а не готовий голосовий рушій.",
+            12, MUTED, Gravity.START, false);
+        form.addView(progress, new LinearLayout.LayoutParams(-1, -2));
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Дмитро і Лада · офлайн")
+            .setView(form)
+            .setNegativeButton("Закрити", null)
+            .setNeutralButton("TTS-сервер", (d, which) -> showNeuralTtsSettings())
+            .setPositiveButton("Завантажити пакет", null)
+            .create();
+        dialog.setOnShowListener(d -> {
+            Button install = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            install.setOnClickListener(v -> {
+                String url = link.getText().toString().trim();
+                String hash = sha.getText().toString().trim();
+                if (!OfflineVoicePackRules.validUrl(url) || !OfflineVoicePackRules.validSha256(hash)) {
+                    progress.setText("Наразі немає готового випуску. Потрібні справжні HTTPS URL та SHA-256 ONNX-пакета.");
+                    return;
+                }
+                install.setEnabled(false);
+                progress.setText("Завантаження: 0%. Не закривай Джарвіса до завершення.");
+                offlinePacks.install(url, hash, new OfflineVoicePackManager.Callback() {
+                    @Override public void onProgress(int percentage) {
+                        if (!isFinishing() && !isDestroyed())
+                            progress.setText("Завантаження: " + percentage + "%. Після нього буде перевірка файлів.");
+                    }
+                    @Override public void onComplete(boolean installed, String message) {
+                        if (isFinishing() || isDestroyed()) return;
+                        progress.setText(message);
+                        setStatus(message);
+                        install.setEnabled(true);
+                    }
+                });
+            });
+        });
         showDialogWithoutWake(dialog);
     }
 
@@ -2033,6 +2103,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (deviceActions != null) deviceActions.close();
         if (aiChatClient != null) aiChatClient.close();
         if (recognizer != null) recognizer.destroy();
+        if (offlinePacks != null) offlinePacks.close();
         if (neuralSpeech != null) neuralSpeech.close();
         if (tts != null) {
             tts.stop();
