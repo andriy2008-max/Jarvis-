@@ -6,7 +6,7 @@ import java.util.regex.Pattern;
 
 /** Deliberate, single-step Android UI actions requested verbatim by the user. */
 public final class ScreenControlCommands {
-    public enum Kind { ENABLE, DISABLE, SETTINGS, CLICK, TYPE_TEXT, SCROLL_UP, SCROLL_DOWN, BACK, STATUS }
+    public enum Kind { ENABLE, DISABLE, SETTINGS, CLICK, LONG_PRESS, SWIPE_UP, SWIPE_DOWN, SWIPE_LEFT, SWIPE_RIGHT, TYPE_TEXT, SCROLL_UP, SCROLL_DOWN, BACK, STATUS }
 
     public static final class Action {
         public final Kind kind;
@@ -18,6 +18,11 @@ public final class ScreenControlCommands {
         "(?iu)^напиши(?:[\\s,:—-]+([\\s\\S]*))?$");
     private static final Pattern WAKE = Pattern.compile(
         "(?iu)^(?:джарвіс|джарвис|jarvis)[\\s,:—-]*");
+
+    private static final Pattern HOLD = Pattern.compile(
+        "^(?:зажми|затисни|утримуй|натисни\\s+(?:і|та)\\s+(?:тримай|утримуй))" +
+        "(?:\\s+на)?(?:\\s+(?:кнопку|значок|іконку|ікону|елемент))?\\s+(.+)$",
+        Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
     private static final Pattern CLICK = Pattern.compile(
         "^(?:натисни|нажми|торкнись|торкнися)(?:\\s+на)?(?:\\s+(?:кнопку|значок|іконку|ікону|символ))?\\s+(.+)$",
@@ -42,6 +47,19 @@ public final class ScreenControlCommands {
         String s = original.toLowerCase(Locale.forLanguageTag("uk-UA"))
             .replaceAll("[.!?]+$", "").trim().replaceAll("\\s+", " ");
         switch (s) {
+            case "свайпни вверх": case "свайпни верх": case "свайпни в верх":
+            case "свайпни у верх": case "свайпни вгору": case "свайп вверх":
+            case "свайп вгору": case "проведи вгору":
+                return new Action(Kind.SWIPE_UP, null);
+            case "свайпни вниз": case "свайпни в низ": case "свайпни у низ":
+            case "свайпни низ": case "свайп вниз": case "проведи вниз":
+                return new Action(Kind.SWIPE_DOWN, null);
+            case "свайпни вліво": case "свайпни в ліво": case "свайпни ліво":
+            case "свайп вліво": case "проведи вліво":
+                return new Action(Kind.SWIPE_LEFT, null);
+            case "свайпни вправо": case "свайпни в право": case "свайпни право":
+            case "свайп вправо": case "проведи вправо":
+                return new Action(Kind.SWIPE_RIGHT, null);
             case "увімкни керування екраном":
             case "включи керування екраном":
             case "почни керування екраном":
@@ -71,6 +89,14 @@ public final class ScreenControlCommands {
             case "повернися назад":
                 return new Action(Kind.BACK, null);
             default:
+                Matcher hold = HOLD.matcher(s);
+                if (hold.matches()) {
+                    String label = hold.group(1).trim();
+                    if (label.isEmpty() || label.length() > 90 ||
+                        isSensitiveLabel(label))
+                        return new Action(Kind.LONG_PRESS, "");
+                    return new Action(Kind.LONG_PRESS, label);
+                }
                 Matcher m = CLICK.matcher(s);
                 if (!m.matches()) {
                     // Only infer a navigation click for a RECOGNIZED destination.
