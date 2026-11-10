@@ -124,7 +124,7 @@ public final class JarvisOrbView extends View {
         paint.setColor(Color.rgb(217, 254, 255));
         float pixel = orb * .076f;
         float ox = cx - 8 * pixel, oy = cy - 8 * pixel;
-        if (transcriptVisible()) {
+        if (transcriptVisible() && !"speaking".equals(expression)) {
             drawRecognizedText(canvas, cx, cy, orb);
             postInvalidateDelayed(180);
             return;
@@ -147,8 +147,11 @@ public final class JarvisOrbView extends View {
                 drawPixel(canvas, ox, oy, pixel, 9, 11, 1, 1);
                 break;
             case "speaking":
-                drawPixel(canvas, ox, oy, pixel, 6, 10, 4,
-                    (SystemClock.uptimeMillis() / 270) % 2 == 0 ? 3 : 1);
+                int height = JarvisSpeechMouth.height();
+                if (height > 0)
+                    drawPixel(canvas, ox, oy, pixel, 6, 10, 4, height);
+                else
+                    drawPixel(canvas, ox, oy, pixel, 6, 11, 4, 1);
                 break;
             default:
                 drawPixel(canvas, ox, oy, pixel, 4, 11, 2, 1);
@@ -162,7 +165,7 @@ public final class JarvisOrbView extends View {
             canvas.drawCircle(cx, cy, ring - 3 * dp, paint);
             paint.setStyle(Paint.Style.FILL);
         }
-        postInvalidateDelayed(180);
+        postInvalidateDelayed("speaking".equals(expression) ? 42L : 180L);
     }
 
     private void drawPixel(Canvas c, float x, float y, float size,
