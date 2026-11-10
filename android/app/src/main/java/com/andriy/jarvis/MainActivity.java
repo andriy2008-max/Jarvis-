@@ -3065,6 +3065,24 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void startSpotifyMusic(SpotifyMusicCommands.Kind selection) {
         if (spotifyPlayback == null) spotifyPlayback = new SpotifyPlaybackController(this);
+        // Only reuse the user's already granted overlay access. Never request
+        // a new permission or create a second screen-control microphone icon.
+        if (selection != SpotifyMusicCommands.Kind.OPEN &&
+            !FloatingJarvisService.isShowing() &&
+            android.provider.Settings.canDrawOverlays(this) &&
+            checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED) {
+            try {
+                Intent faceOverlay = new Intent(this, FloatingJarvisService.class);
+                faceOverlay.setAction(FloatingJarvisService.ACTION_SHOW);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                    startForegroundService(faceOverlay);
+                else startService(faceOverlay);
+            } catch (RuntimeException ignored) {
+                // The core Spotify command still works with Accessibility;
+                // Android may prohibit launching a foreground overlay service.
+            }
+        }
         spotifyPlayback.start(selection, new SpotifyPlaybackController.Listener() {
             @Override public void onProgress(String detail) { setStatus(detail); }
             @Override public void onFinished(boolean success, String detail) {
