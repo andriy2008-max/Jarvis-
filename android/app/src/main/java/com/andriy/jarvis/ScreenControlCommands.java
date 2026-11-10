@@ -18,7 +18,7 @@ public final class ScreenControlCommands {
         "^(?:натисни|нажми|торкнись|торкнися)(?:\\s+на)?(?:\\s+(?:кнопку|значок|іконку|ікону|символ))?\\s+(.+)$",
         Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern NAVIGATE = Pattern.compile(
-        "^(?:відкрий|покажи|знайди|перейди\\s+(?:до|в|у|на)|де\\s+тут|"
+        "^(?:відкрий|покажи|знайди|зайди\\s+(?:в|у|до)|перейди\\s+(?:до|в|у|на)|де\\s+тут|"
         + "хочу\\s+відкрити|хочу\\s+знайти|мені\\s+потрібн(?:а|о|ий|і))\\s+(.+)$",
         Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
 
