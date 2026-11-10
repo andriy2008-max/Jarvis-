@@ -185,6 +185,7 @@ public final class NeuralSpeechClient {
             player.setOnPreparedListener(p -> {
                 if (!active(current)) return;
                 try {
+                    JarvisSpeechMouth.startWav(p, file);
                     p.start();
                     callback.onStart();
                 } catch (Exception error) {
@@ -218,6 +219,7 @@ public final class NeuralSpeechClient {
 
     private void releasePlayer() {
         if (player != null) {
+            JarvisSpeechMouth.stopWav(player);
             try { player.reset(); player.release(); } catch (Exception ignored) { }
             player = null;
         }
