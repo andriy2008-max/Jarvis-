@@ -8,6 +8,7 @@ on:
       - 'android/app/src/androidTest/java/com/andriy/jarvis/ScreenControl*'
       - 'android/app/src/androidTest/AndroidManifest.xml'
       - 'android/app/src/main/java/com/andriy/jarvis/ScreenControl*'
+      - 'android/app/src/main/java/com/andriy/jarvis/ScreenTextInsertion.java'
       - 'android/app/src/debug/java/com/andriy/jarvis/ScreenControlDebugReceiver.java'
       - 'android/app/src/debug/AndroidManifest.xml'
       - 'android/app/src/main/AndroidManifest.xml'
@@ -70,13 +71,16 @@ jobs:
             adb shell am broadcast -n com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlDebugReceiver -a com.andriy.jarvis.preview.DEBUG_SCREEN_CONTROL --es op start
             adb shell "am broadcast -n com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlDebugReceiver -a com.andriy.jarvis.preview.DEBUG_SCREEN_CONTROL --es op click --es phrase 'натисни кнопку тестова кнопка'"
             adb shell "am broadcast -n com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlDebugReceiver -a com.andriy.jarvis.preview.DEBUG_SCREEN_CONTROL --es op click --es phrase 'відкрий пошук'"
+            adb shell "am broadcast -n com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlDebugReceiver -a com.andriy.jarvis.preview.DEBUG_SCREEN_CONTROL --es op type --es phrase 'Напиши Привіт, Тест! 42'"
             adb shell am broadcast -n com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlDebugReceiver -a com.andriy.jarvis.preview.DEBUG_SCREEN_CONTROL --es op scroll_down
             adb shell am broadcast -n com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlDebugReceiver -a com.andriy.jarvis.preview.DEBUG_SCREEN_CONTROL --es op blocked
             adb shell am broadcast -n com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlDebugReceiver -a com.andriy.jarvis.preview.DEBUG_SCREEN_CONTROL --es op stop
-            adb logcat -d -s JARVIS_SCREEN_QA:I '*:S' > /tmp/screen-control-test.log
+            adb logcat -d -s JARVIS_SCREEN_QA:I JARVIS_INPUT_QA:I '*:S' > /tmp/screen-control-test.log
             cat /tmp/screen-control-test.log
             grep -Fq 'qa_op=start qa_active=true' /tmp/screen-control-test.log
             test "$(grep -Fc 'qa_op=click qa_success=true' /tmp/screen-control-test.log)" -eq 2
+            grep -F 'qa_op=type ' /tmp/screen-control-test.log | grep -Fq 'qa_typed=true'
+            grep -Fq 'JARVIS_INPUT_QA: qa_exact_text=true' /tmp/screen-control-test.log
             grep -Fq 'qa_op=scroll_down qa_success=false qa_denied=false qa_scrolled=true' /tmp/screen-control-test.log
             grep -Fq 'qa_op=blocked qa_success=false qa_denied=true' /tmp/screen-control-test.log
             grep -Fq 'qa_op=stop qa_active=false' /tmp/screen-control-test.log
