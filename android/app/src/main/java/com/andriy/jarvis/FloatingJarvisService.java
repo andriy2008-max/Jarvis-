@@ -60,13 +60,13 @@ public final class FloatingJarvisService extends Service {
     private static volatile boolean showing;
     private final Handler ui = new Handler(Looper.getMainLooper());
     private static final String TRANSCRIPT_OWNER = "floating";
+
+    private WindowManager windows;
+    private JarvisOrbView face;
     private final JarvisLiveTranscript.Listener transcriptListener =
         (words, active, untilMs) -> {
             if (face != null) face.showTranscript(words, active, untilMs);
         };
-
-    private WindowManager windows;
-    private JarvisOrbView face;
     private WindowManager.LayoutParams faceParams;
     private int displayWidth;
     private int displayHeight;
