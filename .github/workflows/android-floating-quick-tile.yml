@@ -62,14 +62,17 @@ jobs:
             adb shell cmd statusbar add-tile com.andriy.jarvis.preview/com.andriy.jarvis.JarvisQuickTileService
             sleep 4
             adb shell cmd statusbar click-tile com.andriy.jarvis.preview/com.andriy.jarvis.JarvisQuickTileService
-            sleep 7
-            adb logcat -d -s JARVIS_FLOATING_QA:I AndroidRuntime:E '*:S' > /tmp/jarvis-tile.log
+            sleep 16
+            adb logcat -d -s JARVIS_FLOATING_QA:V AndroidRuntime:E '*:S' > /tmp/jarvis-tile.log
             cat /tmp/jarvis-tile.log
             adb shell dumpsys activity activities | grep -i -E 'jarvis|Resumed' | head -25 || true
             adb shell dumpsys activity services | grep -i -E 'Jarvis|Floating' | head -25 || true
             adb logcat -d -s ActivityTaskManager:I SystemUI:W AndroidRuntime:E '*:S' | tail -35 || true
             grep -Fq 'JARVIS_FLOATING_QA: tile_clicked=true' /tmp/jarvis-tile.log
             grep -Fq 'JARVIS_FLOATING_QA: orb_shown=true' /tmp/jarvis-tile.log
+            adb shell input tap 905 1140
+            sleep 1
+            adb logcat -d -s JARVIS_FLOATING_QA:I '*:S' | grep -Fq 'face_tapped=true'
             # A second tile tap must not open the large MainActivity or duplicate the orb.
             adb shell cmd statusbar expand-settings
             adb shell cmd statusbar click-tile com.andriy.jarvis.preview/com.andriy.jarvis.JarvisQuickTileService
