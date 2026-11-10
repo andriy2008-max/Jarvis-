@@ -58,6 +58,61 @@ public final class OfflineVoicePackManager {
 
     public File installedDirectory() { return new File(root, "current"); }
 
+    /** One-tap voice install: discover a verified pack from our own HTTPS GitHub registry.
+     * The registry remains disabled until both real voices and Android inference pass QA.
+     */
+    public void installOfficial(Callback callback) {
+        final int id = generation.incrementAndGet();
+        io.execute(() -> {
+            HttpURLConnection connection = null;
+            try {
+                URL source = new URL(
+                    "https://raw.githubusercontent.com/andriy2008-max/Jarvis-/main/android/offline-voices.json");
+                connection = (HttpURLConnection) source.openConnection();
+                connection.setRequestMethod("GET");
+                connection.setInstanceFollowRedirects(false);
+                connection.setConnectTimeout(12000);
+                connection.setReadTimeout(12000);
+                if (connection.getResponseCode() != 200)
+                    throw new Exception("Наразі не вдалося перевірити випуск голосів.");
+                byte[] bytes = new byte[8193];
+                int read = 0;
+                try (InputStream in = connection.getInputStream()) {
+                    while (read < bytes.length) {
+                        int n = in.read(bytes, read, bytes.length - read);
+                        if (n < 0) break;
+                        read += n;
+                    }
+                }
+                if (read <= 0 || read > 8192)
+                    throw new Exception("Невірний реєстр офлайн-моделей.");
+                JSONObject registry = new JSONObject(new String(
+                    bytes, 0, read, java.nio.charset.StandardCharsets.UTF_8));
+                if (registry.optInt("schema") != 1 ||
+                    !OfflineVoicePackRules.FORMAT.equals(registry.optString("format")))
+                    throw new Exception("Непідтримуваний реєстр голосів.");
+                if (!registry.optBoolean("ready", false))
+                    throw new Exception("Реальні офлайн-голоси ще перевіряються. Завантаження відкриється після тестів.");
+                JSONArray voices = registry.optJSONArray("voices");
+                if (voices == null || voices.length() != 2 ||
+                    !"dmytro".equals(voices.optString(0)) ||
+                    !"lada".equals(voices.optString(1)))
+                    throw new Exception("Реєстр не містить обидва потрібні голоси.");
+                String url = registry.optString("url");
+                String sha256 = registry.optString("sha256");
+                assertActive(id);
+                // Queued on this same single-thread executor after registry inspection.
+                // SHA-256 is always verified again over the complete binary.
+                install(url, sha256, callback);
+            } catch (Exception e) {
+                report(id, callback, false, e.getMessage() == null ?
+                    "Не вдалося дізнатися про офлайн-голоси." : e.getMessage());
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        });
+    }
+
     public void install(String url, String expectedSha256, Callback callback) {
         if (!OfflineVoicePackRules.validUrl(url) ||
             !OfflineVoicePackRules.validSha256(expectedSha256)) {
