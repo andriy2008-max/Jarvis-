@@ -3114,6 +3114,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
         JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
         wakeConversation.end();
         if (isWatchDevice) {
+            if (watchPhoneLink != null && watchPhoneLink.spotifyRunning()) {
+                watchPhoneLink.cancelSpotify((ok, detail) -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    appendDialogue("Джарвіс", detail);
+                    setStatus(detail);
+                });
+                return;
+            }
             if (watchPhoneLink != null) {
                 watchPhoneLink.exit((ok, detail) -> {
                     if (isFinishing() || isDestroyed()) return;
@@ -3134,6 +3142,21 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (raw == null || raw.trim().isEmpty()) return;
         JarvisPhoneMode.Transition modeTransition = JarvisPhoneMode.transition(raw);
         if (isWatchDevice) {
+            // Automated Spotify tasks use a temporary watch/phone face, not
+            // a persistent session. A new voice command cannot interrupt
+            // the verified sequence except an explicit cancellation.
+            if (watchPhoneLink != null && watchPhoneLink.spotifyRunning()) {
+                String request = CommandPatterns.normalize(raw);
+                if (modeTransition == JarvisPhoneMode.Transition.EXIT ||
+                    request.equals("скасуй spotify") ||
+                    request.equals("скасуй спотіфай") ||
+                    request.equals("зупини spotify")) {
+                    watchPhoneLink.cancelSpotify((ok, detail) -> {
+                        if (!isFinishing() && !isDestroyed()) setStatus(detail);
+                    });
+                } else setStatus("Spotify ще виконує команду. Скажи «Скасуй Spotify».");
+                return;
+            }
             if (modeTransition == JarvisPhoneMode.Transition.ENTER) {
                 if (watchPhoneLink == null) {
                     setStatus("На годиннику немає з'єднання з телефоном.");
@@ -3162,6 +3185,21 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 watchPhoneLink.command(raw,(ok, detail) -> {
                     if (isFinishing() || isDestroyed()) return;
                     if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+                    appendDialogue("Джарвіс", detail);
+                    setStatus(detail);
+                    if (!ok && voiceEnabled) speakReply(detail);
+                });
+                return;
+            }
+            SpotifyMusicCommands.Kind watchMusic = SpotifyMusicCommands.parse(raw);
+            if (watchMusic != null) {
+                if (watchPhoneLink == null) {
+                    setStatus("Не можу передати команду Spotify: телефон не підключений.");
+                    return;
+                }
+                watchPhoneLink.spotify(raw, (ok, detail) -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                     appendDialogue("Джарвіс", detail);
                     setStatus(detail);
                     if (!ok && voiceEnabled) speakReply(detail);
