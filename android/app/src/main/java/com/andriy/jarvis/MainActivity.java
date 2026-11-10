@@ -256,6 +256,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         autoWakeListening = false;
         manualCapture = false;
         manualStopRequested = false;
+        autoSilenceStop = false;
+        speechPause.reset("");
         manualTranscript.setLength(0);
         manualHypothesis = "";
         wakeHypothesis = "";
@@ -1438,8 +1440,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
         cancelPendingWakeCommand();
         cancelAutoWakeSchedule();
         cancelManualRestart();
+        cancelSilenceCheck();
+        speechPause.reset(undone);
+        autoSilenceStop = false;
         manualCapture = true;
         manualStopRequested = false;
+        autoSilenceStop = false;
+        cancelSilenceCheck();
+        speechPause.reset("");
         manualCycleFailures = 0;
         manualTranscript.setLength(0);
         manualTranscript.append(undone);
@@ -1661,6 +1669,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
         if (manualCapture) {
             manualStopRequested = true;
+            autoSilenceStop = false;
+            cancelSilenceCheck();
             cancelManualRestart();
             microphone.setText("Обробляю...");
             setStatus("Завершую запис, розпізнаю останні слова...");
@@ -1701,7 +1711,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             processing = false;
             microphone.setText("■ Завершити та надіслати");
             face.setState("listening");
-            setStatus("Запис триває. Натисни ще раз, щоб надіслати.");
+            setStatus("Мікрофон слухає до першого слова. Після слова відлічується пауза.");
             return;
         }
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -1732,6 +1742,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void finishManualCapture() {
         cancelManualRestart();
+        cancelSilenceCheck();
         final String transcript = manualTranscript.toString().trim();
         manualHypothesis = "";
         if (transcript.isEmpty()) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
@@ -1740,6 +1751,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         manualTranscript.setLength(0);
         manualCapture = false;
         manualStopRequested = false;
+        autoSilenceStop = false;
+        speechPause.reset("");
         manualCycleFailures = 0;
         listening = false;
         recognizerSessionActive = false;
@@ -1755,7 +1768,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             transcript, SystemClock.elapsedRealtime(), true);
         if (decision.kind == WakeConversation.Kind.COMMAND) {
             face.setState("thinking");
-            processCommand(decision.command);
+            processCommand(JarvisSearchRouting.addressedToJarvis(transcript)
+                ? transcript : decision.command);
         } else if (decision.kind == WakeConversation.Kind.ARMED) {
             face.setState("listening");
             setStatus("Слухаю. Можеш продовжувати розмову.");
@@ -1789,9 +1803,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
         intent.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, recognizerUsesOnDevice);
         if (manualCapture) {
             // Hints only; engines may still end a segment early. Cycling handles that.
-            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L);
-            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 5000L);
-            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 5000L);
+            long hintMs = Math.max(1500L, speechPauseSeconds() * 1000L);
+            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, hintMs);
+            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, hintMs + 1000L);
+            intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 700L);
         }
         autoWakeListening = !manualCapture;
         recognizerSessionActive = true;
@@ -1800,7 +1815,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
             isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Джарвісом");
         face.setState(manualCapture || wakeConversation.isActive(SystemClock.elapsedRealtime())
             ? "listening" : "idle");
-        setStatus(manualCapture ? "Запис триває. Натисни ще раз, щоб надіслати." :
+        setStatus(manualCapture ? (speechPause.armed()
+            ? "Слухаю. Пауза після слова: " + speechPauseSeconds() + " с."
+            : "Чекаю першого розпізнаного слова...") :
             wakeConversation.isActive(SystemClock.elapsedRealtime()) ? "Продовжуй розмову..." :
                 "Очікую «Джарвіс»");
         try {
