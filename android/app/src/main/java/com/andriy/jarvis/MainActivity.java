@@ -532,7 +532,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "📱 Відкрий Telegram", "⏰ Покажи будильники",
             "🔦 Увімкни ліхтарик", "⏸ Пауза музики",
             "🔉 Гучність 50%", "☀ Налаштування екрана",
-            "💬 Поговорімо", "🤔 Поясни мені"
+            "💬 Поговорімо", "🤔 Поясни мені",
+            "🗣 Скажи фразу", "💬 Скажи слово"
         };
         String[] commands = {
             "Котра година", "Відкрий YouTube",
@@ -544,7 +545,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "Відкрий Телеграм", "Покажи будильники",
             "Увімкни ліхтарик", "Постав музику на паузу",
             "Постав гучність на 50%", "Відкрий налаштування екрана",
-            "Привіт, Джарвіс", "Поясни простими словами, як працює штучний інтелект"
+            "Привіт, Джарвіс", "Поясни простими словами, як працює штучний інтелект",
+            "Скажи Привіт, як справи?", "Джарвіс, скажи Дякую"
         };
         for (int i = 0; i < examples.length; i += 2) {
             LinearLayout row = new LinearLayout(this);
@@ -1936,6 +1938,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         appendDialogue("Ти", raw.trim());
         String command = CommandPatterns.normalize(raw);
         if (command.isEmpty()) return;
+        String directSpeech = CommandPatterns.spokenText(raw);
 
         Integer requestedTimer = CommandPatterns.timerSeconds(command);
         Integer noteIndex = CommandPatterns.noteIndex(command);
@@ -1948,7 +1951,23 @@ public final class MainActivity extends Activity implements RecognitionListener 
         boolean silentReply = false;
         String reply;
 
-        if (deviceCommand != null) {
+        if (directSpeech != null) {
+            if (directSpeech.isEmpty()) {
+                reply = "Назви слово або речення після команди «Скажи».";
+            } else if (directSpeech.length() > 1200) {
+                reply = "Фраза занадто довга. Назви текст до 1200 символів.";
+            } else if (!voiceEnabled) {
+                reply = "Щоб я повторив фразу, увімкни голосові відповіді.";
+                silentReply = true;
+            } else {
+                // Speak exactly the requested phrase, without asking conversational AI
+                // and without reading back a separate acknowledgment first.
+                appendDialogue("Джарвіс", directSpeech);
+                setStatus("Озвучую задану фразу");
+                speakReply(directSpeech);
+                return;
+            }
+        } else if (deviceCommand != null) {
             reply = deviceActions == null ? "Керування пристроєм ще не готове." : deviceActions.perform(deviceCommand);
         } else if (command.equals("досить") || command.equals("закінчи розмову") ||
             command.equals("заверши розмову") || command.equals("кінець розмови")) {
@@ -2081,7 +2100,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             askAi(raw);
             return;
         } else if (command.contains("що ти вмієш") || command.equals("допомога") || command.equals("команди")) {
-            reply = "Я вмію: команди телефону, нотатки, таймери, будильники, запуск програм, музику, гучність, ліхтарик та вільну розмову з ШІ (після підключення сервера). Спробуй: розкажи цікаву історію.";
+            reply = "Я вмію: команди телефону, нотатки, таймери, будильники, запуск програм, музику, гучність, ліхтарик, озвучення будь-якої фрази командою «Скажи...» та розмову з ШІ (після підключення сервера). Спробуй: скажи Привіт, як справи?";
         } else if (command.contains("дякую")) {
             reply = "Завжди радий допомогти.";
         } else {
