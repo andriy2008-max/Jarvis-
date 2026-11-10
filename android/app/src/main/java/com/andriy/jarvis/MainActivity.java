@@ -112,6 +112,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private boolean autoWakePausedForErrors;
     private int autoWakeErrors;
     private AiChatClient aiChatClient;
+    private WorldNewsReader worldNewsReader;
+    private boolean newsBusy;
     private boolean aiBusy = false;
     private TextView status;
     private ScrollView feedScroll;
@@ -149,6 +151,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             SpeechRecognizer.isOnDeviceRecognitionAvailable(this);
         loadNotes();
         aiChatClient = new AiChatClient(this);
+        worldNewsReader = new WorldNewsReader();
         neuralSpeech = new NeuralSpeechClient(this);
         offlinePacks = new OfflineVoicePackManager(this);
         offlineSpeech = new OfflineSpeechClient(this, offlinePacks);
@@ -2177,6 +2180,33 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
 
+    /** Fetch real world news from RSS, never trust AI memory for current events. */
+    private void readWorldNews() {
+        if (newsBusy) {
+            appendDialogue("Джарвіс", "Я вже шукаю новини.");
+            return;
+        }
+        newsBusy = true;
+        processing = true;
+        face.setState("thinking");
+        setStatus("Шукаю останні світові новини...");
+        worldNewsReader.read((digest, error) -> {
+            newsBusy = false;
+            processing = false;
+            if (isFinishing() || isDestroyed()) return;
+            String report = error == null ? digest : error;
+            if (report == null || report.trim().isEmpty())
+                report = "Не вдалося прочитати свіжі новини.";
+            appendDialogue("Джарвіс", report);
+            setStatus(error == null ? "Світові новини знайдено" : "Новини недоступні");
+            if (voiceEnabled) speakReply(report);
+            else {
+                face.setState("idle");
+                resumeAfterReply();
+            }
+        });
+    }
+
     /** Unrecognized conversation goes to AI; local phone commands never give AI device control. */
     private void askAi(String question) {
         if (aiChatClient == null || !aiChatClient.isConfigured()) {
@@ -2377,6 +2407,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     break;
             }
             }
+        } else if (WorldNewsCommands.requestsWorldNews(command)) {
+            readWorldNews();
+            return;
         } else if (deviceCommand != null) {
             reply = deviceActions == null ? "Керування пристроєм ще не готове." : deviceActions.perform(deviceCommand);
         } else if (command.equals("досить") || command.equals("закінчи розмову") ||
@@ -2510,7 +2543,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             askAi(raw);
             return;
         } else if (command.contains("що ти вмієш") || command.equals("допомога") || command.equals("команди")) {
-            reply = "Я вмію: команди телефону, нотатки, таймери, будильники, запуск програм, музику, гучність, ліхтарик, керування екраном після ручного дозволу, озвучення будь-якої фрази командою «Скажи...» та розмову з ШІ (після підключення сервера). Спробуй: скажи Привіт, як справи?";
+            reply = "Я вмію: свіжі світові новини з озвученням, команди телефону, нотатки, таймери, будильники, запуск програм, музику, гучність, ліхтарик, керування екраном після ручного дозволу, озвучення будь-якої фрази командою «Скажи...» та розмову з ШІ (після підключення сервера). Спробуй: скажи Привіт, як справи?";
         } else if (command.contains("дякую")) {
             reply = "Завжди радий допомогти.";
         } else {
@@ -2563,6 +2596,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         // Never cancel AlarmManager timers when Android destroys the UI.
         if (deviceActions != null) deviceActions.close();
         if (aiChatClient != null) aiChatClient.close();
+        if (worldNewsReader != null) worldNewsReader.close();
         if (recognizer != null) recognizer.destroy();
         if (offlineSpeech != null) offlineSpeech.close();
         if (offlinePacks != null) offlinePacks.close();
