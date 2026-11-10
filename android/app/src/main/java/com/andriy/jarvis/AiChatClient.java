@@ -1,6 +1,7 @@
 package com.andriy.jarvis;
 
 import android.content.Context;
+import android.net.Uri;
 import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
@@ -35,11 +36,24 @@ import javax.crypto.spec.GCMParameterSpec;
 public final class AiChatClient {
     public interface Callback { void onComplete(String reply, String error); }
 
+    /** Detailed result for chosen pictures, documents, live search and generated art. */
+    public interface DetailedCallback { void onComplete(AiResponse result, String error); }
+
+    public static final class AiResponse {
+        public final String reply;
+        public final String sources;
+        public final byte[] image;
+        private AiResponse(String reply, String sources, byte[] image) {
+            this.reply = reply; this.sources = sources; this.image = image;
+        }
+    }
+
     private static final String PREFS = "jarvis_ai_connection";
     private static final String ALIAS = "jarvis_ai_access_code_v1";
-    private static final int MAX_REPLY_BYTES = 32 * 1024;
+    private static final int MAX_REPLY_BYTES = 16 * 1024 * 1024;
 
     private final SharedPreferences prefs;
+    private final Context appContext;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final List<JSONObject> history = new ArrayList<>();
@@ -47,7 +61,8 @@ public final class AiChatClient {
     private volatile int generation;
 
     public AiChatClient(Context context) {
-        prefs = context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        appContext = context.getApplicationContext();
+        prefs = appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
     public String endpoint() { return prefs.getString("endpoint", ""); }
@@ -86,62 +101,87 @@ public final class AiChatClient {
     }
 
     public void send(String question, Callback callback) {
-        if (closed) { ui.post(() -> callback.onComplete(null, "ШІ вже вимкнено.")); return; }
+        sendDetailed(question, "chat", null, (response, error) ->
+            callback.onComplete(response == null ? null : response.reply, error));
+    }
+
+    /**
+     * Explicit modes, optional user-picked URI. Only the selected file is read.
+     * Parsing, encoding and network I/O all happen on our worker thread.
+     */
+    public void sendDetailed(String question, String mode, Uri attachment,
+                             DetailedCallback callback) {
+        if (closed) {
+            ui.post(() -> callback.onComplete(null, "ШІ вже вимкнено."));
+            return;
+        }
         if (!isConfigured()) {
             ui.post(() -> callback.onComplete(null, "Спочатку налаштуй підключення до ШІ."));
             return;
         }
         final String message = question == null ? "" : question.trim();
         if (message.isEmpty() || message.length() > AiChatPolicy.MAX_MESSAGE_CHARS) {
-            ui.post(() -> callback.onComplete(null, "Повідомлення має містити від 1 до 2000 символів."));
+            ui.post(() -> callback.onComplete(null,
+                "Повідомлення повинне містити 1–4000 символів."));
             return;
         }
-        final int requestGeneration;
+        final String requestMode = mode == null ? "chat" : mode;
+        if (!("chat".equals(requestMode) || "web".equals(requestMode) ||
+                "image".equals(requestMode)) ||
+            (attachment != null && "web".equals(requestMode))) {
+            ui.post(() -> callback.onComplete(null, "Недоступний режим ШІ."));
+            return;
+        }
+        final int currentGeneration;
         final List<JSONObject> context;
         synchronized (this) {
-            requestGeneration = generation;
-            // Keep the JSON request below the proxy's byte limit, even with long
-            // conversations in Ukrainian (UTF-8 can use multiple bytes/character).
+            currentGeneration = generation;
             context = new ArrayList<>();
             int remainingBytes = 9000;
             for (int i = history.size() - 1; i >= 0; i--) {
                 JSONObject turn = history.get(i);
-                int length = turn.toString().getBytes(StandardCharsets.UTF_8).length;
-                if (length > remainingBytes) break;
+                int bytes = turn.toString().getBytes(StandardCharsets.UTF_8).length;
+                if (bytes > remainingBytes) break;
                 context.add(0, turn);
-                remainingBytes -= length;
+                remainingBytes -= bytes;
             }
         }
         final String url = endpoint();
         executor.execute(() -> {
-            String answer = null;
+            AiResponse answer = null;
             String error = null;
             try {
                 String token = decrypt(prefs.getString("code_encrypted", ""));
                 JSONObject request = new JSONObject();
                 request.put("message", message);
+                request.put("mode", requestMode);
                 JSONArray previous = new JSONArray();
                 for (JSONObject turn : context) previous.put(turn);
                 request.put("history", previous);
+                if (attachment != null)
+                    request.put("attachment", AiAttachmentLoader.read(appContext, attachment));
                 answer = post(url, token, request);
-            } catch (Exception exception) {
-                error = exception.getMessage() == null ? "Не вдалося підключитися до ШІ." : exception.getMessage();
+            } catch (Exception ex) {
+                error = ex.getMessage() == null ? "Не вдалося звернутися до ШІ." : ex.getMessage();
             }
-            final String done = answer;
-            final String problem = error;
+            final AiResponse done = answer;
+            final String failure = error;
             if (done != null) {
                 synchronized (this) {
-                    if (requestGeneration == generation && !closed) {
+                    if (!closed && currentGeneration == generation) {
                         try {
-                            history.add(turn("user", message));
-                            history.add(turn("assistant", done));
-                            while (history.size() > AiChatPolicy.MAX_CONTEXT_TURNS) history.remove(0);
+                            history.add(turn("user", attachment == null ? message :
+                                "[Обраний файл] " + message));
+                            history.add(turn("assistant", done.reply));
+                            while (history.size() > AiChatPolicy.MAX_CONTEXT_TURNS)
+                                history.remove(0);
                         } catch (Exception ignored) { }
                     }
                 }
             }
             ui.post(() -> {
-                if (!closed && requestGeneration == generation) callback.onComplete(done, problem);
+                if (!closed && currentGeneration == generation)
+                    callback.onComplete(done, failure);
             });
         });
     }
