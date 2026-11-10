@@ -87,6 +87,8 @@ public final class FloatingJarvisService extends Service {
     private OfflineSpeechClient offline;
     private NeuralSpeechClient neural;
     private AiChatClient ai;
+    private WorldNewsReader worldNewsReader;
+    private boolean newsBusy;
     private JarvisSequenceExecutor sequences;
 
     public static boolean isShowing() { return showing; }
@@ -97,6 +99,7 @@ public final class FloatingJarvisService extends Service {
         offline = new OfflineSpeechClient(this, packs);
         neural = new NeuralSpeechClient(this);
         ai = new AiChatClient(this);
+        worldNewsReader = new WorldNewsReader();
         sequences = new JarvisSequenceExecutor(this);
         tts = new TextToSpeech(this, status -> {
             if (status == TextToSpeech.SUCCESS && tts != null) {
@@ -589,6 +592,11 @@ public final class FloatingJarvisService extends Service {
             return;
         }
 
+        if (WorldNewsCommands.requestsWorldNews(normalized)) {
+            readWorldNews();
+            return;
+        }
+
         ScreenControlCommands.Action action = ScreenControlCommands.parse(raw);
         if (action != null) {
             if (!getResources().getBoolean(R.bool.screen_control_available)) {
@@ -707,6 +715,26 @@ public final class FloatingJarvisService extends Service {
                 "Можеш ставити таймер, керувати музикою, говорити «Скажи», " +
                 "або підключити ШІ у налаштуваннях основного Джарвіса.");
         }
+    }
+
+    /** Live headlines can be read through the orb without configuring AI. */
+    private void readWorldNews() {
+        if (newsBusy) {
+            message("Я вже шукаю світові новини.");
+            return;
+        }
+        newsBusy = true;
+        setFace("thinking");
+        message("Шукаю свіжі світові новини...");
+        worldNewsReader.read((digest, error) -> {
+            newsBusy = false;
+            if (closing) return;
+            if (error != null) reply(error);
+            else {
+                message("Знайшов заголовки. Зачитую новини.");
+                reply(digest);
+            }
+        });
     }
 
     private String openRequestedActivity(Intent i, String message) {
@@ -894,6 +922,7 @@ public final class FloatingJarvisService extends Service {
         }
         faceParams = null;
         if (ai != null) ai.close();
+        if (worldNewsReader != null) worldNewsReader.close();
         if (offline != null) offline.close();
         if (neural != null) neural.close();
         if (packs != null) packs.close();
