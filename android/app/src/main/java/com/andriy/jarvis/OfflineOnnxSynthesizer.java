@@ -22,10 +22,10 @@ import java.util.Map;
 import java.util.concurrent.CancellationException;
 
 /**
- * Local inference for ESPnet Tacotron2 + HiFiGAN.
+ * Local inference for ESPnet VITS (Ukrainian TTS v6.0.0).
  *
- * Mirrors espnet_onnx Tacotron2: encoder, attention predecoder,
- * autoregressive LSTM decoder, optional postnet, inverse GlobalMVN, vocoder.
+ * Supports an ESPnet VITS single-graph model and legacy Tacotron2 subgraphs.
+ * The real upstream v6 checkpoint exports VITS despite an old source config.
  *
  * This implementation needs an ACTUALLY EXPORTED + TESTED v6 ONNX model
  * pack; merely compiling this class does not prove real audio performance.
@@ -39,6 +39,7 @@ public final class OfflineOnnxSynthesizer implements AutoCloseable {
     private final File modelDir;
     private final JSONObject manifest;
     private final JSONObject model;
+    private final String modelType;
     private final OrtEnvironment environment;
     private final OrtSession.SessionOptions sessionOptions;
     private final Map<String, OrtSession> sessions = new HashMap<>();
@@ -75,27 +76,47 @@ public final class OfflineOnnxSynthesizer implements AutoCloseable {
             !manifest.optBoolean("smoke_verified"))
             throw new Exception("Потрібен перевірений пакет ONNX Дмитра й Лади.");
         model = manifest.getJSONObject("synthesis");
-        if (!"Tacotron2".equals(model.optString("model_type")))
-            throw new Exception("Модель не Tacotron2.");
+        modelType = model.optString("model_type");
         sampleRate = manifest.getInt("sample_rate");
-        odim = model.getInt("odim");
-        dlayers = model.getInt("dlayers");
-        dunits = model.getInt("dunits");
-        factor = model.getInt("reduction_factor");
-        threshold = (float) model.getDouble("threshold");
-        maxlenratio = model.getDouble("maxlenratio");
-        minlenratio = model.getDouble("minlenratio");
-        cumulate = model.getBoolean("cumulate_att_w");
-        normMeans = model.getBoolean("norm_means");
-        normVars = model.getBoolean("norm_vars");
-        if (factor != 1 || model.optBoolean("use_att_constraint") || dlayers < 1 || dlayers > 8 ||
-            dunits < 64 || dunits > 2048 || odim < 32 || odim > 256 ||
-            maxlenratio < 1.0 || maxlenratio > 20 || sampleRate < 16000 || sampleRate > 48000)
-            throw new Exception("Непідтримувані параметри моделі.");
-        means = floats(model.getJSONArray("mean"));
-        stds = floats(model.getJSONArray("std"));
-        if (means.length != odim || stds.length != odim)
-            throw new Exception("Неправильні параметри нормалізації.");
+        if (sampleRate < 16000 || sampleRate > 48000)
+            throw new Exception("Непідтримувана частота звуку.");
+        if ("VITS".equals(modelType)) {
+            if (!"onnx/full/vits.onnx".equals(model.optString("graph")))
+                throw new Exception("Неправильний шлях до VITS.");
+            odim = 0;
+            dlayers = 0;
+            dunits = 0;
+            factor = 0;
+            threshold = 0;
+            maxlenratio = 0;
+            minlenratio = 0;
+            cumulate = false;
+            normMeans = false;
+            normVars = false;
+            means = new float[0];
+            stds = new float[0];
+        } else if ("Tacotron2".equals(modelType)) {
+            odim = model.getInt("odim");
+            dlayers = model.getInt("dlayers");
+            dunits = model.getInt("dunits");
+            factor = model.getInt("reduction_factor");
+            threshold = (float) model.getDouble("threshold");
+            maxlenratio = model.getDouble("maxlenratio");
+            minlenratio = model.getDouble("minlenratio");
+            cumulate = model.getBoolean("cumulate_att_w");
+            normMeans = model.getBoolean("norm_means");
+            normVars = model.getBoolean("norm_vars");
+            if (factor != 1 || model.optBoolean("use_att_constraint") || dlayers < 1 || dlayers > 8 ||
+                dunits < 64 || dunits > 2048 || odim < 32 || odim > 256 ||
+                maxlenratio < 1.0 || maxlenratio > 20)
+                throw new Exception("Непідтримувані параметри Tacotron2.");
+            means = floats(model.getJSONArray("mean"));
+            stds = floats(model.getJSONArray("std"));
+            if (means.length != odim || stds.length != odim)
+                throw new Exception("Неправильні параметри нормалізації.");
+        } else {
+            throw new Exception("Непідтримуваний тип моделі: " + modelType);
+        }
 
         JSONArray vocab = manifest.getJSONArray("tokens");
         for (int i = 0; i < vocab.length(); i++) tokenMap.put(vocab.getString(i), i);
@@ -112,10 +133,13 @@ public final class OfflineOnnxSynthesizer implements AutoCloseable {
             sessionOptions.setIntraOpNumThreads(2);
             sessionOptions.setInterOpNumThreads(1);
             sessionOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.BASIC_OPT);
-            for (String part : new String[] {
-                "tts_model_encoder.onnx", "predecoder_0.onnx",
-                "tts_model_decoder.onnx", "postdecoder.onnx", "HiFiGANVocoder.onnx"
-            }) {
+            String[] graphFiles = "VITS".equals(modelType)
+                ? new String[] {"vits.onnx"}
+                : new String[] {
+                    "tts_model_encoder.onnx", "predecoder_0.onnx",
+                    "tts_model_decoder.onnx", "postdecoder.onnx", "HiFiGANVocoder.onnx"
+                };
+            for (String part : graphFiles) {
                 File target = new File(modelDir, "onnx/full/" + part);
                 if (!target.isFile()) throw new Exception("Не знайдено " + part + ".");
                 sessions.put(part, environment.createSession(target.getAbsolutePath(), sessionOptions));
@@ -240,6 +264,19 @@ public final class OfflineOnnxSynthesizer implements AutoCloseable {
         Map<String, Object> enc = new LinkedHashMap<>();
         enc.put("text", tokens);
         enc.put("spembs", speaker);
+        if ("VITS".equals(modelType)) {
+            cancelled.check();
+            // Official ESPnet VITS ONNX export yields 1D float32 PCM waveform.
+            Object audio = run(sessions.get("vits.onnx"), enc, "wav")[0];
+            float[] result = flatten(audio);
+            if (result.length < 50 || result.length > MAX_SAMPLES)
+                throw new Exception("VITS повернув неправильну кількість семплів.");
+            for (float value : result)
+                if (!Float.isFinite(value))
+                    throw new Exception("VITS повернув некоректні аудіодані.");
+            cancelled.check();
+            return result;
+        }
         float[][] h = (float[][]) run(sessions.get("tts_model_encoder.onnx"), enc, "h")[0];
         int length = h.length;
         if (length < 2 || length > MAX_CHARS_PER_CHUNK + 24)
