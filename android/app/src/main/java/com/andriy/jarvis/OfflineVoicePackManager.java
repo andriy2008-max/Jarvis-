@@ -114,13 +114,36 @@ public final class OfflineVoicePackManager {
                           int id, Callback callback) throws Exception {
         HttpURLConnection connection = null;
         try {
-            connection = (HttpURLConnection) new URL(rawUrl).openConnection();
-            connection.setRequestMethod("GET");
-            connection.setInstanceFollowRedirects(false);
-            connection.setConnectTimeout(15000);
-            connection.setReadTimeout(45000);
-            int code = connection.getResponseCode();
-            if (code != 200) throw new Exception("Сервер моделі повернув HTTP " + code + ".");
+            // GitHub Release assets use HTTPS redirects to a signed assets host.
+            // Follow only a small bounded chain of HTTPS links; never allow HTTP downgrade.
+            URL target = new URL(rawUrl);
+            for (int redirects = 0; ; redirects++) {
+                if (connection != null) connection.disconnect();
+                if (!"https".equalsIgnoreCase(target.getProtocol()))
+                    throw new Exception("Небезпечне перенаправлення моделі: дозволено тільки HTTPS.");
+                connection = (HttpURLConnection) target.openConnection();
+                connection.setRequestMethod("GET");
+                connection.setInstanceFollowRedirects(false);
+                connection.setConnectTimeout(15000);
+                connection.setReadTimeout(45000);
+                int response = connection.getResponseCode();
+                if (response == 301 || response == 302 || response == 303 ||
+                    response == 307 || response == 308) {
+                    if (redirects >= 5) throw new Exception("Забагато перенаправлень моделі.");
+                    String location = connection.getHeaderField("Location");
+                    if (location == null || location.isEmpty())
+                        throw new Exception("Сервер не надав адресу перенаправлення.");
+                    URL next = new URL(target, location);
+                    if (!"https".equalsIgnoreCase(next.getProtocol()) ||
+                        next.getUserInfo() != null)
+                        throw new Exception("Небезпечне перенаправлення моделі.");
+                    target = next;
+                    continue;
+                }
+                if (response != 200)
+                    throw new Exception("Сервер моделі повернув HTTP " + response + ".");
+                break;
+            }
             long expected = connection.getContentLengthLong();
             if (expected > OfflineVoicePackRules.MAX_ARCHIVE_BYTES)
                 throw new Exception("Пакет моделі перевищує дозволений розмір.");
