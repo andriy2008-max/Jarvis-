@@ -133,7 +133,10 @@ public final class FloatingJarvisService extends Service {
         windows = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         if (windows == null) throw new IllegalStateException("No WindowManager");
         face = new JarvisOrbView(this);
-        face.setOnClickListener(v -> toggleListening());
+        face.setOnClickListener(v -> {
+            android.util.Log.i("JARVIS_FLOATING_QA", "face_tapped=true");
+            toggleListening();
+        });
         face.setOnLongClickListener(v -> {
             Toast.makeText(this, "Плаваючий Джарвіс закрито.", Toast.LENGTH_SHORT).show();
             stopSelf();
