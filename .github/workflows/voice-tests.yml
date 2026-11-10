@@ -28,6 +28,11 @@ on:
       - 'android/app/src/test/java/com/andriy/jarvis/OfflineVoicePackRulesTest.java'
       - 'tools/voice-export/**'
       - 'android/app/src/main/java/com/andriy/jarvis/MainActivity.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisCommandSequence.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisSequenceEngine.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisSequenceExecutor.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/JarvisCommandSequenceTest.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/JarvisSequenceEngineTest.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisQuickTileService.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisBubbleLauncherActivity.java'
       - 'android/app/src/main/java/com/andriy/jarvis/FloatingJarvisService.java'
@@ -65,6 +70,10 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/JarvisOrbTranscript.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisOrbPlacement.java \
             android/app/src/main/java/com/andriy/jarvis/ScreenControlCommands.java \
+            android/app/src/main/java/com/andriy/jarvis/JarvisCommandSequence.java \
+            android/app/src/main/java/com/andriy/jarvis/JarvisSequenceEngine.java \
+            android/app/src/main/java/com/andriy/jarvis/AssistantIntents.java \
+            android/app/src/main/java/com/andriy/jarvis/DeviceCommands.java \
             android/app/src/main/java/com/andriy/jarvis/ScreenTextInsertion.java \
             android/app/src/main/java/com/andriy/jarvis/ScreenTargetMatcher.java \
             android/app/src/main/java/com/andriy/jarvis/NeuralSpeechPolicy.java \
@@ -74,6 +83,8 @@ jobs:
             android/app/src/test/java/com/andriy/jarvis/JarvisOrbTranscriptTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisOrbPlacementTest.java \
             android/app/src/test/java/com/andriy/jarvis/ScreenControlCommandsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/JarvisCommandSequenceTest.java \
+            android/app/src/test/java/com/andriy/jarvis/JarvisSequenceEngineTest.java \
             android/app/src/test/java/com/andriy/jarvis/ScreenTextInsertionTest.java \
             android/app/src/test/java/com/andriy/jarvis/ScreenTargetMatcherTest.java \
             android/app/src/test/java/com/andriy/jarvis/NeuralSpeechPolicyTest.java \
@@ -83,6 +94,8 @@ jobs:
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisOrbTranscriptTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisOrbPlacementTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.ScreenControlCommandsTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisCommandSequenceTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisSequenceEngineTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.ScreenTextInsertionTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.ScreenTargetMatcherTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.NeuralSpeechPolicyTest
