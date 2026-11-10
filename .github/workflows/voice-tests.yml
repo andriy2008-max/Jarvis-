@@ -11,6 +11,8 @@ on:
       - 'android/app/src/main/java/com/andriy/jarvis/OfflineVoicePackManager.java'
       - 'android/app/src/main/java/com/andriy/jarvis/OfflineOnnxSynthesizer.java'
       - 'android/app/src/main/java/com/andriy/jarvis/OfflineSpeechClient.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/UkrainianVoiceText.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/UkrainianVoiceTextTest.java'
       - 'android/app/src/test/java/com/andriy/jarvis/OfflineVoicePackRulesTest.java'
       - 'tools/voice-export/**'
       - 'android/app/src/main/java/com/andriy/jarvis/MainActivity.java'
@@ -40,10 +42,13 @@ jobs:
           javac -encoding UTF-8 -d /tmp/jarvis-voice-tests \
             android/app/src/main/java/com/andriy/jarvis/NeuralSpeechPolicy.java \
             android/app/src/main/java/com/andriy/jarvis/OfflineVoicePackRules.java \
+            android/app/src/main/java/com/andriy/jarvis/UkrainianVoiceText.java \
             android/app/src/test/java/com/andriy/jarvis/NeuralSpeechPolicyTest.java \
-            android/app/src/test/java/com/andriy/jarvis/OfflineVoicePackRulesTest.java
+            android/app/src/test/java/com/andriy/jarvis/OfflineVoicePackRulesTest.java \
+            android/app/src/test/java/com/andriy/jarvis/UkrainianVoiceTextTest.java
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.NeuralSpeechPolicyTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.OfflineVoicePackRulesTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.UkrainianVoiceTextTest
       
   android_compile:
     runs-on: ubuntu-latest
