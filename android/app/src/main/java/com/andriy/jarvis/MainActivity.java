@@ -2770,9 +2770,33 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private JarvisSequenceExecutor commandSequenceExecutor;
+    private SpotifyPlaybackController spotifyPlayback;
+
+    private void startSpotifyMusic(SpotifyMusicCommands.Kind selection) {
+        if (spotifyPlayback == null) spotifyPlayback = new SpotifyPlaybackController(this);
+        spotifyPlayback.start(selection, new SpotifyPlaybackController.Listener() {
+            @Override public void onProgress(String detail) { setStatus(detail); }
+            @Override public void onFinished(boolean success, String detail) {
+                if (isFinishing() || isDestroyed()) return;
+                appendDialogue("Джарвіс", detail);
+                setStatus(detail);
+                if (!success && voiceEnabled) speakReply(detail);
+            }
+        });
+    }
 
     private void processCommand(String raw) {
         if (raw == null || raw.trim().isEmpty()) return;
+        if (spotifyPlayback != null && spotifyPlayback.isRunning()) {
+            String action = CommandPatterns.normalize(raw);
+            if (action.equals("скасуй spotify") ||
+                action.equals("зупини spotify") ||
+                action.equals("скасуй спотіфай") ||
+                action.equals("стоп послідовність")) {
+                spotifyPlayback.cancel();
+            } else setStatus("Чекаю завершення Spotify. Скажи «Скасуй Spotify», щоб зупинити.");
+            return;
+        }
         if (commandSequenceExecutor != null && commandSequenceExecutor.isRunning()) {
             String request = CommandPatterns.normalize(raw);
             if (request.equals("скасуй послідовність") ||
@@ -2788,6 +2812,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
         appendDialogue("Ти", raw.trim());
         String command = CommandPatterns.normalize(raw);
         if (command.isEmpty()) return;
+        SpotifyMusicCommands.Kind musicRequest = SpotifyMusicCommands.parse(raw);
+        if (musicRequest != null) {
+            startSpotifyMusic(musicRequest);
+            return;
+        }
 
         // Complex commands are parsed and validated as a complete plan BEFORE
         // opening any app. This prevents partial execution on malformed speech.
@@ -3080,6 +3109,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         JarvisLiveTranscript.unsubscribe(transcriptListener);
         cancelPendingWakeCommand();
         if (commandSequenceExecutor != null) commandSequenceExecutor.cancel();
+        if (spotifyPlayback != null) spotifyPlayback.cancel();
         cancelAutoWakeSchedule();
         wakeConversation.end();
         // Never cancel AlarmManager timers when Android destroys the UI.
