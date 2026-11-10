@@ -68,6 +68,11 @@ public final class FloatingJarvisService extends Service {
             if (face != null) face.showTranscript(words, active, untilMs);
         };
     private WindowManager.LayoutParams faceParams;
+    private android.widget.Button phoneMic;
+    private WindowManager.LayoutParams phoneMicParams;
+    private final Runnable phoneModeListener = () -> ui.post(() -> {
+        if (!closing) refreshPhoneModeUi();
+    });
     private int displayWidth;
     private int displayHeight;
     private SpeechRecognizer recognizer;
@@ -107,6 +112,7 @@ public final class FloatingJarvisService extends Service {
 
     @Override public void onCreate() {
         super.onCreate();
+        JarvisPhoneMode.subscribe(phoneModeListener);
         packs = new OfflineVoicePackManager(this);
         offline = new OfflineSpeechClient(this, packs);
         neural = new NeuralSpeechClient(this);
@@ -210,7 +216,11 @@ public final class FloatingJarvisService extends Service {
             .getInt("accent_style", 0));
         face.setOnClickListener(v -> {
             android.util.Log.i("JARVIS_FLOATING_QA", "face_tapped=true");
-            toggleListening();
+            if (JarvisPhoneMode.isActive()) {
+                abortPhoneSpeech();
+                String result = JarvisPhoneModeManager.exit();
+                message(result);
+            } else toggleListening();
         });
         face.setOnLongClickListener(v -> {
             Toast.makeText(this, "Плаваючий Джарвіс закрито.", Toast.LENGTH_SHORT).show();
@@ -282,6 +292,7 @@ public final class FloatingJarvisService extends Service {
                                 startingY + Math.round(dy), topLimit(), bottomLimit());
                             try { windows.updateViewLayout(face, faceParams); }
                             catch (IllegalArgumentException ignored) { }
+                            positionPhoneMic();
                         }
                         return true;
                     case MotionEvent.ACTION_UP:
@@ -305,6 +316,7 @@ public final class FloatingJarvisService extends Service {
         });
         android.util.Log.i("JARVIS_FLOATING_QA", "orb_window_add_start=true");
         windows.addView(face, faceParams);
+        refreshPhoneModeUi();
         JarvisLiveTranscript.subscribe(transcriptListener);
         JarvisLiveTranscript.setCorrectionHandler(TRANSCRIPT_OWNER, this::undoHeardWord);
         showing = true;
@@ -366,6 +378,7 @@ public final class FloatingJarvisService extends Service {
         restorePosition();
         try { windows.updateViewLayout(face, faceParams); }
         catch (IllegalArgumentException ignored) { }
+        positionPhoneMic();
     }
 
     @Override public void onConfigurationChanged(Configuration config) {
@@ -802,6 +815,20 @@ public final class FloatingJarvisService extends Service {
 
     private void executeCommand(String raw) {
         if (closing) return;
+        JarvisPhoneMode.Transition transition = JarvisPhoneMode.transition(raw);
+        if (transition == JarvisPhoneMode.Transition.ENTER) {
+            String result = JarvisPhoneModeManager.enter(this, true);
+            if (JarvisPhoneMode.isActive()) screenModeStartedHere = true;
+            message(result);
+            return;
+        }
+        if (transition == JarvisPhoneMode.Transition.EXIT &&
+            JarvisPhoneMode.isActive()) {
+            JarvisPhoneModeManager.exit();
+            screenModeStartedHere = false;
+            message("Звичайний режим Джарвіса увімкнено.");
+            return;
+        }
         if (spotifyPlayback != null && spotifyPlayback.isRunning()) {
             String word = CommandPatterns.normalize(raw);
             if (word.equals("скасуй spotify") || word.equals("зупини spotify") ||
@@ -1280,6 +1307,7 @@ public final class FloatingJarvisService extends Service {
 
     @Override public void onDestroy() {
         closing = true;
+        JarvisPhoneMode.unsubscribe(phoneModeListener);
         showing = false;
         android.util.Log.i("JARVIS_FLOATING_QA", "orb_closed=true");
         recording = false;
@@ -1299,6 +1327,7 @@ public final class FloatingJarvisService extends Service {
         JarvisLiveTranscript.setCorrectionHandler(TRANSCRIPT_OWNER, null);
         JarvisLiveTranscript.unsubscribe(transcriptListener);
         JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+        removePhoneMic();
         if (face != null && windows != null) {
             try { windows.removeView(face); } catch (Exception ignored) { }
             face = null;
