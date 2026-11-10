@@ -26,6 +26,8 @@ public final class ScreenControlCommandsTest {
         is("натисни на значок лупи", ScreenControlCommands.Kind.CLICK, "лупи");
         is("відкрий пошук", ScreenControlCommands.Kind.CLICK, "пошук");
         is("знайди чати", ScreenControlCommands.Kind.CLICK, "чати");
+        is("зайди в переписки", ScreenControlCommands.Kind.CLICK, "переписки");
+        is("покажи мої переписки", ScreenControlCommands.Kind.CLICK, "мої переписки");
         is("покажи профіль", ScreenControlCommands.Kind.CLICK, "профіль");
         is("перейди до налаштувань", ScreenControlCommands.Kind.CLICK, "налаштувань");
         is("де тут повідомлення", ScreenControlCommands.Kind.CLICK, "повідомлення");
