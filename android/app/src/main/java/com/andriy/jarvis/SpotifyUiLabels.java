@@ -39,8 +39,9 @@ public final class SpotifyUiLabels {
                     s.equals("українська музика") || s.equals("укрмуз") ||
                     s.equals("ukr muz");
             case SHUFFLE:
-                return containsAny(s, "shuffle", "переміш", "перемеш", "випадков",
-                    "случайн", "random order", "play randomly");
+                return s.contains("shuffle") || s.startsWith("переміш") ||
+                    s.startsWith("перемеш") || s.startsWith("випадков") ||
+                    s.startsWith("случайн") || containsAny(s, "random order", "play randomly");
             case PLAY:
                 if (containsAny(s, "pause", "paused", "пауза", "призупинити",
                     "зупинити", "stop playing")) return false;
