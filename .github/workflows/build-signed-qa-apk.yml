@@ -1,0 +1,97 @@
+name: Signed Jarvis 0.1.14 phone QA APK (not stable release)
+
+# Signed with the SAME certificate and package ID as existing stable Jarvis.
+# Uploads a private GitHub Actions artifact only. NO public APK release.
+on:
+  push:
+    paths:
+      - '.github/workflows/build-signed-qa-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  signed-qa-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Android SDK tools
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Restore original stable keystore for temporary signed QA APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.JARVIS_SIGNING_KEYSTORE_BASE64 }}
+          JARVIS_RELEASE_STORE_PASSWORD: ${{ secrets.JARVIS_RELEASE_STORE_PASSWORD }}
+          JARVIS_RELEASE_KEY_ALIAS: ${{ secrets.JARVIS_RELEASE_KEY_ALIAS }}
+          JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${KEYSTORE_BASE64:?Stable release keystore GitHub secret is missing}"
+          : "${JARVIS_RELEASE_STORE_PASSWORD:?Missing stable store password secret}"
+          : "${JARVIS_RELEASE_KEY_ALIAS:?Missing stable alias secret}"
+          : "${JARVIS_RELEASE_KEY_PASSWORD:?Missing stable key password secret}"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/jarvis-stable.jks"
+          chmod 600 "$RUNNER_TEMP/jarvis-stable.jks"
+          echo "JARVIS_RELEASE_STORE_FILE=$RUNNER_TEMP/jarvis-stable.jks" >> "$GITHUB_ENV"
+      - name: Assemble update-compatible QA APK
+        env:
+          JARVIS_RELEASE_STORE_PASSWORD: ${{ secrets.JARVIS_RELEASE_STORE_PASSWORD }}
+          JARVIS_RELEASE_KEY_ALIAS: ${{ secrets.JARVIS_RELEASE_KEY_ALIAS }}
+          JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
+        run: gradle -p android --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleRelease
+      - name: Confirm real package, version and ORIGINAL certificate
+        run: |
+          set -euo pipefail
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+          actual="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1)"
+          expected="$(tr -d '[:space:]' < android/RELEASE-CERT-SHA256.txt | tr '[:upper:]' '[:lower:]')"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::QA APK signing cert differs from installed stable Jarvis"
+            exit 1
+          fi
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" > "$RUNNER_TEMP/qa-badging.txt"
+          grep -Fq "package: name='com.andriy.jarvis.stable'" "$RUNNER_TEMP/qa-badging.txt"
+          grep -Fq "versionCode='24'" "$RUNNER_TEMP/qa-badging.txt"
+          grep -Fq "versionName='0.1.14'" "$RUNNER_TEMP/qa-badging.txt"
+          mkdir -p android/dist
+          cp "$apk" android/dist/JARVIS-0.1.14-stable-phone-QA.apk
+          (cd android/dist && sha256sum JARVIS-0.1.14-stable-phone-QA.apk > JARVIS-0.1.14-stable-phone-QA.sha256)
+          cat > android/dist/README-PHONE-QA.txt <<'TXT'
+          JARVIS 0.1.14 — TEST BUILD ONLY, NOT A FINAL STABLE RELEASE
+
+          Updates com.andriy.jarvis.stable only if your existing APK was signed
+          with the original pinned stable certificate. Otherwise Android will
+          refuse the update, which is safer than creating a second app.
+
+          Test one-tap Dmytro/Lada 145MB offline pack in settings.
+          Test screen control only after manually enabling Accessibility Service.
+          Supported UI target selection uses text, accessibility description,
+          and resource IDs; icon-only elements without metadata are unsupported.
+          Unverified on your physical phone. Never grant this build more
+          accessibility privileges than you intend.
+          TXT
+      - name: Upload signed QA APK, digest and setup note (7-day artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: JARVIS-0.1.14-SIGNED-update-compatible-PHONE-QA
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            android/dist/JARVIS-0.1.14-stable-phone-QA.apk
+            android/dist/JARVIS-0.1.14-stable-phone-QA.sha256
+            android/dist/README-PHONE-QA.txt
+      - name: Erase signing keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/jarvis-stable.jks"
