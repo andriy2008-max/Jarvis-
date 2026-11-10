@@ -88,7 +88,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private NeuralSpeechClient neuralSpeech;
     private OfflineVoicePackManager offlinePacks;
     private OfflineSpeechClient offlineSpeech;
-    private String activeTtsId;
+    private volatile String activeTtsId;
     private DeviceActions deviceActions;
     private final WakeConversation wakeConversation = new WakeConversation();
     private final Handler wakeHandler = new Handler(Looper.getMainLooper());
@@ -187,13 +187,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         }
                     }
                     @Override public void onDone(String id) {
-                        if (id != null && id.equals(activeTtsId)) endSpeaking();
+                        finishSystemTts(id);
                     }
                     @Override public void onError(String id) {
-                        if (id != null && id.equals(activeTtsId)) endSpeaking();
+                        finishSystemTts(id);
                     }
                     @Override public void onStop(String id, boolean interrupted) {
-                        if (id != null && id.equals(activeTtsId)) endSpeaking();
+                        finishSystemTts(id);
                     }
                     @Override public void onRangeStart(String id, int start, int end, int frame) {
                         if (id != null && id.equals(activeTtsId) && voiceEnabled)
@@ -866,6 +866,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (face != null) face.setState("speaking");
     }
 
+    private void finishSystemTts(String utteranceId) {
+        runOnUiThread(() -> {
+            if (utteranceId != null && utteranceId.equals(activeTtsId))
+                endSpeaking();
+        });
+    }
+
     private void speakSystemVoice(String text) {
         if (!voiceEnabled) { endSpeaking(); return; }
         if (!ttsReady || tts == null) {
@@ -1489,7 +1496,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             SystemClock.uptimeMillis());
         face.setState("listening");
         microphone.setText("■ Завершити та надіслати");
-        setStatus("Слово видалено. Повтори його та заверши запис кнопкою.");
+        setStatus("Слово видалено. Повтори його: команда надішлеться після паузи.");
         scheduleManualRestart(550L);
     }
 
@@ -1912,7 +1919,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
             // SpeechRecognizer stops automatically on pauses. Keep the *user's*
             // manual recording active and restart once results arrive.
             setStatus(manualStopRequested ? "Завершую запис..." :
-                "Запис активний: продовжуй говорити або натисни для надсилання.");
+                speechPause.armed()
+                    ? "Слухаю. Надсилання після " + speechPauseSeconds() + " с тиші."
+                    : "Чекаю першого розпізнаного слова...");
             return;
         }
         processing = true;
