@@ -54,6 +54,11 @@ android {
     }
 }
 
+// CPU ONNX runtime is included in the small APK; actual voice models download once.
+dependencies {
+    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.20.0'
+}
+
 // Never complete an unsigned release build inadvertently.
 tasks.matching { it.name == 'assembleRelease' || it.name == 'bundleRelease' }.configureEach {
     doFirst {
