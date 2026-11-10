@@ -1351,6 +1351,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void setStatus(String message) {
         if (status != null) status.setText(message);
+        // Full-screen watch has no text controls. Show short status/error
+        // directly on the face, without replacing words while listening.
+        if (isWatchDevice && face != null && !manualCapture &&
+            !listening && !processing && message != null && !message.trim().isEmpty()) {
+            face.showTranscript(message, false, SystemClock.uptimeMillis() + 3200L);
+        }
     }
 
     private void appendDialogue(String who, String message) {
