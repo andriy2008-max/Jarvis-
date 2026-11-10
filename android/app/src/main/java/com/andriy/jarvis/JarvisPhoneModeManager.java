@@ -1,6 +1,11 @@
 package com.andriy.jarvis;
 
 import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.Manifest;
+import android.provider.Settings;
+import android.os.Build;
 import java.util.UUID;
 
 /** Explicit and scoped screen-control sessions; never grants Accessibility. */
@@ -23,11 +28,34 @@ public final class JarvisPhoneModeManager {
         }
     }
 
+    private static String ensureSingleFloatingFace(Context context) {
+        if (FloatingJarvisService.isShowing()) return null;
+        if (!Settings.canDrawOverlays(context))
+            return "Дозволь плаваюче вікно Джарвіса в налаштуваннях Android. " +
+                "Після цього повтори команду.";
+        if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED)
+            return "Дозволь доступ до мікрофона Джарвісу.";
+        try {
+            Intent show = new Intent(context, FloatingJarvisService.class);
+            show.setAction(FloatingJarvisService.ACTION_SHOW);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                context.startForegroundService(show);
+            else context.startService(show);
+            return null;
+        } catch (RuntimeException error) {
+            return "Android не дозволив показати єдине плаваюче обличчя. " +
+                "Відкрий Джарвіса й повтори команду.";
+        }
+    }
+
     public static synchronized String enter(Context context, boolean useFloatingMic) {
         if (!supported(context))
             return "Ця конфігурація Джарвіса не підтримує керування екраном.";
         if (!ScreenControlAccessibilityService.isConnected())
             return consentNeeded();
+        String orbError = ensureSingleFloatingFace(context);
+        if (orbError != null) return orbError;
         // An explicit "Телефон" supersedes temporary automated control.
         automaticOwner = null;
         if (JarvisPhoneMode.isActive() &&
@@ -49,6 +77,8 @@ public final class JarvisPhoneModeManager {
             return new Lease(null,false,"Керування екраном недоступне на цьому пристрої.");
         if (!ScreenControlAccessibilityService.isConnected())
             return new Lease(null,false,consentNeeded());
+        String orbError = ensureSingleFloatingFace(context);
+        if (orbError != null) return new Lease(null,false,orbError);
         if (ScreenControlAccessibilityService.isSessionActive()) {
             // Borrow a pre-existing manual / watch session; do not close it.
             return new Lease(null,true,"Користуюся вже активним керуванням екраном.");
