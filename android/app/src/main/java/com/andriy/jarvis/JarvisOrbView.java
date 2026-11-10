@@ -45,28 +45,11 @@ public final class JarvisOrbView extends View {
         invalidate();
     }
 
-    /** Replace the animated facial expression with heard words during listening. */
-    public void beginTranscript() {
-        transcribing = true;
-        recognizedText = "";
-        showRecognizedUntilMs = 0L;
-        invalidate();
-    }
-
-    /** Only a short in-memory tail of the voice recognizer's hypothesis is shown. */
-    public void updateTranscript(String text, boolean isFinal) {
-        recognizedText = JarvisOrbTranscript.visibleTail(text);
-        transcribing = !isFinal;
-        showRecognizedUntilMs = isFinal
-            ? SystemClock.uptimeMillis() + 3500L : 0L;
-        invalidate();
-    }
-
-    /** Erase speech immediately on a new recording, error, or closing the orb. */
-    public void clearTranscript() {
-        recognizedText = "";
-        transcribing = false;
-        showRecognizedUntilMs = 0L;
+    /** Both the main app and floating face render this same in-memory transcript. */
+    public void showTranscript(String words, boolean active, long untilMs) {
+        recognizedText = JarvisOrbTranscript.visibleTail(words);
+        transcribing = active;
+        showRecognizedUntilMs = untilMs;
         invalidate();
     }
 

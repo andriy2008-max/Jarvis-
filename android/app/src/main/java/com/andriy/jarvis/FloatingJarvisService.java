@@ -59,6 +59,11 @@ public final class FloatingJarvisService extends Service {
     private static final int NOTIFICATION = 81740;
     private static volatile boolean showing;
     private final Handler ui = new Handler(Looper.getMainLooper());
+    private static final String TRANSCRIPT_OWNER = "floating";
+    private final JarvisLiveTranscript.Listener transcriptListener =
+        (words, active, untilMs) -> {
+            if (face != null) face.showTranscript(words, active, untilMs);
+        };
 
     private WindowManager windows;
     private JarvisOrbView face;
@@ -243,6 +248,7 @@ public final class FloatingJarvisService extends Service {
         });
         android.util.Log.i("JARVIS_FLOATING_QA", "orb_window_add_start=true");
         windows.addView(face, faceParams);
+        JarvisLiveTranscript.subscribe(transcriptListener);
         showing = true;
         android.util.Log.i("JARVIS_FLOATING_QA", "orb_shown=true");
         try {
@@ -365,7 +371,7 @@ public final class FloatingJarvisService extends Service {
                     @Override public void onError(int error) {
                         recording = false;
                         listening = false;
-                        if (face != null) face.clearTranscript();
+                        JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                         setFace("idle");
                         if (!closing) message("Не почув команди. Натисни обличчя ще раз.");
                     }
@@ -376,26 +382,28 @@ public final class FloatingJarvisService extends Service {
                         java.util.ArrayList<String> list =
                             results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                         if (list == null || list.isEmpty() || list.get(0).trim().isEmpty()) {
-                            if (face != null) face.clearTranscript();
+                            JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                             setFace("idle");
                             message("Не почув команди. Спробуй ще раз.");
                             return;
                         }
-                        if (face != null) face.updateTranscript(list.get(0), true);
+                        JarvisLiveTranscript.update(TRANSCRIPT_OWNER, list.get(0), true,
+                            SystemClock.uptimeMillis());
                         executeCommand(list.get(0));
                     }
                     @Override public void onPartialResults(Bundle results) {
-                        if (!recording || closing || face == null || results == null) return;
+                        if (!recording || closing || results == null) return;
                         ArrayList<String> heard =
                             results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
                         if (heard != null && !heard.isEmpty() && heard.get(0) != null)
-                            face.updateTranscript(heard.get(0), false);
+                            JarvisLiveTranscript.update(TRANSCRIPT_OWNER, heard.get(0), false,
+                                SystemClock.uptimeMillis());
                     }
                     @Override public void onEvent(int type, Bundle params) {}
                 });
             }
             stopSpeech();
-            if (face != null) face.beginTranscript();
+            JarvisLiveTranscript.begin(TRANSCRIPT_OWNER);
             Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
             i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                 RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
@@ -413,7 +421,7 @@ public final class FloatingJarvisService extends Service {
         } catch (Exception exception) {
             recording = false;
             listening = false;
-            if (face != null) face.clearTranscript();
+            JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
             setFace("idle");
             message("Не вдалося ввімкнути мікрофон. Повтори натискання.");
         }
@@ -740,7 +748,8 @@ public final class FloatingJarvisService extends Service {
             recognizer = null;
         }
         ui.removeCallbacksAndMessages(null);
-        if (face != null) face.clearTranscript();
+        JarvisLiveTranscript.unsubscribe(transcriptListener);
+        JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
         if (face != null && windows != null) {
             try { windows.removeView(face); } catch (Exception ignored) { }
             face = null;

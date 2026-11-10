@@ -22,6 +22,7 @@ import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.RadialGradient;
 import android.graphics.Shader;
 import android.graphics.Typeface;
@@ -36,6 +37,9 @@ import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.speech.tts.Voice;
 import android.util.TypedValue;
+import android.text.Layout;
+import android.text.StaticLayout;
+import android.text.TextPaint;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
@@ -113,6 +117,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private EditText input;
     private Button microphone;
     private PixelFace face;
+    private static final String TRANSCRIPT_OWNER = "main";
+    private final JarvisLiveTranscript.Listener transcriptListener =
+        (words, active, untilMs) -> {
+            if (face != null) face.showTranscript(words, active, untilMs);
+        };
     private boolean listening = false;
     private boolean processing = false;
     private boolean speaking = false;
@@ -196,6 +205,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     protected void onResume() {
         super.onResume();
         foreground = true;
+        JarvisLiveTranscript.subscribe(transcriptListener);
         autoWakePausedForErrors = false;
         autoWakeErrors = 0;
         scheduleAutoWake(650L);
@@ -214,6 +224,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     protected void onPause() {
+        if (manualCapture || autoWakeListening) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+        JarvisLiveTranscript.unsubscribe(transcriptListener);
         foreground = false;
         cancelAutoWakeSchedule();
         cancelManualRestart();
@@ -1438,6 +1450,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         manualStopRequested = false;
         manualCycleFailures = 0;
         manualTranscript.setLength(0);
+        JarvisLiveTranscript.begin(TRANSCRIPT_OWNER);
         cancelManualRestart();
         cancelAutoWakeSchedule();
         // Reuse an already-started wake session, then restart in manual mode.
@@ -1478,6 +1491,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private void finishManualCapture() {
         cancelManualRestart();
         final String transcript = manualTranscript.toString().trim();
+        if (transcript.isEmpty()) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+        else JarvisLiveTranscript.update(TRANSCRIPT_OWNER, transcript, true,
+            SystemClock.uptimeMillis());
         manualTranscript.setLength(0);
         manualCapture = false;
         manualStopRequested = false;
@@ -1526,7 +1542,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "uk-UA");
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "uk-UA");
-        intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false);
+        intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
         intent.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, recognizerUsesOnDevice);
         if (manualCapture) {
             // Hints only; engines may still end a segment early. Cycling handles that.
@@ -1581,6 +1597,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 beginListening();
             } else {
                 manualCapture = false;
+                JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                 setStatus("Дозволь доступ до мікрофона в налаштуваннях застосунку.");
             }
         } else if (code == DeviceActions.REQUEST_CAMERA_FOR_TORCH && deviceActions != null) {
@@ -1600,6 +1617,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             ? "Продовжуй розмову..." : "Очікую «Джарвіс»");
     }
     @Override public void onBeginningOfSpeech() {
+        if (!manualCapture) JarvisLiveTranscript.begin(TRANSCRIPT_OWNER);
         setStatus(manualCapture ? "Розпізнаю голос..." : "Слухаю фразу...");
     }
     @Override public void onRmsChanged(float rmsdB) { }
@@ -1650,6 +1668,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (noSpeech) manualCycleFailures = 0;
             else manualCycleFailures++;
             if (manualCycleFailures > 5) {
+                if (manualTranscript.length() == 0)
+                    JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+                else JarvisLiveTranscript.update(TRANSCRIPT_OWNER,
+                    manualTranscript.toString(), true, SystemClock.uptimeMillis());
                 manualCapture = false;
                 resetListening("Розпізнавання зупинилося через повторні помилки (" + error + ").");
                 if (manualTranscript.length() > 0) {
@@ -1660,12 +1682,16 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 }
                 return;
             }
+            if (manualTranscript.length() > 0)
+                JarvisLiveTranscript.update(TRANSCRIPT_OWNER,
+                    manualTranscript.toString(), false, SystemClock.uptimeMillis());
             microphone.setText("■ Завершити та надіслати");
             face.setState("listening");
             setStatus("Запис триває. Натисни ще раз, щоб надіслати.");
             scheduleManualRestart(noSpeech ? 450L : 1100L);
             return;
         }
+        JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
         resetListening("Очікую «Джарвіс»");
         if (error == SpeechRecognizer.ERROR_NO_MATCH ||
             error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
@@ -1709,6 +1735,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (manualStopRequested) {
                 finishManualCapture();
             } else {
+                JarvisLiveTranscript.update(TRANSCRIPT_OWNER,
+                    manualTranscript.toString(), false, SystemClock.uptimeMillis());
                 microphone.setText("■ Завершити та надіслати");
                 face.setState("listening");
                 setStatus("Запис триває. Натисни ще раз, щоб надіслати.");
@@ -1718,11 +1746,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
         resetListening("Команду розпізнано");
         autoWakeErrors = 0;
-        if (matches == null || matches.isEmpty()) {
+        if (matches == null || matches.isEmpty() || matches.get(0) == null ||
+            matches.get(0).trim().isEmpty()) {
+            JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
             setStatus("Не вдалося розпізнати фразу.");
             scheduleAutoWake(450L);
             return;
         }
+        JarvisLiveTranscript.update(TRANSCRIPT_OWNER, matches.get(0), true,
+            SystemClock.uptimeMillis());
         WakeConversation.Decision decision = wakeConversation.accept(
             matches.get(0), SystemClock.elapsedRealtime(), false);
         if (decision.kind == WakeConversation.Kind.ARMED) {
@@ -1739,7 +1771,18 @@ public final class MainActivity extends Activity implements RecognitionListener 
         scheduleAutoWake(450L);
     }
 
-    @Override public void onPartialResults(Bundle results) { }
+    @Override public void onPartialResults(Bundle results) {
+        if (!foreground || results == null) return;
+        ArrayList<String> hypotheses =
+            results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+        if (hypotheses == null || hypotheses.isEmpty() || hypotheses.get(0) == null) return;
+        String partial = hypotheses.get(0).trim();
+        if (partial.isEmpty()) return;
+        if (manualCapture && manualTranscript.length() > 0)
+            partial = manualTranscript.toString() + " " + partial;
+        JarvisLiveTranscript.update(TRANSCRIPT_OWNER, partial, false,
+            SystemClock.uptimeMillis());
+    }
     @Override public void onEvent(int eventType, Bundle params) { }
 
     @Override
@@ -2377,6 +2420,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     protected void onDestroy() {
+        JarvisLiveTranscript.unsubscribe(transcriptListener);
         if (commandSequenceExecutor != null) commandSequenceExecutor.cancel();
         cancelAutoWakeSchedule();
         wakeConversation.end();
@@ -2397,6 +2441,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private final class PixelFace extends View {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private String expression = "idle";
+        private final TextPaint transcriptPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+        private String recognizedText = "";
+        private boolean transcribing;
+        private long showRecognizedUntilMs;
 
         PixelFace() {
             super(MainActivity.this);
@@ -2406,6 +2454,47 @@ public final class MainActivity extends Activity implements RecognitionListener 
         void setState(String state) {
             expression = state;
             invalidate();
+        }
+
+        void showTranscript(String words, boolean active, long untilMs) {
+            recognizedText = JarvisOrbTranscript.visibleTail(words);
+            transcribing = active;
+            showRecognizedUntilMs = untilMs;
+            invalidate();
+        }
+
+        private boolean transcriptVisible() {
+            return transcribing || (!recognizedText.isEmpty() &&
+                SystemClock.uptimeMillis() < showRecognizedUntilMs);
+        }
+
+        private void drawTranscript(Canvas canvas, float cx, float cy, float radius) {
+            String visible = recognizedText.isEmpty() ? "Слухаю…" : recognizedText;
+            transcriptPaint.setColor(Color.rgb(224, 253, 255));
+            transcriptPaint.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+            float sp = getResources().getDisplayMetrics().scaledDensity;
+            transcriptPaint.setTextSize(Math.min(17f * sp,
+                Math.max(11f * sp, radius * .27f)));
+            int width = Math.max(1, Math.round(radius * 1.50f));
+            StaticLayout layout;
+            while (true) {
+                layout = StaticLayout.Builder.obtain(visible, 0, visible.length(),
+                        transcriptPaint, width)
+                    .setAlignment(Layout.Alignment.ALIGN_CENTER)
+                    .setIncludePad(false).build();
+                if (layout.getLineCount() <= 4 || visible.length() <= 12) break;
+                int nextSpace = visible.indexOf(' ');
+                if (nextSpace > 0 && nextSpace < visible.length() - 1)
+                    visible = "…" + visible.substring(nextSpace + 1);
+                else visible = "…" + visible.substring(1);
+            }
+            Path circle = new Path();
+            circle.addCircle(cx, cy, radius * .93f, Path.Direction.CW);
+            canvas.save();
+            canvas.clipPath(circle);
+            canvas.translate(cx - width / 2f, cy - layout.getHeight() / 2f);
+            layout.draw(canvas);
+            canvas.restore();
         }
 
         @Override
@@ -2434,6 +2523,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
             canvas.drawCircle(cx, cy, orb, paint);
 
             paint.setStyle(Paint.Style.FILL);
+            if (transcriptVisible()) {
+                drawTranscript(canvas, cx, cy, orb);
+                postInvalidateDelayed(180);
+                return;
+            }
             // Match the web SVG sprite: 16x16 grid with a roughly 90/148 face/orb ratio.
             float pixel = orb * 0.076f;
             float ox = cx - 8 * pixel;
