@@ -112,6 +112,16 @@ public final class ScreenTargetMatcher {
         return false;
     }
 
+    private static boolean mentionsIntent(String field, String groupName) {
+        for (String[] aliases : ALIASES) {
+            if (!aliases[0].equals(groupName)) continue;
+            for (int i = 1; i < aliases.length; i++) {
+                if (containsAlias(field, aliases[i])) return true;
+            }
+        }
+        return false;
+    }
+
     private static int fieldScore(String request, String requestedIntent,
                                   String field, int exactScore, int semanticScore) {
         String value = normal(field);
@@ -119,7 +129,7 @@ public final class ScreenTargetMatcher {
         if (value.equals(request)) return exactScore;
         // A "button search", "icon search", or "пошук у чатах" descriptor may be
         // longer than the request yet still name exactly its UI action.
-        if (!requestedIntent.isEmpty() && requestedIntent.equals(intent(value)))
+        if (!requestedIntent.isEmpty() && mentionsIntent(value, requestedIntent))
             return semanticScore;
         if (request.length() >= 4 && (" " + value + " ").contains(" " + request + " "))
             return Math.max(MIN_CONFIDENCE, semanticScore - 8);
