@@ -1,10 +1,11 @@
 name: Experimental real Dmytro and Lada ONNX export
 
-# One-shot on creation and manual re-runs. Never ships an untested model or APK.
+# Export only when exporter source or workflow changes. Does not build an APK.
 on:
   push:
     paths:
       - '.github/workflows/export-uktts-onnx.yml'
+      - 'tools/voice-export/export_voice_pack.py'
   workflow_dispatch:
 
 permissions:
