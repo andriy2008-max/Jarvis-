@@ -19,7 +19,12 @@ import org.junit.runner.RunWith;
 @RunWith(AndroidJUnit4.class)
 public final class ScreenControlInstrumentedTest {
     @Test public void explicitlyNamedClickAndStopOnExternalScreen() throws Exception {
-        assertTrue("Enable Jarvis AccessibilityService in CI first",
+        // Android binds enabled accessibility services asynchronously, especially
+        // after first installation on a fresh emulator.
+        for (int attempt = 0;
+             attempt < 50 && !ScreenControlAccessibilityService.isConnected();
+             attempt++) SystemClock.sleep(200);
+        assertTrue("AccessibilityService never connected after 10 seconds; inspect dumpsys accessibility",
             ScreenControlAccessibilityService.isConnected());
         Intent external = new Intent();
         external.setComponent(new ComponentName(
