@@ -1,0 +1,62 @@
+name: Publish verified Dmytro + Lada model for phone QA
+
+# Experimental voice model only. Does not build or release a Jarvis APK.
+on:
+  push:
+    paths:
+      - '.github/workflows/publish-voice-model-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-model:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify known two-voice ZIP exists on the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/jarvis-v6
+          gh release download jarvis-offline-voices-v6-experimental \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'jarvis-uktts-v6-onnx.zip' \
+            --dir /tmp/jarvis-v6
+          printf '%s  %s\n' \
+            '12fdd6521ae864f5eafac2d5a205d32f299ba65229800dafbd647b4a3ff8e0d5' \
+            '/tmp/jarvis-v6/jarvis-uktts-v6-onnx.zip' | sha256sum -c -
+          unzip -p /tmp/jarvis-v6/jarvis-uktts-v6-onnx.zip manifest.json | \
+            python3 -c 'import json,sys; m=json.load(sys.stdin); assert m["voices"]==["dmytro","lada"] and m["synthesis"]["model_type"]=="VITS" and m["smoke_verified"]'
+          test -s android/THIRD_PARTY_UKRAINIAN_TTS_LICENSE.txt
+      - name: Publish as PUBLIC PRERELEASE for voluntary phone tests, not stable
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/model-release-notes.md" <<'EOF'
+          # TEST MODEL ONLY — NOT APPROVED AS STABLE PHONE-READY
+
+          Original `robinhad/ukrainian-tts` v6.0.0 **Dmytro** and **Lada** voices
+          converted to a shared ~145MB VITS ONNX graph, verified with Python
+          and Java ONNX Runtime, and Android 11/15 emulator inference in airplane mode.
+
+          **ARM64 physical Android phones, audio quality and battery not yet verified.**
+          This pre-release enables voluntary testing; it is not a production guarantee.
+          Do not install from unverified mirrors.
+
+          ZIP SHA-256:
+          `12fdd6521ae864f5eafac2d5a205d32f299ba65229800dafbd647b4a3ff8e0d5`
+
+          Original Ukrainian TTS v6 model is MIT licensed.
+          Copyright (c) 2021 Yurii Paniv.
+          Full MIT license in [android/THIRD_PARTY_UKRAINIAN_TTS_LICENSE.txt](https://github.com/andriy2008-max/Jarvis-/blob/main/android/THIRD_PARTY_UKRAINIAN_TTS_LICENSE.txt).
+          EOF
+          gh release edit jarvis-offline-voices-v6-experimental \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft=false --prerelease \
+            --title 'Dmytro + Lada offline ONNX v6 — Android QA only' \
+            --notes-file "$RUNNER_TEMP/model-release-notes.md"
