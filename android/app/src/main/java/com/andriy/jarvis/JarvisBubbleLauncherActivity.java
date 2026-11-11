@@ -15,6 +15,8 @@ import android.widget.Toast;
  * Starts microphone foreground service only while the activity is visible.
  */
 public final class JarvisBubbleLauncherActivity extends Activity {
+    /** Set only by an explicit user-triggered system assistant invocation. */
+    public static final String EXTRA_AUTO_LISTEN = "com.andriy.jarvis.assist.AUTO_LISTEN";
     private static final int MICROPHONE_REQUEST = 621;
     private static final int OVERLAY_REQUEST = 622;
     private boolean requestingOverlay;
@@ -91,7 +93,9 @@ public final class JarvisBubbleLauncherActivity extends Activity {
         started = true;
         try {
             Intent show = new Intent(this, FloatingJarvisService.class);
-            show.setAction(FloatingJarvisService.ACTION_SHOW);
+            show.setAction(getIntent() != null &&
+                getIntent().getBooleanExtra(EXTRA_AUTO_LISTEN,false)
+                ? FloatingJarvisService.ACTION_LISTEN : FloatingJarvisService.ACTION_SHOW);
             if (Build.VERSION.SDK_INT >= 26) startForegroundService(show);
             else startService(show);
         } catch (RuntimeException failure) {

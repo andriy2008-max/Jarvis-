@@ -74,6 +74,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private static final int REQUEST_MICROPHONE = 101;
     private static final int REQUEST_TIMER_NOTIFICATIONS = 103;
     private static final int REQUEST_AI_ATTACHMENT = 106;
+    private static final int REQUEST_ASSISTANT_ROLE = 108;
     public static final String EXTRA_AI_IMAGE_PROMPT = "com.andriy.jarvis.AI_IMAGE_PROMPT";
     private static final int BG = Color.rgb(8, 14, 29);
     private static final int PANEL = Color.rgb(17, 27, 48);
@@ -865,6 +866,18 @@ public final class MainActivity extends Activity implements RecognitionListener 
             tileParams.topMargin = dp(8);
             chatPanel.addView(quickTileButton, tileParams);
 
+            Button assistantButton = secondaryButton(
+                "🗣 Зробити Джарвіса цифровим помічником",
+                this::requestAssistantRole);
+            LinearLayout.LayoutParams assistantParams =
+                new LinearLayout.LayoutParams(-1,-2);
+            assistantParams.topMargin = dp(7);
+            chatPanel.addView(assistantButton,assistantParams);
+            TextView assistantHint = makeText(
+                "Для кнопки живлення Pixel: Налаштування → Система → Жести → Утримання кнопки живлення → Цифровий помічник.",
+                isCompact ? 10 : 12, MUTED, Gravity.START, false);
+            chatPanel.addView(assistantHint);
+
             Button floatingButton = secondaryButton(
                 "🫧 Показати плаваюче обличчя",
                 () -> startActivity(new Intent(this, JarvisBubbleLauncherActivity.class)));
@@ -1471,6 +1484,34 @@ public final class MainActivity extends Activity implements RecognitionListener 
             .setNegativeButton("Скасувати", null)
             .create();
         showDialogWithoutWake(dialog);
+    }
+
+    /** Android itself presents the assistant role dialog; never change it silently. */
+    private void requestAssistantRole() {
+        if (isWatchDevice) return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            android.app.role.RoleManager roles =
+                getSystemService(android.app.role.RoleManager.class);
+            if (roles != null &&
+                roles.isRoleAvailable(android.app.role.RoleManager.ROLE_ASSISTANT)) {
+                if (roles.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT)) {
+                    setStatus("Джарвіс уже вибраний цифровим помічником Android.");
+                    return;
+                }
+                try {
+                    startActivityForResult(
+                        roles.createRequestRoleIntent(android.app.role.RoleManager.ROLE_ASSISTANT),
+                        REQUEST_ASSISTANT_ROLE);
+                    return;
+                } catch (RuntimeException ignored) { }
+            }
+        }
+        try {
+            startActivity(new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS));
+            setStatus("У системних налаштуваннях вибери «Цифровий помічник» → «Джарвіс».");
+        } catch (RuntimeException error) {
+            setStatus("Відкрий Налаштування → Програми → Програми за замовчуванням → Цифровий помічник.");
+        }
     }
 
     private void requestJarvisQuickTile() {
@@ -3046,6 +3087,18 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == REQUEST_ASSISTANT_ROLE) {
+            boolean selected = false;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                android.app.role.RoleManager roles =
+                    getSystemService(android.app.role.RoleManager.class);
+                selected = roles != null &&
+                    roles.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT);
+            }
+            setStatus(selected ? "Джарвіс — цифровий помічник за замовчуванням. Утримуй кнопку живлення." :
+                "Джарвіса не вибрано. Це можна зробити в налаштуваннях Android.");
+            return;
+        }
         if (request != REQUEST_AI_ATTACHMENT || result != RESULT_OK ||
             data == null || data.getData() == null) return;
         Uri attachment = data.getData();

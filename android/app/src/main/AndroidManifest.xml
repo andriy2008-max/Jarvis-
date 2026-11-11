@@ -79,6 +79,21 @@
             <meta-data android:name="android.service.quicksettings.ACTIVE_TILE"
                        android:value="true" />
         </service>
+        <!-- Android's default digital assistant / power-button ASSIST entry point.
+             No hotword capture; the user must select Jarvis in system settings. -->
+        <activity
+            android:name=".JarvisAssistActivity"
+            android:label="Джарвіс"
+            android:icon="@drawable/ic_launcher"
+            android:theme="@style/JarvisBubbleLaunchTheme"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true">
+            <intent-filter>
+                <action android:name="android.intent.action.ASSIST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
         <activity
             android:name=".JarvisBubbleLauncherActivity"
             android:theme="@style/JarvisBubbleLaunchTheme"
