@@ -349,6 +349,19 @@ public final class JarvisMacroActivity extends Activity {
                 throw new IllegalArgumentException("Вкажи голосову команду.");
             if("time".equals(chosen) && !JarvisMacros.validTime(triggerText))
                 throw new IllegalArgumentException("Час тригера має формат HH:mm.");
+            if ("voice".equals(chosen)) {
+                String phrase = CommandPatterns.normalize(triggerText)
+                    .replaceAll("\\s+", " ").trim();
+                for (JSONObject other : JarvisMacros.all(this)) {
+                    if (editing != null && other.optString("id").equals(editing.optString("id")))
+                        continue;
+                    if (other.optBoolean("enabled", true) &&
+                        "voice".equals(other.optString("trigger")) &&
+                        phrase.equals(CommandPatterns.normalize(other.optString("triggerValue"))
+                            .replaceAll("\\s+", " ").trim()))
+                        throw new IllegalArgumentException("Така голосова команда вже використовується.");
+                }
+            }
             JSONObject constraints = new JSONObject();
             if(!value(timeFrom).isEmpty() || !value(timeTo).isEmpty()) {
                 if(!JarvisMacros.validTime(value(timeFrom)) ||
