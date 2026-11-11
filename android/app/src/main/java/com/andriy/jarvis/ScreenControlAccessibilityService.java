@@ -153,55 +153,119 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             asString(node.getViewIdResourceName());
     }
 
-    private boolean boltHasDestination(AccessibilityNodeInfo root) {
-        ArrayDeque<AccessibilityNodeInfo> queue = new ArrayDeque<>();
-        queue.add(root);
-        int checked = 0;
-        while (!queue.isEmpty() && checked++ < MAX_SCAN) {
-            AccessibilityNodeInfo item = queue.removeFirst();
-            if (!item.isVisibleToUser() || item.isPassword()) continue;
-            if (BoltUiLabels.destination(boltNodeLabel(item))) return true;
-            for (int k=0; k<item.getChildCount(); k++) {
-                AccessibilityNodeInfo child = item.getChild(k);
-                if (child != null) queue.add(child);
-            }
-        }
-        return false;
+    /** The rides tile is not enough to prove navigation succeeded. We only
+     * advance after Bolt has actually focused an editable destination field. */
+    public static boolean boltRidesReady() {
+        ScreenControlAccessibilityService service = connected.get();
+        return service != null && service.sessionActive &&
+            service.isBoltDestinationFocused();
     }
 
-    /** Only an exactly labelled rides tab, never history or booking actions. */
+    private boolean isBoltDestinationFocused() {
+        AccessibilityNodeInfo root = currentBoltRoot();
+        if (root == null) return false;
+        AccessibilityNodeInfo focus = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+        if (focus == null || !focus.isEditable() || !focus.isFocused() ||
+            !focus.isVisibleToUser() || !focus.isEnabled() || focus.isPassword() ||
+            focus.getPackageName() == null ||
+            !"ee.mtakso.client".contentEquals(focus.getPackageName()))
+            return false;
+        return !BoltUiLabels.pickup(boltNodeLabel(focus)) &&
+            !isSensitiveInputType(focus.getInputType()) &&
+            !isSensitiveFieldLabel(focus);
+    }
+
+    /** Physical tap within the exact «Поїздки» tile. Some Bolt tiles expose
+     * their text but no ACTION_CLICK or clickable ancestor to Accessibility.
+     * Do not confuse the home search preview «Куди прямуємо?» with an opened
+     * destination form. */
     private BoltStep tapBoltRides() {
         AccessibilityNodeInfo root = currentBoltRoot();
         if (root == null) return BoltStep.WAIT;
+        Rect screen = new Rect();
+        root.getBoundsInScreen(screen);
+        if (screen.width() < 240 || screen.height() < 450) return BoltStep.WAIT;
+
         ArrayDeque<AccessibilityNodeInfo> queue = new ArrayDeque<>();
         queue.add(root);
-        int checked = 0;
-        while (!queue.isEmpty() && checked++ < MAX_SCAN) {
+        Rect best = null;
+        int bestScore = -1;
+        boolean plan = false, food = false, send = false, homeSearch = false;
+        int scanned = 0;
+        while (!queue.isEmpty() && ++scanned <= MAX_SCAN) {
             AccessibilityNodeInfo item = queue.removeFirst();
             if (!item.isVisibleToUser() || item.isPassword()) continue;
-            if (BoltUiLabels.rides(asString(item.getText())) ||
-                BoltUiLabels.rides(asString(item.getContentDescription()))) {
-                AccessibilityNodeInfo target = clickable(item);
-                if (target != null && target.isEnabled()) {
-                    Rect screen = new Rect(), bounds = new Rect();
-                    root.getBoundsInScreen(screen);
-                    target.getBoundsInScreen(bounds);
-                    // Prevent clicking a full-page parent instead of a tab.
-                    if (bounds.width() > 0 && bounds.height() > 0 &&
-                        bounds.height() < screen.height() / 2) {
-                        FloatingJarvisService.avoidControl(bounds);
-                        return target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                            ? BoltStep.CLICKED : BoltStep.WAIT;
+            String text = asString(item.getText());
+            String description = asString(item.getContentDescription());
+            String joined = (text + " " + description).toLowerCase(Locale.ROOT);
+            if (joined.contains("запланувати") || joined.contains("schedule"))
+                plan = true;
+            if (joined.contains("bolt food")) food = true;
+            if (joined.contains("bolt send")) send = true;
+            if (BoltUiLabels.destination(text) || BoltUiLabels.destination(description))
+                homeSearch = true;
+
+            boolean title = BoltUiLabels.rides(text);
+            boolean desc = BoltUiLabels.rides(description);
+            if (title || desc) {
+                Rect bounds = new Rect();
+                item.getBoundsInScreen(bounds);
+                float cx = bounds.exactCenterX(), cy = bounds.exactCenterY();
+                // Screenshot: rides tile occupies the top-left half, not the
+                // bottom navigation, promo banner, or full-page root.
+                boolean topLeft = cx > screen.left + screen.width() * .04f &&
+                    cx < screen.left + screen.width() * .61f &&
+                    cy > screen.top + screen.height() * .12f &&
+                    cy < screen.top + screen.height() * .64f;
+                if (topLeft && bounds.width() > 16 && bounds.height() > 16 &&
+                    bounds.width() < screen.width() * .72f &&
+                    bounds.height() < screen.height() * .43f) {
+                    int score = title ? 3 : 2;
+                    if (item.isClickable()) score++;
+                    // Prefer a visible label directly attached to the tile;
+                    // tapping its center lands inside the actual card.
+                    if (score > bestScore) {
+                        bestScore = score;
+                        best = bounds;
                     }
                 }
             }
-            for(int k=0;k<item.getChildCount();k++) {
-                AccessibilityNodeInfo child=item.getChild(k);
-                if(child!=null) queue.add(child);
+            for (int i=0; i<item.getChildCount(); i++) {
+                AccessibilityNodeInfo child = item.getChild(i);
+                if (child != null) queue.addLast(child);
             }
         }
-        // Some Bolt versions open directly on the rides screen.
-        return boltHasDestination(root) ? BoltStep.READY : BoltStep.WAIT;
+        if (scanned > MAX_SCAN) return BoltStep.WAIT;
+
+        if (best != null) return gestureTapBolt(root,best.exactCenterX(),best.exactCenterY());
+
+        // If the tile's text is drawn on a canvas and has no accessible node,
+        // recognize the specific four-tile home screen shown by the user first.
+        // Never use hard-coded coordinates on an unverified Bolt screen.
+        if (plan && food && send && homeSearch && screen.height() > screen.width() * 1.45f) {
+            float cx = screen.left + screen.width() * .26f;
+            float cy = screen.top + screen.height() * .29f;
+            return gestureTapBolt(root,cx,cy);
+        }
+        return isBoltDestinationFocused() ? BoltStep.READY : BoltStep.WAIT;
+    }
+
+    private BoltStep gestureTapBolt(AccessibilityNodeInfo root,float x,float y) {
+        if (!sessionActive || currentBoltRoot() == null) return BoltStep.BLOCKED;
+        Rect frame = new Rect();
+        root.getBoundsInScreen(frame);
+        if (!frame.contains(Math.round(x),Math.round(y))) return BoltStep.BLOCKED;
+        Path path = new Path();
+        path.moveTo(x,y);
+        GestureDescription tap = new GestureDescription.Builder()
+            .addStroke(new GestureDescription.StrokeDescription(path,0,90))
+            .build();
+        // The gesture helper makes the floating face untouchable for the tap,
+        // and verifies that Bolt remains the foreground package.
+        return dispatchTrackedGesture(tap, (ok, detail) -> {
+            if (!ok && sessionActive)
+                toast("Не вдалося натиснути «Поїздки»: " + detail);
+        }) ? BoltStep.CLICKED : BoltStep.BLOCKED;
     }
 
     /** Address field is already active after the rides tab; never click it again. */

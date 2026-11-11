@@ -5,6 +5,10 @@ public final class BoltUiLabelsTest {
     public static void main(String[] args){
         yes(BoltUiLabels.rides("Поїздки"));
         yes(BoltUiLabels.rides("Rides"));
+        yes(BoltUiLabels.rides("Поїздки • Рушаймо!"));
+        yes(BoltUiLabels.rides("Поїздки\nРушаймо!"));
+        yes(!BoltUiLabels.rides("Поїздки завтра"));
+        yes(!BoltUiLabels.rides("Мої поїздки"));
         yes(!BoltUiLabels.rides("Історія поїздок"));
         yes(!BoltUiLabels.rides("Замовити авто"));
         yes(BoltUiLabels.destination("Куди поїдемо?"));

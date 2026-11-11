@@ -17,7 +17,7 @@ public final class BoltTaxiController {
         void onProgress(String status);
         void onFinished(boolean ok,String status);
     }
-    private enum Stage { OPEN_APP, RIDES, DELAY, TYPE }
+    private enum Stage { OPEN_APP, RIDES, VERIFY_RIDES, DELAY, TYPE }
     private final Listener listener;
     private final String address;
     private final JarvisPhoneModeManager.Lease lease;
@@ -25,6 +25,7 @@ public final class BoltTaxiController {
     private Stage stage=Stage.OPEN_APP;
     private long started=SystemClock.elapsedRealtime();
     private boolean finished;
+    private boolean ridesRetried;
 
     private BoltTaxiController(Listener listener,String address,JarvisPhoneModeManager.Lease lease){
         this.listener=listener;this.address=address;this.lease=lease;
@@ -93,14 +94,25 @@ public final class BoltTaxiController {
             case RIDES:{
                 ScreenControlAccessibilityService.BoltStep result=
                     ScreenControlAccessibilityService.boltRides();
-                if(result==ScreenControlAccessibilityService.BoltStep.CLICKED||
-                    result==ScreenControlAccessibilityService.BoltStep.READY)
-                    move(Stage.DELAY,"«Поїздки» відкрито. Очікую 2 секунди...");
+                if(result==ScreenControlAccessibilityService.BoltStep.CLICKED)
+                    move(Stage.VERIFY_RIDES,"Натиснув плитку «Поїздки». Перевіряю, чи відкрився пошук...");
+                else if(result==ScreenControlAccessibilityService.BoltStep.READY)
+                    move(Stage.DELAY,"Поле Bolt готове. Очікую 2 секунди...");
                 else if(result==ScreenControlAccessibilityService.BoltStep.BLOCKED){
                     finish(false,"Не вдалося відкрити «Поїздки».");return;
                 }
                 break;
             }
+            case VERIFY_RIDES:
+                if(ScreenControlAccessibilityService.boltRidesReady()) {
+                    move(Stage.DELAY,"«Поїздки» відкрито. Очікую 2 секунди...");
+                } else if(age >= 3500L && !ridesRetried) {
+                    // Retry only if the recognizable Bolt home tile is still
+                    // visible; never tap arbitrary elements on another screen.
+                    ridesRetried = true;
+                    ScreenControlAccessibilityService.boltRides();
+                }
+                break;
             case DELAY:
                 if(age>=2000L){
                     if(address.isEmpty()){
