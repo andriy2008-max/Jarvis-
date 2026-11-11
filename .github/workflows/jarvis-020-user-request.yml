@@ -130,6 +130,14 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
           script: sed -e 's/0\.1\.19/NEWVERSION/g' -e 's/0\.1\.18/0.1.19/g' -e 's/NEWVERSION/0.1.20/g' -e 's/versionCode=29/versionCode=30/g' tools/release-device-qa-019.sh > /tmp/release-device-qa-020.sh && bash /tmp/release-device-qa-020.sh
+      - name: Save emulator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: JARVIS-0.1.20-emulator-diagnostics
+          path: qa-results/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Upload signed APK artifact
         uses: actions/upload-artifact@v4
         with:

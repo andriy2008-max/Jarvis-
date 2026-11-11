@@ -1,5 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
+mkdir -p qa-results
+capture_failure() {
+  code=$?
+  if [ "$code" -ne 0 ]; then
+    adb shell dumpsys activity activities > qa-results/activities.txt 2>&1 || true
+    adb shell uiautomator dump /sdcard/jarvis-qa.xml >/dev/null 2>&1 || true
+    adb pull /sdcard/jarvis-qa.xml qa-results/window.xml >/dev/null 2>&1 || true
+    adb exec-out screencap -p > qa-results/failure.png || true
+    adb logcat -d > qa-results/logcat.txt 2>&1 || true
+    cat qa-results/window.xml || true
+  fi
+  exit "$code"
+}
+trap capture_failure EXIT
 adb wait-for-device
 # boot_completed may precede PackageManager readiness.
 for i in $(seq 1 30); do
@@ -25,16 +39,29 @@ adb wait-for-device
 adb shell id
 adb install --no-streaming -r android/app/build/outputs/apk/debug/app-debug.apk
 adb install --no-streaming -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb shell pm grant com.andriy.jarvis.preview android.permission.RECORD_AUDIO
 adb logcat -c
-adb shell am start -n com.andriy.jarvis.preview/com.andriy.jarvis.MainActivity
+adb shell am start -W -n com.andriy.jarvis.preview/com.andriy.jarvis.MainActivity
 sleep 1
 adb shell appops set com.andriy.jarvis.preview ACCESS_RESTRICTED_SETTINGS allow || true
 adb shell settings put secure enabled_accessibility_services com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlAccessibilityService
 adb shell settings put secure accessibility_enabled 1
-adb shell am start -n com.andriy.jarvis.preview.test/com.andriy.jarvis.ScreenControlTestTarget
-sleep 1
 for i in $(seq 1 20); do adb shell am broadcast -n com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlDebugReceiver -a com.andriy.jarvis.preview.DEBUG_SCREEN_CONTROL --es op status >/dev/null; if adb logcat -d -s JARVIS_SCREEN_QA:I '*:S' | grep -Fq 'qa_op=status qa_connected=true'; then break; fi; sleep 2; done
 adb logcat -d -s JARVIS_SCREEN_QA:I '*:S' | grep -F 'qa_op=status qa_connected=true'
+# Start the fixture only after Accessibility has connected, then verify its UI.
+adb shell am start -W -n com.andriy.jarvis.preview.test/com.andriy.jarvis.ScreenControlTestTarget
+fixture_ready=false
+for i in $(seq 1 15); do
+  adb shell uiautomator dump /sdcard/jarvis-qa.xml >/dev/null
+  adb pull /sdcard/jarvis-qa.xml qa-results/window.xml >/dev/null
+  if grep -Fq 'text="Тестова кнопка"' qa-results/window.xml &&
+     grep -Fq 'content-desc="Search"' qa-results/window.xml; then
+    fixture_ready=true
+    break
+  fi
+  sleep 2
+done
+test "$fixture_ready" = true
 adb shell am broadcast -n com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlDebugReceiver -a com.andriy.jarvis.preview.DEBUG_SCREEN_CONTROL --es op start
 sleep 1
 adb shell "am broadcast -n com.andriy.jarvis.preview/com.andriy.jarvis.ScreenControlDebugReceiver -a com.andriy.jarvis.preview.DEBUG_SCREEN_CONTROL --es op click --es phrase 'натисни кнопку тестова кнопка'"
