@@ -286,7 +286,8 @@ public final class JarvisMacroActivity extends Activity {
     private void useLastLocation() {
         if(checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
             != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION},207);
+            requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION,
+                Manifest.permission.ACCESS_FINE_LOCATION},207);
             return;
         }
         LocationManager manager =
@@ -310,8 +311,8 @@ public final class JarvisMacroActivity extends Activity {
     @Override public void onRequestPermissionsResult(int request, String[] permissions,
                                                        int[] results) {
         super.onRequestPermissionsResult(request,permissions,results);
-        if(request == 207 && results.length > 0 &&
-            results[0] == PackageManager.PERMISSION_GRANTED) useLastLocation();
+        if(request == 207 && checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+            == PackageManager.PERMISSION_GRANTED) useLastLocation();
     }
 
     private String value(EditText field) { return field.getText().toString().trim(); }
