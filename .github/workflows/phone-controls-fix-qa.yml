@@ -6,7 +6,7 @@ permissions:
   contents: read
 jobs:
   device-qa:
-    if: github.event.head_commit.message == 'Fix phone controls, shuffle targeting and unobtrusive overlay'
+    if: github.event.head_commit.message == 'Keep phone transcript words readable and verify rendering'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:

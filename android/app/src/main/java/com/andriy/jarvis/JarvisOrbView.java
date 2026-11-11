@@ -68,7 +68,13 @@ public final class JarvisOrbView extends View {
         transcriptPaint.setColor(Color.rgb(224, 253, 255));
         transcriptPaint.setStyle(Paint.Style.FILL);
 
-        int lineWidth = Math.max(1, Math.round(radius * 1.48f));
+        int lineWidth = Math.max(1, Math.round(radius * 1.75f));
+        // Fit ordinary words before wrapping; narrow phone layouts must not
+        // split a short Ukrainian word into two rows.
+        float widest=0f;
+        for (String word:text.split(" ")) widest=Math.max(widest,transcriptPaint.measureText(word));
+        if (widest>lineWidth) transcriptPaint.setTextSize(Math.max(8f*sp,
+            transcriptPaint.getTextSize()*lineWidth/widest));
         String visible = text;
         StaticLayout layout;
         // Keep the latest words visible even when the recognition result is
