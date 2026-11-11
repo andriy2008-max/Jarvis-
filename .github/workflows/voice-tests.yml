@@ -5,6 +5,10 @@ on:
     paths:
       - '.github/workflows/voice-tests.yml'
       - 'android/app/src/main/java/com/andriy/jarvis/SongRecognition*.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisTaxi*.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/Bolt*.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/JarvisTaxiCommandsTest.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/BoltUiLabelsTest.java'
       - 'android/app/src/test/java/com/andriy/jarvis/SongRecognitionCommandsTest.java'
       - 'server/jarvis-tts-server/**'
       - 'server/jarvis-ai-worker/**'
@@ -125,6 +129,10 @@ jobs:
           mkdir -p /tmp/jarvis-voice-tests
           javac -encoding UTF-8 -d /tmp/jarvis-voice-tests \
             android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java \
+            android/app/src/main/java/com/andriy/jarvis/JarvisTaxiCommands.java \
+            android/app/src/main/java/com/andriy/jarvis/BoltUiLabels.java \
+            android/app/src/test/java/com/andriy/jarvis/JarvisTaxiCommandsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/BoltUiLabelsTest.java \
             android/app/src/main/java/com/andriy/jarvis/SpotifyMusicCommands.java \
             android/app/src/main/java/com/andriy/jarvis/SpotifyUiLabels.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisSearchRouting.java \
@@ -181,6 +189,8 @@ jobs:
             android/app/src/test/java/com/andriy/jarvis/NeuralSpeechPolicyTest.java \
             android/app/src/test/java/com/andriy/jarvis/OfflineVoicePackRulesTest.java \
             android/app/src/test/java/com/andriy/jarvis/UkrainianVoiceTextTest.java
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisTaxiCommandsTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.BoltUiLabelsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.CommandPatternsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyMusicCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyUiLabelsTest

@@ -120,6 +120,175 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             packageName.contentEquals(focused.getPackageName());
     }
 
+    /** Only the user-requested Bolt passenger app may be controlled by these methods. */
+    public enum BoltStep { WAIT, CLICKED, READY, ENTERED, BLOCKED }
+
+    public static boolean boltVisible() {
+        ScreenControlAccessibilityService service = connected.get();
+        return service != null && service.sessionActive && service.currentBoltRoot() != null;
+    }
+
+    public static BoltStep boltRides() {
+        ScreenControlAccessibilityService service = connected.get();
+        return service == null || !service.sessionActive ? BoltStep.BLOCKED :
+            service.tapBoltRides();
+    }
+
+    public static BoltStep boltOpenDestination() {
+        ScreenControlAccessibilityService service = connected.get();
+        return service == null || !service.sessionActive ? BoltStep.BLOCKED :
+            service.tapBoltDestination();
+    }
+
+    public static BoltStep boltTypeDestination(String address, boolean searchOpened) {
+        ScreenControlAccessibilityService service = connected.get();
+        return service == null || !service.sessionActive ? BoltStep.BLOCKED :
+            service.fillBoltDestination(address, searchOpened);
+    }
+
+    private AccessibilityNodeInfo currentBoltRoot() {
+        AccessibilityNodeInfo root = currentExternalRoot();
+        return root != null && root.isVisibleToUser() && root.getPackageName() != null &&
+            "ee.mtakso.client".contentEquals(root.getPackageName()) ? root : null;
+    }
+
+    private static String boltNodeLabel(AccessibilityNodeInfo node) {
+        return asString(node.getText()) + " " +
+            asString(node.getContentDescription()) + " " +
+            asString(node.getHintText()) + " " +
+            asString(node.getViewIdResourceName());
+    }
+
+    private boolean boltHasDestination(AccessibilityNodeInfo root) {
+        ArrayDeque<AccessibilityNodeInfo> queue = new ArrayDeque<>();
+        queue.add(root);
+        int checked = 0;
+        while (!queue.isEmpty() && checked++ < MAX_SCAN) {
+            AccessibilityNodeInfo item = queue.removeFirst();
+            if (!item.isVisibleToUser() || item.isPassword()) continue;
+            if (BoltUiLabels.destination(boltNodeLabel(item))) return true;
+            for (int k=0; k<item.getChildCount(); k++) {
+                AccessibilityNodeInfo child = item.getChild(k);
+                if (child != null) queue.add(child);
+            }
+        }
+        return false;
+    }
+
+    /** Only an exactly labelled rides tab, never history or booking actions. */
+    private BoltStep tapBoltRides() {
+        AccessibilityNodeInfo root = currentBoltRoot();
+        if (root == null) return BoltStep.WAIT;
+        ArrayDeque<AccessibilityNodeInfo> queue = new ArrayDeque<>();
+        queue.add(root);
+        int checked = 0;
+        while (!queue.isEmpty() && checked++ < MAX_SCAN) {
+            AccessibilityNodeInfo item = queue.removeFirst();
+            if (!item.isVisibleToUser() || item.isPassword()) continue;
+            if (BoltUiLabels.rides(asString(item.getText())) ||
+                BoltUiLabels.rides(asString(item.getContentDescription()))) {
+                AccessibilityNodeInfo target = clickable(item);
+                if (target != null && target.isEnabled()) {
+                    Rect screen = new Rect(), bounds = new Rect();
+                    root.getBoundsInScreen(screen);
+                    target.getBoundsInScreen(bounds);
+                    // Prevent clicking a full-page parent instead of a tab.
+                    if (bounds.width() > 0 && bounds.height() > 0 &&
+                        bounds.height() < screen.height() / 2) {
+                        FloatingJarvisService.avoidControl(bounds);
+                        return target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                            ? BoltStep.CLICKED : BoltStep.WAIT;
+                    }
+                }
+            }
+            for(int k=0;k<item.getChildCount();k++) {
+                AccessibilityNodeInfo child=item.getChild(k);
+                if(child!=null) queue.add(child);
+            }
+        }
+        // Some Bolt versions open directly on the rides screen.
+        return boltHasDestination(root) ? BoltStep.READY : BoltStep.WAIT;
+    }
+
+    private BoltStep tapBoltDestination() {
+        AccessibilityNodeInfo root = currentBoltRoot();
+        if (root == null) return BoltStep.WAIT;
+        ArrayDeque<AccessibilityNodeInfo> queue = new ArrayDeque<>();
+        queue.add(root);
+        int checked = 0;
+        while (!queue.isEmpty() && checked++ < MAX_SCAN) {
+            AccessibilityNodeInfo item = queue.removeFirst();
+            if (!item.isVisibleToUser() || !item.isEnabled() || item.isPassword()) continue;
+            String label=boltNodeLabel(item);
+            if (BoltUiLabels.destination(label) && !BoltUiLabels.pickup(label)) {
+                if (item.isEditable()) return BoltStep.READY;
+                AccessibilityNodeInfo target=clickable(item);
+                if (target != null && target.isEnabled()) {
+                    Rect bounds=new Rect();
+                    target.getBoundsInScreen(bounds);
+                    if(bounds.width()>0 && bounds.height()>0) {
+                        FloatingJarvisService.avoidControl(bounds);
+                        return target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                            ? BoltStep.CLICKED : BoltStep.WAIT;
+                    }
+                }
+            }
+            for(int k=0;k<item.getChildCount();k++) {
+                AccessibilityNodeInfo child=item.getChild(k);
+                if(child!=null)queue.add(child);
+            }
+        }
+        return BoltStep.WAIT;
+    }
+
+    /** SET_TEXT only: does not press search, choose a suggestion or book a ride. */
+    private BoltStep fillBoltDestination(String address,boolean searchOpened) {
+        if (address == null || address.trim().isEmpty() || address.length()>250)
+            return BoltStep.BLOCKED;
+        AccessibilityNodeInfo root=currentBoltRoot();
+        if (root==null) return BoltStep.WAIT;
+        ArrayDeque<AccessibilityNodeInfo> queue=new ArrayDeque<>();
+        queue.add(root);
+        AccessibilityNodeInfo best=null;
+        int bestScore=-1, ties=0, candidateCount=0, checked=0;
+        while(!queue.isEmpty()&&checked++<MAX_SCAN){
+            AccessibilityNodeInfo item=queue.removeFirst();
+            if(!item.isVisibleToUser()||!item.isEnabled()||item.isPassword())continue;
+            if(item.isEditable()) {
+                String label=boltNodeLabel(item);
+                if(!BoltUiLabels.pickup(label) && !isSensitiveInputType(item.getInputType()) &&
+                   !isSensitiveFieldLabel(item)) {
+                    candidateCount++;
+                    int score=BoltUiLabels.destination(label)?100:(item.isFocused()?10:0);
+                    if(score>bestScore){bestScore=score;best=item;ties=1;}
+                    else if(score==bestScore)ties++;
+                }
+            }
+            for(int k=0;k<item.getChildCount();k++){
+                AccessibilityNodeInfo child=item.getChild(k);
+                if(child!=null)queue.add(child);
+            }
+        }
+        if(best==null || ties!=1) return BoltStep.WAIT;
+        // Unlabelled fields only after the destination button was explicitly opened,
+        // and only if there is exactly ONE eligible field.
+        if(bestScore<100 && (!searchOpened || candidateCount!=1 || !best.isFocused()))
+            return BoltStep.WAIT;
+        boolean canSetText=false;
+        for(AccessibilityNodeInfo.AccessibilityAction action:best.getActionList())
+            if(action.getId()==AccessibilityNodeInfo.ACTION_SET_TEXT)canSetText=true;
+        if(!canSetText)return BoltStep.BLOCKED;
+        AccessibilityNodeInfo current=currentBoltRoot();
+        if(!sessionActive||current==null||!best.isEnabled()||!best.isVisibleToUser() ||
+           best.isPassword())return BoltStep.WAIT;
+        Bundle args=new Bundle();
+        args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,address);
+        try {
+            return best.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)
+                ? BoltStep.ENTERED : BoltStep.WAIT;
+        }catch(SecurityException ignored){return BoltStep.BLOCKED;}
+    }
+
     public interface Completion { void finished(boolean success, String detail); }
 
     /**
@@ -387,6 +556,14 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                                 request.equals("скасуй спотіфай"))
                                 spotifyPlayback.cancel();
                             else toast("Зачекай завершення Spotify або скажи «Скасуй Spotify».");
+                            return;
+                        }
+                        if (JarvisTaxiCommands.destination(raw) != null) {
+                            BoltTaxiController.start(ScreenControlAccessibilityService.this,
+                                raw,new BoltTaxiController.Listener() {
+                                    @Override public void onProgress(String info) {toast(info);}
+                                    @Override public void onFinished(boolean ok,String info) {toast(info);}
+                                });
                             return;
                         }
                         SpotifyMusicCommands.Kind selection = SpotifyMusicCommands.parse(raw);

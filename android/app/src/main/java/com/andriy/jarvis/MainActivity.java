@@ -566,6 +566,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
         Button macroTab = secondaryButton("⚙ Макроси",
             () -> startActivity(new Intent(this, JarvisMacroActivity.class)));
         macroTabs.addView(macroTab, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        Button taxiPlacesTab = secondaryButton("📍 Адреси",
+            () -> startActivity(new Intent(this, JarvisTaxiPlacesActivity.class)));
+        macroTabs.addView(taxiPlacesTab, new LinearLayout.LayoutParams(0, dp(48), 1f));
 
         LinearLayout hero = new LinearLayout(this);
         hero.setOrientation(LinearLayout.VERTICAL);
@@ -3387,6 +3390,17 @@ public final class MainActivity extends Activity implements RecognitionListener 
              command.equals("проаналізуй документ") ||
              command.equals("прочитай документ"))) {
             setStatus("Для ШІ після струшування двічі скажи «Джарвіс».");
+            return;
+        }
+        if (!isWatchDevice && JarvisTaxiCommands.destination(raw) != null) {
+            BoltTaxiController.start(this, raw, new BoltTaxiController.Listener() {
+                @Override public void onProgress(String detail) {setStatus(detail);}
+                @Override public void onFinished(boolean ok,String detail) {
+                    if(isFinishing()||isDestroyed())return;
+                    appendDialogue("Джарвіс",detail);
+                    setStatus(detail);
+                }
+            });
             return;
         }
         if (SongRecognitionCommands.matches(raw)) {

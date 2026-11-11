@@ -1037,6 +1037,14 @@ public final class FloatingJarvisService extends Service {
             else message("Завершую команду в Spotify. Скажи «Скасуй Spotify», щоб зупинити.");
             return;
         }
+        if (JarvisTaxiCommands.destination(raw) != null) {
+            abortPhoneSpeech();
+            BoltTaxiController.start(this,raw,new BoltTaxiController.Listener(){
+                @Override public void onProgress(String info){if(!closing)message(info);}
+                @Override public void onFinished(boolean ok,String info){if(!closing)message(info);}
+            });
+            return;
+        }
         if (SongRecognitionCommands.matches(raw)) {
             pauseForSongRecognition();
             message(SongRecognitionLauncher.launch(this, (success, detail) -> {
