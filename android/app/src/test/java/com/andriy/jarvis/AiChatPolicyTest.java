@@ -26,7 +26,7 @@ public final class AiChatPolicyTest {
         List<String> last = AiChatPolicy.keepLast(Arrays.asList("a", "b", "c", "d"), 2);
         yes(last.equals(Arrays.asList("c", "d")), "bounded history");
         yes(AiChatPolicy.keepLast(Arrays.asList("a"), 0).isEmpty(), "empty history");
-        yes(AiChatPolicy.MAX_MESSAGE_CHARS == 2000, "message cap");
+        yes(AiChatPolicy.MAX_MESSAGE_CHARS == 4000, "message cap");
         yes(AiChatPolicy.MAX_CONTEXT_TURNS == 14, "context cap");
         System.out.println("PASS " + checks + " AiChatPolicy assertions");
     }
