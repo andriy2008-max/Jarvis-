@@ -17,14 +17,13 @@ public final class BoltTaxiController {
         void onProgress(String status);
         void onFinished(boolean ok,String status);
     }
-    private enum Stage { OPEN_APP, RIDES, DELAY, SEARCH, TYPE }
+    private enum Stage { OPEN_APP, RIDES, DELAY, TYPE }
     private final Listener listener;
     private final String address;
     private final JarvisPhoneModeManager.Lease lease;
     private final Runnable tick=this::poll;
     private Stage stage=Stage.OPEN_APP;
     private long started=SystemClock.elapsedRealtime();
-    private boolean searchOpened;
     private boolean finished;
 
     private BoltTaxiController(Listener listener,String address,JarvisPhoneModeManager.Lease lease){
@@ -107,22 +106,14 @@ public final class BoltTaxiController {
                     if(address.isEmpty()){
                         finish(true,"Відкрив Bolt → «Поїздки». Назви пункт призначення.");return;
                     }
-                    move(Stage.SEARCH,"Шукаю поле пункту призначення...");
+                    // Bolt automatically activates the address field after "Поїздки".
+                    // Do not tap any search/destination control again.
+                    move(Stage.TYPE,"Вводжу адресу в уже активне поле Bolt...");
                 }
                 break;
-            case SEARCH:{
-                ScreenControlAccessibilityService.BoltStep result=
-                    ScreenControlAccessibilityService.boltOpenDestination();
-                if(result==ScreenControlAccessibilityService.BoltStep.CLICKED||
-                    result==ScreenControlAccessibilityService.BoltStep.READY){
-                    searchOpened=true;
-                    move(Stage.TYPE,"Вводжу пункт призначення...");
-                }
-                break;
-            }
             case TYPE:{
                 ScreenControlAccessibilityService.BoltStep result=
-                    ScreenControlAccessibilityService.boltTypeDestination(address,searchOpened);
+                    ScreenControlAccessibilityService.boltTypeDestination(address);
                 if(result==ScreenControlAccessibilityService.BoltStep.ENTERED){
                     finish(true,"У Bolt введено: "+address+
                         ". Обери правильну підказку й підтвердь поїздку вручну.");
