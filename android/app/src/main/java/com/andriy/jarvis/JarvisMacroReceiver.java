@@ -40,11 +40,11 @@ public final class JarvisMacroReceiver extends BroadcastReceiver {
             if (id == null) finish.run();
             else JarvisMacros.handleTime(context, id, listener);
         } else if (Intent.ACTION_POWER_CONNECTED.equals(action)) {
-            JarvisMacros.handleEvent(context, "charger_on", listener);
-            finish.run();
+            if (!JarvisMacros.handleEvent(context, "charger_on", listener))
+                finish.run();
         } else {
-            JarvisMacros.handleEvent(context, "charger_off", listener);
-            finish.run();
+            if (!JarvisMacros.handleEvent(context, "charger_off", listener))
+                finish.run();
         }
     }
 }
