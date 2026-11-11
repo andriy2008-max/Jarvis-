@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - '.github/workflows/voice-tests.yml'
+      - 'android/app/src/main/java/com/andriy/jarvis/SongRecognition*.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/SongRecognitionCommandsTest.java'
       - 'server/jarvis-tts-server/**'
       - 'server/jarvis-ai-worker/**'
       - 'android/app/src/main/java/com/andriy/jarvis/AiChatClient.java'
@@ -208,6 +210,20 @@ jobs:
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.OfflineVoicePackRulesTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.UkrainianVoiceTextTest
       
+  song_recognition:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Recognition phrases and playback isolation
+        run: |
+          mkdir -p /tmp/song-tests
+          javac -encoding UTF-8 -d /tmp/song-tests android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java android/app/src/main/java/com/andriy/jarvis/SongRecognitionCommands.java android/app/src/test/java/com/andriy/jarvis/SongRecognitionCommandsTest.java
+          java -cp /tmp/song-tests com.andriy.jarvis.SongRecognitionCommandsTest
+
   android_compile:
     runs-on: ubuntu-latest
     timeout-minutes: 18

@@ -87,3 +87,7 @@ java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.ScreenTargetMatcherTest
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.NeuralSpeechPolicyTest
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.OfflineVoicePackRulesTest
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.UkrainianVoiceTextTest
+
+# Recognition must stay separate from playback and title searches.
+javac -encoding UTF-8 -d /tmp/jarvis-voice-tests android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java android/app/src/main/java/com/andriy/jarvis/SongRecognitionCommands.java android/app/src/test/java/com/andriy/jarvis/SongRecognitionCommandsTest.java
+java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SongRecognitionCommandsTest

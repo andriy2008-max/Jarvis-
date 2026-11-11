@@ -30,6 +30,7 @@
     <uses-feature android:name="android.hardware.microphone" android:required="true" />
     <uses-feature android:name="android.hardware.type.watch" android:required="false" />
     <queries>
+        <package android:name="com.google.android.googlequicksearchbox" />
         <package android:name="com.arlosoft.macrodroid" />
         <!-- Spotify: user-requested app launch and verified accessibility controls. -->
         <package android:name="com.spotify.music" />

@@ -73,6 +73,18 @@ public final class FloatingJarvisService extends Service {
         }
     };
 
+    /** Release our microphone before handing it to Google's foreground activity. */
+    public static void pauseForSongRecognition() {
+        FloatingJarvisService service = activeOverlay.get();
+        if (service == null || service.closing) return;
+        service.abortPhoneSpeech();
+        service.cancelCorrectionRestart();
+        if (service.recognitionRestart != null)
+            service.ui.removeCallbacks(service.recognitionRestart);
+        service.stopSpeech();
+        service.setFace("idle");
+    }
+
     /** Only app-owned UI is hidden; the user's target app is never moved. */
     public static Runnable hideForGesture() {
         FloatingJarvisService service = activeOverlay.get();
@@ -1023,6 +1035,11 @@ public final class FloatingJarvisService extends Service {
             if (word.equals("скасуй spotify") || word.equals("зупини spotify") ||
                 word.equals("скасуй спотіфай")) spotifyPlayback.cancel();
             else message("Завершую команду в Spotify. Скажи «Скасуй Spotify», щоб зупинити.");
+            return;
+        }
+        if (SongRecognitionCommands.matches(raw)) {
+            pauseForSongRecognition();
+            message(SongRecognitionLauncher.launch(this));
             return;
         }
         SpotifyMusicCommands.Kind requestedMusic = SpotifyMusicCommands.parse(raw);

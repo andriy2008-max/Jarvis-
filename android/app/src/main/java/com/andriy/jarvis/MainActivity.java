@@ -3389,6 +3389,28 @@ public final class MainActivity extends Activity implements RecognitionListener 
             setStatus("Для ШІ після струшування двічі скажи «Джарвіс».");
             return;
         }
+        if (SongRecognitionCommands.matches(raw)) {
+            if (!isWatchDevice) {
+                stopPhoneListening();
+                cancelAutoWakeSchedule();
+                cancelManualRestart();
+                cancelSilenceCheck();
+                cancelPendingWakeCommand();
+                wakeConversation.end();
+                stopSpeaking();
+                manualCapture = false;
+                autoWakeListening = false;
+                recognizerSessionActive = false;
+                listening = false;
+                if (recognizer != null) recognizer.cancel();
+                if (headsetRoute != null) headsetRoute.end();
+                FloatingJarvisService.pauseForSongRecognition();
+            }
+            String result = SongRecognitionLauncher.launch(this);
+            appendDialogue("Джарвіс", result);
+            setStatus(result); // Remain silent while Google listens to the song.
+            return;
+        }
         SpotifyMusicCommands.Kind musicRequest = SpotifyMusicCommands.parse(raw);
         if (musicRequest != null) {
             startSpotifyMusic(musicRequest);
