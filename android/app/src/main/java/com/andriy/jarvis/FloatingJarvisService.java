@@ -300,8 +300,12 @@ public final class FloatingJarvisService extends Service {
             }
             android.util.Log.i("JARVIS_FLOATING_QA", "foreground_started=true");
             showFace();
-            if (ACTION_LISTEN.equals(intent.getAction()) && JarvisPhoneMode.isActive())
-                startPhoneListening();
+            if (ACTION_LISTEN.equals(intent.getAction())) {
+                if (JarvisPhoneMode.isActive()) startPhoneListening();
+                else if (!recording && !recognizerSessionActive && !aiBusy &&
+                    pendingSend == null) toggleListening();
+                // A repeated Quick Tap must not stop or restart an active capture.
+            }
         } catch (Exception error) {
             android.util.Log.e("JARVIS_FLOATING_QA", "orb_start_failed", error);
             Toast.makeText(this, "Не вдалося відкрити плаваючий Джарвіс. Перевір дозволи Android.",

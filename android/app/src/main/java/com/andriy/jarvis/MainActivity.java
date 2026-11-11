@@ -105,6 +105,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private boolean autoWakeEnabled;
     private boolean supportsOnDeviceRecognizer;
     private boolean foreground;
+    // A Pixel Quick Tap "Open app" uses the ordinary Android launcher intent.
+    // Android does not identify the physical back tap separately; this setting
+    // also applies when the user opens Jarvis from the home-screen app icon.
+    private static final String PREF_LISTEN_ON_OPEN = "listen_on_launcher_open";
+    private boolean pendingLauncherMicrophone;
+    private Runnable launcherMicrophoneStart;
     private int visibleDialogs;
     private boolean manualCapture;
     private boolean manualStopRequested;
@@ -253,6 +259,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         getWindow().setNavigationBarColor(BG);
         if (state != null) pendingTimerSeconds = state.getInt("pending_timer_seconds", 0);
         isWatchDevice = getPackageManager().hasSystemFeature(PackageManager.FEATURE_WATCH);
+        pendingLauncherMicrophone = state == null && isPhoneLauncherIntent(getIntent());
         if (isWatchDevice) watchPhoneLink = new JarvisWearPhoneLink(this);
         isCompact = getResources().getConfiguration().smallestScreenWidthDp < 360;
         shakeEnabled = getPreferences(MODE_PRIVATE).getBoolean(SHAKE_PREF, true);
@@ -349,6 +356,60 @@ public final class MainActivity extends Activity implements RecognitionListener 
         super.onNewIntent(intent);
         setIntent(intent);
         acceptImageIntent(intent);
+        if (isPhoneLauncherIntent(intent)) {
+            pendingLauncherMicrophone = true;
+            if (foreground) scheduleLauncherMicrophone();
+        }
+    }
+
+    private boolean isPhoneLauncherIntent(Intent intent) {
+        if (isWatchDevice || intent == null ||
+            !Intent.ACTION_MAIN.equals(intent.getAction())) return false;
+        java.util.Set<String> categories = intent.getCategories();
+        return categories == null || categories.contains(Intent.CATEGORY_LAUNCHER);
+    }
+
+    /**
+     * Run once for each explicit app launch, not for a normal return from the
+     * internal Macros/Addresses screens. The short delay allows Android to put
+     * the activity in the foreground before starting SpeechRecognizer.
+     */
+    private void scheduleLauncherMicrophone() {
+        if (launcherMicrophoneStart != null) wakeHandler.removeCallbacks(launcherMicrophoneStart);
+        if (!foreground || !pendingLauncherMicrophone || isWatchDevice) return;
+        launcherMicrophoneStart = () -> {
+            launcherMicrophoneStart = null;
+            if (!foreground || !pendingLauncherMicrophone || isFinishing() || isDestroyed()) return;
+            pendingLauncherMicrophone = false;
+            if (!getPreferences(MODE_PRIVATE).getBoolean(PREF_LISTEN_ON_OPEN,true))
+                return;
+            if (visibleDialogs != 0 || aiBusy || processing || manualCapture || 
+                (listening && !autoWakeListening)) return;
+            if (JarvisPhoneMode.isActive()) {
+                startPhoneListening();
+                return;
+            }
+            // If the user's existing floating face already owns the microphone,
+            // send it one listen request instead of creating a second recognizer.
+            if (FloatingJarvisService.isShowing() &&
+                checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+                    PackageManager.PERMISSION_GRANTED) {
+                try {
+                    Intent bubble = new Intent(this,FloatingJarvisService.class);
+                    bubble.setAction(FloatingJarvisService.ACTION_LISTEN);
+                    startService(bubble);
+                    setStatus("Плаваючий Джарвіс слухає команду...");
+                    return;
+                } catch (RuntimeException ignored) {
+                    setStatus("Не вдалося запустити мікрофон плаваючого Джарвіса.");
+                    return;
+                }
+            }
+            // Use the exact same capture path and silence timer as the main
+            // microphone button (including the Android permission request).
+            startManualListening();
+        };
+        wakeHandler.postDelayed(launcherMicrophoneStart, 420L);
     }
 
     private void acceptImageIntent(Intent intent) {
@@ -379,6 +440,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             setStatus("Час вийшов! Таймер завершено.");
         }
         resumePendingTimerIfAllowed();
+        scheduleLauncherMicrophone();
     }
 
     @Override
@@ -389,6 +451,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     protected void onPause() {
+        if (launcherMicrophoneStart != null) {
+            wakeHandler.removeCallbacks(launcherMicrophoneStart);
+            launcherMicrophoneStart = null;
+        }
+        pendingLauncherMicrophone = false;
         stopPhoneListening();
         if (headsetRoute != null) headsetRoute.end();
         unregisterShakeSensor();
@@ -623,6 +690,22 @@ public final class MainActivity extends Activity implements RecognitionListener 
         micParams.topMargin = dp(18);
         micParams.width = LinearLayout.LayoutParams.MATCH_PARENT;
         hero.addView(microphone, micParams);
+
+        if (!isWatchDevice) {
+            CheckBox launchMicToggle = new CheckBox(this);
+            launchMicToggle.setText("🎙 Автоматично слухати при відкритті Джарвіса (подвійний дотик Pixel)");
+            launchMicToggle.setTextColor(MUTED);
+            launchMicToggle.setTextSize(TypedValue.COMPLEX_UNIT_SP, isCompact ? 11 : 12);
+            launchMicToggle.setButtonTintList(ColorStateList.valueOf(CYAN));
+            launchMicToggle.setChecked(getPreferences(MODE_PRIVATE)
+                .getBoolean(PREF_LISTEN_ON_OPEN,true));
+            launchMicToggle.setOnCheckedChangeListener((control,enabled) ->
+                getPreferences(MODE_PRIVATE).edit()
+                    .putBoolean(PREF_LISTEN_ON_OPEN,enabled).apply());
+            LinearLayout.LayoutParams micOptionParams = new LinearLayout.LayoutParams(-1,-2);
+            micOptionParams.topMargin = dp(6);
+            hero.addView(launchMicToggle,micOptionParams);
+        }
 
         wakeToggle = makeWakeToggle();
         shakeToggle = makeShakeToggle();
