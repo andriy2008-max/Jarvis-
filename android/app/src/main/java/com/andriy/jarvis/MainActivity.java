@@ -275,6 +275,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         offlinePacks = new OfflineVoicePackManager(this);
         offlineSpeech = new OfflineSpeechClient(this, offlinePacks);
         buildInterface();
+        JarvisMacros.scheduleAll(this);
         JarvisPhoneMode.subscribe(phoneModeListener);
         deviceActions = new DeviceActions(this);
 
@@ -553,6 +554,18 @@ public final class MainActivity extends Activity implements RecognitionListener 
         version.setPadding(dp(10), dp(6), dp(10), dp(6));
         if (!isWatchDevice) topbar.addView(version);
         content.addView(topbar);
+        // Separate native macro tab; return to this screen with Android Back.
+        LinearLayout macroTabs = new LinearLayout(this);
+        macroTabs.setOrientation(LinearLayout.HORIZONTAL);
+        macroTabs.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams tabParams = new LinearLayout.LayoutParams(-1, -2);
+        tabParams.topMargin = dp(12);
+        content.addView(macroTabs, tabParams);
+        TextView assistantTab = makeText("● Джарвіс", 15, CYAN, Gravity.CENTER, true);
+        macroTabs.addView(assistantTab, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        Button macroTab = secondaryButton("⚙ Макроси",
+            () -> startActivity(new Intent(this, JarvisMacroActivity.class)));
+        macroTabs.addView(macroTab, new LinearLayout.LayoutParams(0, dp(48), 1f));
 
         LinearLayout hero = new LinearLayout(this);
         hero.setOrientation(LinearLayout.VERTICAL);
@@ -3349,6 +3362,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
             return;
         }
         appendDialogue("Ти", raw.trim());
+        if (!isWatchDevice && JarvisMacros.handleVoice(this, raw, result -> {
+            if (isFinishing() || isDestroyed()) return;
+            appendDialogue("Джарвіс", result);
+            setStatus(result);
+            if (voiceEnabled) speakReply(result);
+        })) return;
         String command = CommandPatterns.normalize(raw);
         if (command.isEmpty()) return;
         if (shakeLocalOnly &&
