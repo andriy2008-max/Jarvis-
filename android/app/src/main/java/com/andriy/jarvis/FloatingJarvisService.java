@@ -997,6 +997,10 @@ public final class FloatingJarvisService extends Service {
 
     private void executeCommand(String raw) {
         if (closing) return;
+        // User-defined phrases take precedence over built-in commands.
+        if (JarvisMacros.handleVoice(this, raw, result -> {
+            if (!closing) reply(result);
+        })) return;
         JarvisPhoneMode.Transition transition = JarvisPhoneMode.transition(raw);
         if (transition == JarvisPhoneMode.Transition.ENTER) {
             String result = JarvisPhoneModeManager.enter(this, true);
