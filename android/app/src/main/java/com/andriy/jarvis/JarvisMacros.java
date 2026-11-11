@@ -125,11 +125,15 @@ public final class JarvisMacros {
         return false;
     }
 
-    public static void handleEvent(Context context, String trigger, Listener listener) {
+    public static boolean handleEvent(Context context, String trigger, Listener listener) {
+        boolean matched = false;
         for (JSONObject m : all(context)) {
-            if (m.optBoolean("enabled", true) && trigger.equals(m.optString("trigger")))
+            if (m.optBoolean("enabled", true) && trigger.equals(m.optString("trigger"))) {
+                matched = true;
                 execute(context, m, listener);
+            }
         }
+        return matched;
     }
 
     public static void handleTime(Context context, String id, Listener listener) {
