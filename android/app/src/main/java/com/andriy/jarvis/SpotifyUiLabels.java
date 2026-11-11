@@ -39,10 +39,14 @@ public final class SpotifyUiLabels {
                     s.equals("українська музика") || s.equals("укрмуз") ||
                     s.equals("ukr muz");
             case SHUFFLE:
-                return s.contains("shuffle") || s.startsWith("переміш") ||
-                    s.startsWith("перемеш") || s.startsWith("випадков") ||
-                    s.startsWith("случайн") || containsAny(s, "random order", "play randomly");
+                // Combined Play/Shuffle is a different action from the crossed arrows.
+                if (s.matches(".*\\b(play|pause|repeat|next|back|playpause|playbutton)\\b.*") ||
+                    s.startsWith("відтворити") || s.startsWith("воспроизвести")) return false;
+                return s.contains("shuffle") || (" "+s).contains(" переміш") ||
+                    (" "+s).contains(" перемеш") || (" "+s).contains(" випадков") ||
+                    (" "+s).contains(" случайн") || containsAny(s, "random order", "play randomly");
             case PLAY:
+                if (matches(Target.SHUFFLE, raw) || s.contains("shuffle")) return false;
                 if (containsAny(s, "pause", "paused", "пауза", "призупинити",
                     "зупинити", "stop playing")) return false;
                 return s.equals("play") || s.equals("play button") ||
@@ -53,6 +57,24 @@ public final class SpotifyUiLabels {
                     s.startsWith("воспроизвести ");
             default: return false;
         }
+    }
+
+    /** Bare plural arrows mean this control only within Spotify, never in other apps. */
+    public static boolean shuffleRequest(String phrase) {
+        String s = normalize(phrase);
+        return ScreenTargetMatcher.intent(s).equals("shuffle") ||
+            s.equals("стрілочки") || s.equals("стрілки") || s.equals("ці стрілочки") ||
+            s.equals("ці стрілки") || s.equals("дві стрілочки") || s.equals("дві стрілки");
+    }
+
+    /** The small crossed arrows sit LEFT of the large playlist Play, on the same row. */
+    public static boolean toolbarPair(int sl,int st,int sr,int sb,
+                                      int pl,int pt,int pr,int pb,float density) {
+        int sw=sr-sl, sh=sb-st, pw=pr-pl, ph=pb-pt;
+        return sw>0 && sh>0 && pw>=36*density && ph>=36*density &&
+            (pl+pr)>(sl+sr) && pl>=sl && pw>=sw*.8f &&
+            Math.abs((pt+pb)-(st+sb))/2f<=Math.max(sh,ph)*.65f &&
+            pl-sr<Math.max(pw,sw)*3f;
     }
 
     public static boolean shuffleOn(String label, boolean selected, boolean checked) {

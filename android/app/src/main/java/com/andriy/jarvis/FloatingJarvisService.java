@@ -59,6 +59,81 @@ public final class FloatingJarvisService extends Service {
     private static final String CHANNEL = "jarvis_floating_control";
     private static final int NOTIFICATION = 81740;
     private static volatile boolean showing;
+    private static java.lang.ref.WeakReference<FloatingJarvisService> activeOverlay =
+        new java.lang.ref.WeakReference<>(null);
+    private int gestureHides;
+    private boolean overlayDragging;
+    private boolean transcriptActive;
+    private long transcriptUntil;
+    private final Runnable overlayLayoutTick = new Runnable() {
+        @Override public void run() {
+            if (closing || face == null) return;
+            refreshOverlayLayout();
+            ui.postDelayed(this,250L);
+        }
+    };
+
+    /** Only app-owned UI is hidden; the user's target app is never moved. */
+    public static Runnable hideForGesture() {
+        FloatingJarvisService service = activeOverlay.get();
+        if (service == null || service.closing) return () -> {};
+        service.gestureHides++;
+        service.overlayDragging=false;
+        service.refreshOverlayLayout();
+        if ((service.getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0)
+            android.util.Log.i("JARVIS_FLOATING_QA","qa_overlay_gesture_hidden="+
+                (service.faceParams!=null && service.faceParams.alpha==0f &&
+                (service.faceParams.flags & WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)!=0));
+        return () -> {
+            service.gestureHides = Math.max(0,service.gestureHides-1);
+            if (!service.closing) service.refreshOverlayLayout();
+        };
+    }
+
+    public static void avoidControl(android.graphics.Rect target) {
+        FloatingJarvisService service = activeOverlay.get();
+        if (service == null || service.closing || service.faceParams == null) return;
+        WindowManager.LayoutParams p = service.faceParams;
+        android.graphics.Rect occupied = new android.graphics.Rect(p.x,p.y,p.x+p.width,p.y+p.height);
+        if (!android.graphics.Rect.intersects(occupied,target)) return;
+        int opposite = p.x < service.displayWidth/2 ? service.rightLimit() : service.leftLimit();
+        occupied.offsetTo(opposite,p.y);
+        p.x=opposite;
+        if (android.graphics.Rect.intersects(occupied,target)) {
+            int above=target.top-p.height-service.dp(8);
+            int below=target.bottom+service.dp(8);
+            p.y = above>=service.topLimit() ? above :
+                JarvisOrbPlacement.clamp(below,service.topLimit(),service.bottomLimit());
+        }
+        try { service.windows.updateViewLayout(service.face,p); }
+        catch (IllegalArgumentException ignored) { }
+    }
+
+    private void refreshOverlayLayout() {
+        if (face == null || faceParams == null || windows == null || overlayDragging) return;
+        long now=SystemClock.uptimeMillis();
+        boolean running=JarvisControlFeedback.phase(now)==JarvisControlFeedback.Phase.RUNNING;
+        boolean expanded=listening || recording || transcriptActive || now<transcriptUntil;
+        int diameter=dp(expanded ? JarvisOrbPlacement.supportedSize(
+            getSharedPreferences(ORB_PREFS,MODE_PRIVATE).getInt("diameter_dp",112)) : 56);
+        int flags=WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
+        if (running || gestureHides>0) flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        // Below Android's default obscuring-opacity limit for pass-through windows.
+        float alpha=gestureHides>0 ? 0f : running ? .60f : expanded ? .90f : .65f;
+        if (faceParams.width==diameter && faceParams.flags==flags && faceParams.alpha==alpha) return;
+        boolean right=faceParams.x+faceParams.width/2>=displayWidth/2;
+        int centerY=faceParams.y+faceParams.height/2;
+        faceParams.width=diameter;
+        faceParams.height=diameter;
+        faceParams.flags=flags;
+        faceParams.alpha=alpha;
+        faceParams.x=right ? rightLimit() : leftLimit();
+        faceParams.y=JarvisOrbPlacement.clamp(centerY-diameter/2,topLimit(),bottomLimit());
+        try { windows.updateViewLayout(face,faceParams); }
+        catch (IllegalArgumentException ignored) { }
+    }
+
     private final Handler ui = new Handler(Looper.getMainLooper());
     private static final String TRANSCRIPT_OWNER = "floating";
 
@@ -66,7 +141,10 @@ public final class FloatingJarvisService extends Service {
     private JarvisOrbView face;
     private final JarvisLiveTranscript.Listener transcriptListener =
         (words, active, untilMs) -> {
+            transcriptActive=active;
+            transcriptUntil=untilMs;
             if (face != null) face.showTranscript(words, active, untilMs);
+            refreshOverlayLayout();
         };
     private WindowManager.LayoutParams faceParams;
     private final Runnable phoneModeListener = () -> ui.post(() -> {
@@ -83,6 +161,7 @@ public final class FloatingJarvisService extends Service {
         @Override public void run() {
             if (closing || !phoneListening || !JarvisPhoneMode.isActive()) return;
             if (!recording && correctionRestart == null && !aiBusy && !newsBusy && !webSearchBusy &&
+                JarvisControlFeedback.phase(SystemClock.uptimeMillis()) != JarvisControlFeedback.Phase.RUNNING &&
                 (sequences == null || !sequences.isRunning()) &&
                 (spotifyPlayback == null || !spotifyPlayback.isRunning())) {
                 speechPause.reset("");
@@ -271,6 +350,7 @@ public final class FloatingJarvisService extends Service {
             @Override public boolean onTouch(View v, MotionEvent event) {
                 switch (event.getActionMasked()) {
                     case MotionEvent.ACTION_DOWN:
+                        overlayDragging=true;
                         downRawX = event.getRawX();
                         downRawY = event.getRawY();
                         startingX = faceParams.x;
@@ -315,16 +395,22 @@ public final class FloatingJarvisService extends Service {
                         }
                         return true;
                     case MotionEvent.ACTION_UP:
+                        overlayDragging=false;
                         if (holdAction != null) ui.removeCallbacks(holdAction);
                         if (swipingBack && !longPressed && !closing) {
                             float swipeDx = event.getRawX() - downRawX;
                             float swipeDy = event.getRawY() - downRawY;
                             if (JarvisTranscriptCorrection.isLeftSwipe(
                                 swipeDx, swipeDy, dp(28))) JarvisLiveTranscript.requestCorrection();
-                        } else if (dragging) persistPosition();
+                        } else if (dragging) {
+                            faceParams.x=faceParams.x+faceParams.width/2>=displayWidth/2 ? rightLimit() : leftLimit();
+                            windows.updateViewLayout(face,faceParams);
+                            persistPosition();
+                        }
                         else if (!longPressed && !closing) v.performClick();
                         return true;
                     case MotionEvent.ACTION_CANCEL:
+                        overlayDragging=false;
                         if (holdAction != null) ui.removeCallbacks(holdAction);
                         if (dragging) persistPosition();
                         return true;
@@ -339,6 +425,8 @@ public final class FloatingJarvisService extends Service {
         JarvisLiveTranscript.subscribe(transcriptListener);
         JarvisLiveTranscript.setCorrectionHandler(TRANSCRIPT_OWNER, this::undoHeardWord);
         showing = true;
+        activeOverlay = new java.lang.ref.WeakReference<>(this);
+        ui.post(overlayLayoutTick);
         android.util.Log.i("JARVIS_FLOATING_QA", "orb_shown=true");
         try {
             android.service.quicksettings.TileService.requestListeningState(this,
@@ -1030,7 +1118,9 @@ public final class FloatingJarvisService extends Service {
                         ? "Керування екраном активне." : "Увімкни керування екраном голосом.");
                     return;
                 default:
-                    reply(JarvisPhoneModeManager.perform(this, action));
+                    JarvisPhoneModeManager.perform(this, action, (ok, detail) -> {
+                        if (!closing) reply(detail);
+                    });
                     return;
             }
         }
@@ -1417,6 +1507,8 @@ public final class FloatingJarvisService extends Service {
 
     @Override public void onDestroy() {
         closing = true;
+        ui.removeCallbacks(overlayLayoutTick);
+        if (activeOverlay.get()==this) activeOverlay.clear();
         JarvisPhoneMode.unsubscribe(phoneModeListener);
         showing = false;
         android.util.Log.i("JARVIS_FLOATING_QA", "orb_closed=true");

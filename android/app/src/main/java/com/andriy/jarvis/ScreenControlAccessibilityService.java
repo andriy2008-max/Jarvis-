@@ -146,24 +146,40 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         long feedback = JarvisControlFeedback.begin();
         Completion callback = gestureCompletion;
         gestureCompletion = null;
-        boolean accepted;
-        try {
-            accepted = dispatchGesture(gesture, new GestureResultCallback() {
-                @Override public void onCompleted(GestureDescription description) {
-                    JarvisControlFeedback.finish(feedback,true,android.os.SystemClock.uptimeMillis());
-                    if (callback != null) callback.finished(true,"Жест виконано.");
-                }
-                @Override public void onCancelled(GestureDescription description) {
-                    JarvisControlFeedback.finish(feedback,false,android.os.SystemClock.uptimeMillis());
-                    if (callback != null) callback.finished(false,"Android скасував жест.");
-                }
-            },main);
-        } catch (RuntimeException error) { accepted = false; }
-        if (!accepted) {
-            JarvisControlFeedback.finish(feedback,false,android.os.SystemClock.uptimeMillis());
-            if (callback != null) callback.finished(false,"Android відхилив жест.");
-        }
-        return accepted;
+        AccessibilityNodeInfo originalRoot=currentExternalRoot();
+        String expectedPackage=originalRoot==null ? "" : asString(originalRoot.getPackageName());
+        Runnable restore = FloatingJarvisService.hideForGesture();
+        main.postDelayed(() -> {
+            final java.util.concurrent.atomic.AtomicBoolean finished =
+                new java.util.concurrent.atomic.AtomicBoolean();
+            Completion done = (ok,detail) -> {
+                if (!finished.compareAndSet(false,true)) return;
+                restore.run();
+                JarvisControlFeedback.finish(feedback,ok,android.os.SystemClock.uptimeMillis());
+                if (callback != null) callback.finished(ok,detail);
+            };
+            AccessibilityNodeInfo current=currentExternalRoot();
+            if (!sessionActive || connected.get() != this || current==null ||
+                !expectedPackage.equals(asString(current.getPackageName()))) {
+                done.finished(false,"Керування зупинено до початку жесту.");
+                return;
+            }
+            try {
+                boolean accepted = dispatchGesture(gesture, new GestureResultCallback() {
+                    @Override public void onCompleted(GestureDescription description) {
+                        done.finished(true,"Жест виконано.");
+                    }
+                    @Override public void onCancelled(GestureDescription description) {
+                        done.finished(false,"Android скасував жест.");
+                    }
+                },main);
+                if (!accepted) done.finished(false,"Android відхилив жест.");
+                else main.postDelayed(() -> done.finished(false,"Час очікування жесту вичерпано."),5000L);
+            } catch (RuntimeException error) {
+                done.finished(false,"Android відхилив жест.");
+            }
+        },80L); // Let WindowManager remove the orb from hit testing first.
+        return true; // queued; completion is reported only by the callback above
     }
 
     public static String perform(ScreenControlCommands.Action action) {
@@ -174,16 +190,13 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             return "Невідома команда керування.";
         if (!s.sessionActive)
             return "Спочатку скажи: увімкни керування екраном.";
+        // Phone mode and screen control share the same session; gestures need no second switch.
         switch (action.kind) {
             case CLICK: return s.clickNamed(action.label);
             case LONG_PRESS:
-                return JarvisPhoneMode.isActive() ?
-                    s.longPressNamed(action.label) :
-                    "Спочатку скажи «Телефон», щоб увімкнути довге натискання.";
+                return s.longPressNamed(action.label);
             case SWIPE_UP: case SWIPE_DOWN: case SWIPE_LEFT: case SWIPE_RIGHT:
-                return JarvisPhoneMode.isActive() ?
-                    s.swipeCenterToEdge(action.kind) :
-                    "Спочатку скажи «Телефон», щоб керувати свайпами.";
+                return s.swipeCenterToEdge(action.kind);
             case TYPE_TEXT: return s.writeToFocusedField(action.label);
             case SCROLL_DOWN: return s.scroll(true);
             case SCROLL_UP: return s.scroll(false);
@@ -473,8 +486,16 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         }
         AccessibilityNodeInfo root = currentExternalRoot();
         if (root == null)
-            return "Відкрий потрібну програму й подай команду через плаваючий мікрофон Джарвіса. Системними дозволами я не керую.";
+            return "Відкрий потрібну програму й подай команду через іконку Джарвіса. Системними дозволами я не керую.";
 
+        if ("com.spotify.music".equals(asString(root.getPackageName())) &&
+            SpotifyUiLabels.shuffleRequest(label)) {
+            SpotifyStep step = tapSpotifyControl(SpotifyUiLabels.Target.SHUFFLE, null);
+            if (step == SpotifyStep.CLICKED) return "Знайшов потрібну кнопку й натиснув.";
+            if (step == SpotifyStep.ALREADY) return "Перемішування вже ввімкнено.";
+            return "Не зміг однозначно визначити кнопку для «перемішування». " +
+                "Потрібні перехрещені стрілки ліворуч від великої кнопки Play.";
+        }
         ArrayDeque<AccessibilityNodeInfo> queue = new ArrayDeque<>();
         queue.add(root);
         ArrayList<AccessibilityNodeInfo> controls = new ArrayList<>();
@@ -540,6 +561,9 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             !asString(current.getPackageName()).equals(asString(root.getPackageName()))) {
             return "Екран змінився. Не натискатиму кнопку без повторної команди.";
         }
+        Rect tapBounds = new Rect();
+        chosen.getBoundsInScreen(tapBounds);
+        FloatingJarvisService.avoidControl(tapBounds);
         boolean clicked = chosen.performAction(AccessibilityNodeInfo.ACTION_CLICK);
         return clicked ? "Знайшов потрібну кнопку й натиснув." :
             "Кнопку знайдено, але застосунок не дозволив її натиснути.";
@@ -634,7 +658,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if ((target == SpotifyUiLabels.Target.SHUFFLE ||
              target == SpotifyUiLabels.Target.PLAY ||
              target == SpotifyUiLabels.Target.RAP_FILTER) &&
-             (playlist == null || !spotifyHasTitle(root, playlist)))
+             playlist != null && !spotifyHasTitle(root, playlist))
             return SpotifyStep.WAIT;
 
         ArrayDeque<AccessibilityNodeInfo> queue = new ArrayDeque<>();
@@ -649,6 +673,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         // row; this rejects buttons in the mini-player and on individual songs.
         Rect shuffleBounds = null;
         ArrayList<SpotifyChoice> possibleShuffle = new ArrayList<>();
+        ArrayList<SpotifyChoice> possiblePlay = new ArrayList<>();
         while (!queue.isEmpty() && ++scanned <= MAX_SCAN) {
             AccessibilityNodeInfo n = queue.removeFirst();
             if (!n.isVisibleToUser() || n.isPassword()) continue;
@@ -661,6 +686,8 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                         asString(n.getContentDescription()) + " " +
                         asString(n.getViewIdResourceName());
                     String selfDesc = asString(n.getContentDescription());
+                    if (spotifyTextMatches(SpotifyUiLabels.Target.PLAY, n))
+                        possiblePlay.add(new SpotifyChoice(control,selfDesc,r,100));
                     if (spotifyTextMatches(SpotifyUiLabels.Target.SHUFFLE, n))
                         possibleShuffle.add(new SpotifyChoice(control,
                             selfDesc + " " + asString(control.getContentDescription()),r,100));
@@ -687,6 +714,17 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             }
         }
         if (scanned > MAX_SCAN) return SpotifyStep.WAIT;
+        if (target == SpotifyUiLabels.Target.SHUFFLE) {
+            float density = getResources().getDisplayMetrics().density;
+            matches.removeIf(c -> {
+                for (SpotifyChoice play : possiblePlay) {
+                    Rect a=c.bounds, b=play.bounds;
+                    if (SpotifyUiLabels.toolbarPair(a.left,a.top,a.right,a.bottom,
+                        b.left,b.top,b.right,b.bottom,density)) return false;
+                }
+                return true;
+            });
+        }
         if (target == SpotifyUiLabels.Target.PLAY) {
             // Prefer the visible green playlist Play adjacent to Shuffle.
             for (SpotifyChoice c : possibleShuffle) {
@@ -731,6 +769,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
              (best.node.isSelected() || best.node.isChecked()))
             return SpotifyStep.ALREADY;
 
+        FloatingJarvisService.avoidControl(best.bounds);
         return best.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
             ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
     }
@@ -780,6 +819,9 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             !node.isVisibleToUser() || !node.isEnabled() ||
             ScreenTargetMatcher.dangerous(targets.get(selected.index)))
             return "Екран змінився або цю кнопку заборонено натискати.";
+        Rect holdBounds = new Rect();
+        node.getBoundsInScreen(holdBounds);
+        FloatingJarvisService.avoidControl(holdBounds);
         if (node.isLongClickable() &&
             node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK))
             return "Виконав довге натискання на «" + label + "».";
@@ -820,7 +862,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         }
         // Revalidate foreground and authorization just before dispatch.
         AccessibilityNodeInfo current = currentExternalRoot();
-        if (!sessionActive || !JarvisPhoneMode.isActive() || current == null ||
+        if (!sessionActive || current == null ||
             !asString(root.getPackageName()).equals(asString(current.getPackageName())))
             return "Вікно змінилося. Свайп зупинено.";
         Path gesturePath = new Path();

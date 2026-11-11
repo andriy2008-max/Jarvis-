@@ -70,6 +70,10 @@ public final class ScreenControlCommandsTest {
         eq(ScreenControlCommands.parse(null), null);
         eq(ScreenControlCommands.isSensitiveLabel("Pay now"), true);
         eq(ScreenControlCommands.isSensitiveLabel("Пошук"), false);
+        is("свайпни наліво", ScreenControlCommands.Kind.SWIPE_LEFT, null);
+        is("свайпни направо", ScreenControlCommands.Kind.SWIPE_RIGHT, null);
+        is("свайпни нагору", ScreenControlCommands.Kind.SWIPE_UP, null);
+        is("натисни перехрещені стрілочки", ScreenControlCommands.Kind.CLICK, "перехрещені стрілочки");
         System.out.println("PASS " + assertions + " screen control parser assertions");
     }
 }

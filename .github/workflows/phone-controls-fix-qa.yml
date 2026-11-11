@@ -1,0 +1,49 @@
+name: Phone controls fix verification (no release)
+on:
+  push:
+    paths: ['.github/workflows/phone-controls-fix-qa.yml']
+permissions:
+  contents: read
+jobs:
+  device-qa:
+    if: github.event.head_commit.message == 'Fix phone controls, shuffle targeting and unobtrusive overlay'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Behavior contracts
+        run: bash tools/release-java-contracts.sh
+      - name: Temporary emulator test APKs only
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+          gradle -p android --no-daemon --max-workers=2 :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Enable KVM
+        run: sudo chmod 666 /dev/kvm
+      - name: Real gestures and overlay on Android
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: google_apis
+          arch: x86_64
+          profile: pixel_4
+          ram-size: 2048M
+          disk-size: 4096M
+          heap-size: 256M
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: bash tools/phone-controls-qa.sh
+      - name: Save QA evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phone-controls-qa-evidence
+          path: qa-results/
+          retention-days: 7

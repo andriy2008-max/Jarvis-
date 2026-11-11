@@ -68,6 +68,17 @@ public final class ScreenTargetMatcherTest {
         unique("чати", 0,
             target("Пошук у чатах", "", "chat_search"),
             target("Камера", "", "btn_camera"));
+        unique("перехрещені стрілочки", 2,
+            target("", "Play", "play_button"),
+            target("", "Repeat", "repeat_button"),
+            target("", "Enable shuffle", "shuffle_button"),
+            target("", "Back", "arrow_back"));
+        unique("перемішування", -1, target("", "Play shuffle", "play_button"));
+        unique("перемішування", -1,
+            target("", "Shuffle", "shuffle_top"), target("", "Shuffle", "shuffle_bottom"));
+        unique("стрілочку", -1, target("", "Back", "arrow_back"), target("", "Play", "play_button"));
+        unique("плей", -1, target("Playlist", "", "playlist"));
+        unique("перемішування", 0, target("", "", "com.spotify.music:id/shuffleButton"));
         System.out.println("PASS " + assertions + " semantic screen matcher assertions");
     }
 }

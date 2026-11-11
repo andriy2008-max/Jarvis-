@@ -27,6 +27,7 @@ public final class ScreenTargetMatcher {
         {"camera", "камер", "фотографува", "camera", "photo_camera"},
         {"attachment", "скріпк", "вкладен", "прикріп", "attachment", "attach", "paperclip"},
         {"favorites", "обран", "улюблен", "зірочк", "favorites", "bookmarks", "star"},
+        {"shuffle", "переміш", "перемеш", "shuffle", "перехрещені стріл", "перехрещених стріл", "схрещені стріл", "схрещених стріл", "crossed arrows", "випадковий порядок"},
         {"play", "відтвор", "програ", "плей", "play"},
         {"pause", "пауз", "pause"},
         {"back", "поверн", "назад", "back", "arrow_back"},
@@ -72,7 +73,8 @@ public final class ScreenTargetMatcher {
 
     private static String normal(String source) {
         if (source == null) return "";
-        return source.toLowerCase(Locale.forLanguageTag("uk-UA"))
+        return source.replaceAll("([a-zа-яіїєґ])([A-Z])", "$1 $2")
+            .toLowerCase(Locale.forLanguageTag("uk-UA"))
             .replace('’', '\'').replace('ʼ', '\'')
             .replaceAll("([a-zа-яіїєґ])([A-Z])", "$1 $2")
             .replaceAll("[^a-z0-9а-яіїєґ]+", " ").trim().replaceAll("\\s+", " ");
@@ -92,7 +94,7 @@ public final class ScreenTargetMatcher {
     private static boolean containsAlias(String text, String alias) {
         if (text.isEmpty() || alias.isEmpty()) return false;
         for (String part : text.split(" ")) {
-            if (part.equals(alias) || (alias.length() >= 3 && part.startsWith(alias)))
+            if (part.equals(alias) || (!alias.equals("play") && alias.length() >= 3 && part.startsWith(alias)))
                 return true;
         }
         // Multi-word phrases such as "три крапки" are valid when all words appear.
@@ -126,6 +128,10 @@ public final class ScreenTargetMatcher {
                                   String field, int exactScore, int semanticScore) {
         String value = normal(field);
         if (value.isEmpty()) return 0;
+        if (requestedIntent.equals("shuffle") &&
+            !SpotifyUiLabels.matches(SpotifyUiLabels.Target.SHUFFLE, field)) return 0;
+        if (requestedIntent.equals("play") &&
+            SpotifyUiLabels.matches(SpotifyUiLabels.Target.SHUFFLE, field)) return 0;
         if (value.equals(request)) return exactScore;
         // A "button search", "icon search", or "пошук у чатах" descriptor may be
         // longer than the request yet still name exactly its UI action.

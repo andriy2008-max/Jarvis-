@@ -83,12 +83,14 @@ public final class JarvisPhoneModeManager {
         return new Lease(token,true,"Тимчасовий режим «Телефон» активовано.");
     }
 
-    public static String perform(Context context, ScreenControlCommands.Action action) {
+    public static void perform(Context context, ScreenControlCommands.Action action,
+                               ScreenControlAccessibilityService.Completion completion) {
         Lease lease = acquireForCommand(context);
-        if (!lease.granted) return lease.message;
-        String result = null;
-        try { result = ScreenControlAccessibilityService.perform(action); return result; }
-        finally { releaseForCommand(lease, JarvisControlFeedback.successfulReply(result)); }
+        if (!lease.granted) { completion.finished(false,lease.message); return; }
+        ScreenControlAccessibilityService.perform(action,(ok,detail) -> {
+            releaseForCommand(lease,ok);
+            completion.finished(ok,detail);
+        });
     }
 
     public static void releaseForCommand(Lease lease) {

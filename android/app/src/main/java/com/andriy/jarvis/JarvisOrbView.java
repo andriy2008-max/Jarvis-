@@ -128,7 +128,12 @@ public final class JarvisOrbView extends View {
         boolean hearing = !"speaking".equals(expression) &&
             (transcribing || "listening".equals(expression));
         if (JarvisPhoneMode.isActive() || feedback != JarvisControlFeedback.Phase.IDLE) {
-            JarvisPixelPhone.draw(canvas, paint, cx, cy, orb, hearing, feedback, now);
+            boolean hasWords = transcriptVisible() && !recognizedText.isEmpty() &&
+                    !"speaking".equals(expression);
+                JarvisPixelPhone.draw(canvas, paint, cx,
+                    hasWords ? cy-orb*.40f : cy, orb*(hasWords ? .53f : 1f),
+                    hearing, feedback, now);
+                if (hasWords) drawRecognizedText(canvas,cx,cy+orb*.40f,orb*.60f);
             postInvalidateDelayed(80L);
             return;
         }

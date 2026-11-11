@@ -49,16 +49,16 @@ public final class ScreenControlCommands {
         switch (s) {
             case "свайпни вверх": case "свайпни верх": case "свайпни в верх":
             case "свайпни у верх": case "свайпни вгору": case "свайп вверх":
-            case "свайп вгору": case "проведи вгору":
+            case "свайп вгору": case "проведи вгору": case "свайпни наверх": case "свайпни нагору":
                 return new Action(Kind.SWIPE_UP, null);
             case "свайпни вниз": case "свайпни в низ": case "свайпни у низ":
             case "свайпни низ": case "свайп вниз": case "проведи вниз":
                 return new Action(Kind.SWIPE_DOWN, null);
             case "свайпни вліво": case "свайпни в ліво": case "свайпни ліво":
-            case "свайп вліво": case "проведи вліво":
+            case "свайп вліво": case "проведи вліво": case "свайпни наліво": case "свайп наліво":
                 return new Action(Kind.SWIPE_LEFT, null);
             case "свайпни вправо": case "свайпни в право": case "свайпни право":
-            case "свайп вправо": case "проведи вправо":
+            case "свайп вправо": case "проведи вправо": case "свайпни направо": case "свайп направо":
                 return new Action(Kind.SWIPE_RIGHT, null);
             case "увімкни керування екраном":
             case "включи керування екраном":

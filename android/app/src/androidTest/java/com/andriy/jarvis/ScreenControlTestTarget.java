@@ -13,6 +13,20 @@ import android.widget.TextView;
 
 /** Standalone test APK activity: a different package from the Jarvis service. */
 public final class ScreenControlTestTarget extends Activity {
+    private float touchX,touchY;
+    @Override public boolean dispatchTouchEvent(android.view.MotionEvent e) {
+        if (e.getActionMasked()==android.view.MotionEvent.ACTION_DOWN) {
+            touchX=e.getX();touchY=e.getY();
+        } else if(e.getActionMasked()==android.view.MotionEvent.ACTION_UP) {
+            float dx=e.getX()-touchX,dy=e.getY()-touchY;
+            if(Math.max(Math.abs(dx),Math.abs(dy))>60f) {
+                String direction=Math.abs(dx)>Math.abs(dy) ? (dx<0 ? "left":"right") :
+                    (dy<0 ? "up":"down");
+                Log.i("JARVIS_INPUT_QA","qa_touch_swipe="+direction);
+            }
+        }
+        return super.dispatchTouchEvent(e);
+    }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         ScrollView scroll = new ScrollView(this);
@@ -22,7 +36,20 @@ public final class ScreenControlTestTarget extends Activity {
         Button namedButton = new Button(this);
         namedButton.setText("Тестова кнопка");
         namedButton.setOnClickListener(v -> namedButton.setText("Знайдено"));
+        namedButton.setOnLongClickListener(v -> {
+            Log.i("JARVIS_INPUT_QA","qa_long_press=true"); return true;
+        });
         content.addView(namedButton);
+        LinearLayout toolbar = new LinearLayout(this);
+        for (String label : new String[]{"Back","Repeat","Enable shuffle","Play"}) {
+            Button icon = new Button(this);
+            icon.setText(label.equals("Enable shuffle") ? "⤨" : "▷");
+            icon.setContentDescription(label);
+            icon.setOnClickListener(v -> Log.i("JARVIS_INPUT_QA",
+                "qa_toolbar_click="+label));
+            toolbar.addView(icon,new LinearLayout.LayoutParams(0,60,1f));
+        }
+        content.addView(toolbar);
 
         // Real editable view in a separate test APK, with existing text.
         // Logs only a Boolean pass marker, never the content of other app fields.

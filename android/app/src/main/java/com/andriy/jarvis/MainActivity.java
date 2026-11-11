@@ -175,6 +175,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         @Override public void run() {
             if (!foreground || !phoneListening || !JarvisPhoneMode.isActive()) return;
             if (!manualCapture && !processing && !aiBusy && !speaking && visibleDialogs == 0 &&
+                JarvisControlFeedback.phase(SystemClock.uptimeMillis()) != JarvisControlFeedback.Phase.RUNNING &&
                 (watchPhoneLink == null || !watchPhoneLink.busy()) &&
                 (commandSequenceExecutor == null || !commandSequenceExecutor.isRunning()) &&
                 (spotifyPlayback == null || !spotifyPlayback.isRunning())) {
@@ -3466,8 +3467,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         : "Керування екраном вимкнено. Скажи: увімкни керування екраном.";
                     break;
                 default:
-                    reply = JarvisPhoneModeManager.perform(this, screenCommand);
-                    break;
+                    JarvisPhoneModeManager.perform(this, screenCommand, (ok, detail) -> {
+                        if (isFinishing() || isDestroyed()) return;
+                        appendDialogue("Джарвіс",detail);
+                        setStatus(detail);
+                        if (!phoneListening && voiceEnabled) speakReply(detail);
+                    });
+                    return;
             }
             }
         } else if (WorldNewsCommands.requestsWorldNews(command)) {
@@ -3781,7 +3787,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
             boolean hearing = !"speaking".equals(expression) &&
                 (transcribing || "listening".equals(expression));
             if (JarvisPhoneMode.isActive() || feedback != JarvisControlFeedback.Phase.IDLE) {
-                JarvisPixelPhone.draw(canvas, paint, cx, cy, orb, hearing, feedback, now);
+                boolean hasWords = transcriptVisible() && !recognizedText.isEmpty() &&
+                    !"speaking".equals(expression);
+                JarvisPixelPhone.draw(canvas, paint, cx,
+                    hasWords ? cy-orb*.40f : cy, orb*(hasWords ? .53f : 1f),
+                    hearing, feedback, now);
+                if (hasWords) drawTranscript(canvas,cx,cy+orb*.40f,orb*.60f);
                 postInvalidateDelayed(80L);
                 return;
             }

@@ -35,6 +35,20 @@ public final class SpotifyUiLabelsTest {
             throw new AssertionError("Off-state misread");
         if (!SpotifyUiLabels.shuffleOn("Shuffle",true,false))
             throw new AssertionError("Selected Shuffle not recognized");
+        rejects(SpotifyUiLabels.Target.SHUFFLE,"Play shuffle");
+        rejects(SpotifyUiLabels.Target.SHUFFLE,"Play in shuffle order");
+        rejects(SpotifyUiLabels.Target.PLAY,"Play shuffle");
+        accepts(SpotifyUiLabels.Target.SHUFFLE,"Enable Smart Shuffle");
+        accepts(SpotifyUiLabels.Target.SHUFFLE,"Вимкнути перемішування");
+        if (!SpotifyUiLabels.shuffleRequest("стрілочки") ||
+            !SpotifyUiLabels.shuffleRequest("перехрещені стрілки") ||
+            SpotifyUiLabels.shuffleRequest("стрілка назад")) throw new AssertionError("arrow intent");
+        if (!SpotifyUiLabels.toolbarPair(205,110,265,158,302,70,428,196,1f))
+            throw new AssertionError("reference toolbar pair");
+        if (SpotifyUiLabels.toolbarPair(205,710,265,758,302,70,428,196,1f) ||
+            SpotifyUiLabels.toolbarPair(205,110,265,158,302,110,322,130,1f) ||
+            SpotifyUiLabels.toolbarPair(305,110,365,158,102,70,228,196,1f))
+            throw new AssertionError("wrong row, tiny track Play or wrong side accepted");
         System.out.println("PASS SpotifyUiLabelsTest");
     }
 }

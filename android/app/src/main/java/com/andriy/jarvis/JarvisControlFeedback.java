@@ -49,7 +49,7 @@ public final class JarvisControlFeedback {
      * Unknown/error/permission/help text never earns a green checkmark. */
     public static boolean successfulReply(String text) {
         if (text == null) return false;
-        String[] prefixes = { "Знайшов потрібну кнопку й натиснув.", "Текст введено",
+        String[] prefixes = { "Перемішування вже ввімкнено.", "Жест виконано.", "Знайшов потрібну кнопку й натиснув.", "Текст введено",
             "Повертаюся назад.", "Виконав довге натискання", "Надіслав довге натискання",
             "Виконую свайп", "Прокрутив", "Прокручую", "Відкриваю",
             "Медіагучність:", "Медіагучність відновлено:", "Медіазвук увімкнено.",

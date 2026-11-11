@@ -23,6 +23,32 @@ public final class ScreenControlDebugReceiver extends BroadcastReceiver {
         try {
             String result;
             switch (operation) {
+                case "transcript":
+                    JarvisLiveTranscript.begin("qa");
+                    JarvisLiveTranscript.update("qa","Перевірка тексту",false,android.os.SystemClock.uptimeMillis());
+                    return;
+                case "clear_transcript":
+                    JarvisLiveTranscript.clear("qa");
+                    return;
+                case "show_overlay":
+                    Intent show=new Intent(context,FloatingJarvisService.class);
+                    show.setAction(FloatingJarvisService.ACTION_SHOW);
+                    context.startForegroundService(show);
+                    return;
+                case "phone":
+                    result=JarvisPhoneModeManager.enter(context,true);
+                    Log.i(TAG,"qa_phone="+JarvisPhoneMode.isActive()+
+                        " qa_control="+ScreenControlAccessibilityService.isSessionActive());
+                    return;
+                case "gesture":
+                    final PendingResult pending=goAsync();
+                    JarvisPhoneModeManager.perform(context,
+                        ScreenControlCommands.parse(intent.getStringExtra("phrase")),(ok,detail) -> {
+                            Log.i(TAG,"qa_gesture_done="+ok+" qa_phone="+JarvisPhoneMode.isActive()+
+                                " qa_control="+ScreenControlAccessibilityService.isSessionActive());
+                            pending.finish();
+                        });
+                    return;
                 case "status":
                     Log.i(TAG, "qa_op=status qa_connected=" +
                         ScreenControlAccessibilityService.isConnected() +
