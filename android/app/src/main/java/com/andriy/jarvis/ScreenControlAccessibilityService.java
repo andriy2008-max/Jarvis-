@@ -759,7 +759,9 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             !best.node.isVisibleToUser() || !best.node.isClickable() ||
             best.node.isPassword()) return SpotifyStep.WAIT;
 
-        if (target == SpotifyUiLabels.Target.SHUFFLE) {
+        // Automatic playlist setup is idempotent; an explicit user click toggles
+        // the actual button even when shuffle is already enabled.
+        if (target == SpotifyUiLabels.Target.SHUFFLE && playlist != null) {
             if (SpotifyUiLabels.shuffleOn(best.description,
                 best.node.isSelected(), best.node.isChecked()))
                 return SpotifyStep.ALREADY;
