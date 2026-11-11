@@ -73,8 +73,8 @@ public final class JarvisOrbView extends View {
         // split a short Ukrainian word into two rows.
         float widest=0f;
         for (String word:text.split(" ")) widest=Math.max(widest,transcriptPaint.measureText(word));
-        if (widest>lineWidth) transcriptPaint.setTextSize(Math.max(8f*sp,
-            transcriptPaint.getTextSize()*lineWidth/widest));
+        if (widest>lineWidth) transcriptPaint.setTextSize(Math.max(7f*sp,
+            transcriptPaint.getTextSize()*lineWidth*.90f/widest));
         String visible = text;
         StaticLayout layout;
         // Keep the latest words visible even when the recognition result is

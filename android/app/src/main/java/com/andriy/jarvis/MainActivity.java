@@ -3737,8 +3737,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             int width = Math.max(1, Math.round(radius * 1.75f));
             float widest=0f;
             for (String word:visible.split(" ")) widest=Math.max(widest,transcriptPaint.measureText(word));
-            if (widest>width) transcriptPaint.setTextSize(Math.max(8f*sp,
-                transcriptPaint.getTextSize()*width/widest));
+            if (widest>width) transcriptPaint.setTextSize(Math.max(7f*sp,
+                transcriptPaint.getTextSize()*width*.90f/widest));
             StaticLayout layout;
             while (true) {
                 layout = StaticLayout.Builder.obtain(visible, 0, visible.length(),

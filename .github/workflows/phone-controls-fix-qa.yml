@@ -6,7 +6,7 @@ permissions:
   contents: read
 jobs:
   device-qa:
-    if: github.event.head_commit.message == 'Keep phone transcript words readable and verify rendering'
+    if: github.event.head_commit.message == 'Reserve text shaping space in phone transcript'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
