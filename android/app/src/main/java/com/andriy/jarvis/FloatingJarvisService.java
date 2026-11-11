@@ -1235,6 +1235,14 @@ public final class FloatingJarvisService extends Service {
     }
 
     private String openInstalledApp(String spoken) {
+        long feedback = JarvisPhoneMode.isActive() ? JarvisControlFeedback.begin() : 0L;
+        String result = null;
+        try { result = openInstalledAppInternal(spoken); return result; }
+        finally { JarvisControlFeedback.finish(feedback,JarvisControlFeedback.successfulReply(result),
+            android.os.SystemClock.uptimeMillis()); }
+    }
+
+    private String openInstalledAppInternal(String spoken) {
         Intent query = new Intent(Intent.ACTION_MAIN);
         query.addCategory(Intent.CATEGORY_LAUNCHER);
         try {
@@ -1270,6 +1278,14 @@ public final class FloatingJarvisService extends Service {
     }
 
     private String performQuickDeviceAction(DeviceCommands.Action action) {
+        long feedback = JarvisPhoneMode.isActive() ? JarvisControlFeedback.begin() : 0L;
+        String result = null;
+        try { result = performQuickDeviceActionInternal(action); return result; }
+        finally { JarvisControlFeedback.finish(feedback,JarvisControlFeedback.successfulReply(result),
+            android.os.SystemClock.uptimeMillis()); }
+    }
+
+    private String performQuickDeviceActionInternal(DeviceCommands.Action action) {
         String systemResponse = SystemToggleActions.perform(this, action);
         if (systemResponse != null) return systemResponse;
         AudioManager audio = (AudioManager) getSystemService(Context.AUDIO_SERVICE);

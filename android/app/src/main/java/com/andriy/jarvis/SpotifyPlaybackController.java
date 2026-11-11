@@ -66,16 +66,20 @@ public final class SpotifyPlaybackController {
                 return;
             }
         }
+        long openFeedback = kind == SpotifyMusicCommands.Kind.OPEN && JarvisPhoneMode.isActive()
+            ? JarvisControlFeedback.begin() : 0L;
         try {
             launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             context.startActivity(launch);
         } catch (Exception error) {
+            JarvisControlFeedback.finish(openFeedback,false,SystemClock.uptimeMillis());
             JarvisPhoneModeManager.releaseForCommand(lease);
             if (callback != null) callback.onFinished(false,
                 "Android не дозволив відкрити Spotify.");
             return;
         }
         if (kind == SpotifyMusicCommands.Kind.OPEN) {
+            JarvisControlFeedback.finish(openFeedback,true,SystemClock.uptimeMillis());
             if (callback != null) callback.onFinished(true, "Відкриваю Spotify.");
             return;
         }
@@ -209,7 +213,7 @@ public final class SpotifyPlaybackController {
         temporaryControl = null;
         // Always restore Jarvis' normal face, even on errors/cancellation.
         // User-started or watch-owned sessions remain active.
-        JarvisPhoneModeManager.releaseForCommand(lease);
+        JarvisPhoneModeManager.releaseForCommand(lease, success);
         if (cb != null) cb.onFinished(success, summary);
     }
 }

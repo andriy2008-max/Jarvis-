@@ -50,8 +50,14 @@ public final class JarvisWearPhoneSession {
         main.post(() -> receiveOnMain(context.getApplicationContext(),sourceNode,request,result));
     }
 
-    private static void receiveOnMain(Context context,String sourceNode,JSONObject request,Result out) {
+    private static void receiveOnMain(Context context,String sourceNode,JSONObject request,Result originalOut) {
         String action = request.optString("action","");
+        final long feedback = JarvisWearProtocol.COMMAND.equals(action) ||
+            JarvisWearProtocol.SPOTIFY.equals(action) ? JarvisControlFeedback.begin() : 0L;
+        Result out = (ok, detail, token, ended) -> {
+            JarvisControlFeedback.finish(feedback,ok,SystemClock.uptimeMillis());
+            originalOut.reply(ok,detail,token,ended);
+        };
         String suppliedToken = request.optString("session","");
         String command = request.optString("text","");
         if (!JarvisWearProtocol.validAction(action) || sourceNode == null ||
@@ -196,12 +202,9 @@ public final class JarvisWearPhoneSession {
                 out.reply(true,"Режим телефона вимкнено.","",true);
                 return;
             }
-            String status = ScreenControlAccessibilityService.perform(screen);
-            boolean successful = status != null &&
-                !(status.startsWith("Не ") || status.startsWith("Спочатку") ||
-                  status.contains("заборонен") || status.contains("Уточни"));
-            out.reply(successful,status == null ? "Не вдалося виконати команду." : status,
-                session,false);
+            final String token = session;
+            ScreenControlAccessibilityService.perform(screen,
+                (ok,status) -> out.reply(ok,status,token,false));
             return;
         }
         SpotifyMusicCommands.Kind music = SpotifyMusicCommands.parse(command);
@@ -220,7 +223,7 @@ public final class JarvisWearPhoneSession {
         if (device != null) {
             if (devices == null) devices = new DeviceActions(context);
             String detail = devices.perform(device);
-            out.reply(true,detail,session,false);
+            out.reply(JarvisControlFeedback.successfulReply(detail),detail,session,false);
             return;
         }
         Integer timer = CommandPatterns.timerSeconds(normalized);

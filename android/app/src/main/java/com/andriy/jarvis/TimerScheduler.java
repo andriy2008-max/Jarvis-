@@ -58,6 +58,13 @@ public final class TimerScheduler {
 
     /** Returns false when Android has not granted exact-alarm access; caller opens settings. */
     public static synchronized boolean start(Context context, int seconds) {
+        long feedback = JarvisPhoneMode.isActive() ? JarvisControlFeedback.begin() : 0L;
+        boolean success = false;
+        try { success = startInternal(context, seconds); return success; }
+        finally { JarvisControlFeedback.finish(feedback,success,android.os.SystemClock.uptimeMillis()); }
+    }
+
+    private static boolean startInternal(Context context, int seconds) {
         if (!TimerRules.valid(seconds)) return false;
         Context c = context.getApplicationContext();
         if (!canScheduleExact(c)) return false;
@@ -83,6 +90,13 @@ public final class TimerScheduler {
     }
 
     public static synchronized boolean cancel(Context context) {
+        long feedback = JarvisPhoneMode.isActive() ? JarvisControlFeedback.begin() : 0L;
+        boolean success = false;
+        try { success = cancelInternal(context); return success; }
+        finally { JarvisControlFeedback.finish(feedback,success,android.os.SystemClock.uptimeMillis()); }
+    }
+
+    private static boolean cancelInternal(Context context) {
         Context c = context.getApplicationContext();
         boolean active = prefs(c).getLong(ID, 0L) != 0L;
         cancelScheduled(c);

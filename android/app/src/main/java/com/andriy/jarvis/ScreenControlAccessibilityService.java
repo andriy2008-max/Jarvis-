@@ -120,6 +120,52 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             packageName.contentEquals(focused.getPackageName());
     }
 
+    public interface Completion { void finished(boolean success, String detail); }
+    private Completion gestureCompletion;
+
+    public static void perform(ScreenControlCommands.Action action, Completion callback) {
+        ScreenControlAccessibilityService service = connected.get();
+        if (service == null) {
+            callback.finished(false,"Служба керування екраном недоступна.");
+            return;
+        }
+        service.gestureCompletion = callback;
+        try {
+            String result = perform(action);
+            if (service.gestureCompletion == callback) {
+                service.gestureCompletion = null;
+                callback.finished(JarvisControlFeedback.successfulReply(result),result);
+            }
+        } catch (RuntimeException error) {
+            service.gestureCompletion = null;
+            callback.finished(false,"Android не дозволив виконати команду.");
+        }
+    }
+
+    private boolean dispatchTrackedGesture(GestureDescription gesture) {
+        long feedback = JarvisControlFeedback.begin();
+        Completion callback = gestureCompletion;
+        gestureCompletion = null;
+        boolean accepted;
+        try {
+            accepted = dispatchGesture(gesture, new GestureResultCallback() {
+                @Override public void onCompleted(GestureDescription description) {
+                    JarvisControlFeedback.finish(feedback,true,android.os.SystemClock.uptimeMillis());
+                    if (callback != null) callback.finished(true,"Жест виконано.");
+                }
+                @Override public void onCancelled(GestureDescription description) {
+                    JarvisControlFeedback.finish(feedback,false,android.os.SystemClock.uptimeMillis());
+                    if (callback != null) callback.finished(false,"Android скасував жест.");
+                }
+            },main);
+        } catch (RuntimeException error) { accepted = false; }
+        if (!accepted) {
+            JarvisControlFeedback.finish(feedback,false,android.os.SystemClock.uptimeMillis());
+            if (callback != null) callback.finished(false,"Android відхилив жест.");
+        }
+        return accepted;
+    }
+
     public static String perform(ScreenControlCommands.Action action) {
         ScreenControlAccessibilityService s = connected.get();
         if (s == null)
@@ -747,7 +793,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         finger.moveTo(area.centerX(),area.centerY());
         GestureDescription.Builder gesture = new GestureDescription.Builder();
         gesture.addStroke(new GestureDescription.StrokeDescription(finger, 0, 830));
-        return dispatchGesture(gesture.build(), null, null) ?
+        return dispatchTrackedGesture(gesture.build()) ?
             "Надіслав довге натискання на «" + label + "»." :
             "Android відхилив довге натискання.";
     }
@@ -782,7 +828,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         gesturePath.lineTo(endX,endY);
         GestureDescription.Builder gesture = new GestureDescription.Builder();
         gesture.addStroke(new GestureDescription.StrokeDescription(gesturePath,0,410));
-        return dispatchGesture(gesture.build(),null,null) ?
+        return dispatchTrackedGesture(gesture.build()) ?
             "Виконую свайп " + direction + " від центра екрана." :
             "Android не дозволив свайп " + direction + ".";
     }
@@ -922,7 +968,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         path.lineTo(x, endY);
         GestureDescription.Builder gesture = new GestureDescription.Builder();
         gesture.addStroke(new GestureDescription.StrokeDescription(path, 0, 420));
-        return dispatchGesture(gesture.build(), null, null) ?
+        return dispatchTrackedGesture(gesture.build()) ?
             (down ? "Прокручую вниз." : "Прокручую вгору.") :
             "Android не дозволив прокрутити екран.";
     }

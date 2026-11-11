@@ -123,9 +123,21 @@ public final class JarvisOrbView extends View {
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(Color.rgb(217, 254, 255));
         float pixel = orb * .076f;
-        if (JarvisPhoneMode.isActive()) {
-            JarvisPixelPhone.draw(canvas, paint, cx, cy, pixel);
-            postInvalidateDelayed(360L);
+        long now = SystemClock.uptimeMillis();
+        JarvisControlFeedback.Phase feedback = JarvisControlFeedback.phase(now);
+        boolean hearing = !"speaking".equals(expression) &&
+            (transcribing || "listening".equals(expression));
+        if (JarvisPhoneMode.isActive() || feedback != JarvisControlFeedback.Phase.IDLE) {
+            JarvisPixelPhone.draw(canvas, paint, cx, cy, orb, hearing, feedback, now);
+            postInvalidateDelayed(80L);
+            return;
+        }
+        if (hearing) {
+            boolean hasWords = !recognizedText.isEmpty();
+            JarvisPixelPhone.drawListening(canvas, paint, cx,
+                hasWords ? cy-orb*.35f : cy, orb*(hasWords ? .43f : .74f));
+            if (hasWords) drawRecognizedText(canvas,cx,cy+orb*.40f,orb*.58f);
+            postInvalidateDelayed(100L);
             return;
         }
         float ox = cx - 8 * pixel, oy = cy - 8 * pixel;

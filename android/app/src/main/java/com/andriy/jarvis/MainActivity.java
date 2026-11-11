@@ -2242,8 +2242,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         listening = true;
         microphone.setText(manualCapture ? "■ Завершити та надіслати" :
             isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Джарвісом");
-        face.setState(manualCapture || wakeConversation.isActive(SystemClock.elapsedRealtime())
-            ? "listening" : "idle");
+        face.setState("listening");
         setStatus(manualCapture ? (speechPause.armed()
             ? "Слухаю. Пауза після слова: " + speechPauseSeconds() + " с."
             : "Чекаю першого розпізнаного слова...") :
@@ -2665,6 +2664,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     /** Start the exact launcher activity; never substitute a website for an installed app. */
     private String startMatchedApp(AppNameMatcher.App app) {
+        long feedback = JarvisPhoneMode.isActive() ? JarvisControlFeedback.begin() : 0L;
+        String result = null;
+        try { result = startMatchedAppInternal(app); return result; }
+        finally { JarvisControlFeedback.finish(feedback,JarvisControlFeedback.successfulReply(result),
+            android.os.SystemClock.uptimeMillis()); }
+    }
+
+    private String startMatchedAppInternal(AppNameMatcher.App app) {
         try {
             Intent launch = new Intent(Intent.ACTION_MAIN);
             launch.addCategory(Intent.CATEGORY_LAUNCHER);
@@ -3769,15 +3776,26 @@ public final class MainActivity extends Activity implements RecognitionListener 
             canvas.drawCircle(cx, cy, orb, paint);
 
             paint.setStyle(Paint.Style.FILL);
-            if (transcriptVisible() && !"speaking".equals(expression) &&
-                (isWatchDevice || !JarvisPhoneMode.isActive())) {
-                drawTranscript(canvas, cx, cy, orb);
-                postInvalidateDelayed(180);
+            long now = SystemClock.uptimeMillis();
+            JarvisControlFeedback.Phase feedback = JarvisControlFeedback.phase(now);
+            boolean hearing = !"speaking".equals(expression) &&
+                (transcribing || "listening".equals(expression));
+            if (JarvisPhoneMode.isActive() || feedback != JarvisControlFeedback.Phase.IDLE) {
+                JarvisPixelPhone.draw(canvas, paint, cx, cy, orb, hearing, feedback, now);
+                postInvalidateDelayed(80L);
                 return;
             }
-            if (JarvisPhoneMode.isActive()) {
-                JarvisPixelPhone.draw(canvas, paint, cx, cy, orb * .076f);
-                postInvalidateDelayed(380L);
+            if (hearing) {
+                boolean hasWords = !recognizedText.isEmpty();
+                JarvisPixelPhone.drawListening(canvas,paint,cx,
+                    hasWords ? cy-orb*.35f : cy,orb*(hasWords ? .43f : .74f));
+                if (hasWords) drawTranscript(canvas,cx,cy+orb*.40f,orb*.58f);
+                postInvalidateDelayed(100L);
+                return;
+            }
+            if (transcriptVisible() && !"speaking".equals(expression)) {
+                drawTranscript(canvas,cx,cy,orb);
+                postInvalidateDelayed(180L);
                 return;
             }
             // Match the web SVG sprite: 16x16 grid with a roughly 90/148 face/orb ratio.

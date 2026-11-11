@@ -37,6 +37,7 @@ public final class JarvisWearPhoneLink {
     private String pendingType;
     private Callback pendingCallback;
     private Runnable timeout;
+    private long feedback;
     private final Runnable sync = new Runnable() {
         @Override public void run() {
             if (closed) return;
@@ -167,6 +168,8 @@ public final class JarvisWearPhoneLink {
                     pendingNode = target.getId();
                     pendingType = type;
                     pendingCallback = cb;
+                    if (JarvisWearProtocol.COMMAND.equals(type) || JarvisWearProtocol.SPOTIFY.equals(type))
+                        feedback = JarvisControlFeedback.begin();
                     if (data.length > JarvisWearProtocol.MAX_BYTES)
                         throw new IllegalArgumentException("Payload too large");
                     timeout = () -> failPending("Телефон не підтвердив виконання команди.");
@@ -237,6 +240,8 @@ public final class JarvisWearPhoneLink {
                 // The temporary control was limited to the Spotify command.
                 if (activeSession.isEmpty()) JarvisPhoneMode.setActive(false);
             }
+            JarvisControlFeedback.finish(feedback,ok,SystemClock.uptimeMillis());
+            feedback = 0L;
             clearPending();
             if (cb != null) cb.finished(ok,detail);
         } catch (Exception ignored) { }
@@ -258,6 +263,8 @@ public final class JarvisWearPhoneLink {
     }
 
     private void clearPending() {
+        JarvisControlFeedback.finish(feedback,false,SystemClock.uptimeMillis());
+        feedback = 0L;
         if (timeout != null) main.removeCallbacks(timeout);
         timeout = null;
         pendingId = null;

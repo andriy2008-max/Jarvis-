@@ -55,6 +55,14 @@ public final class DeviceActions {
     }
 
     public String perform(DeviceCommands.Action command) {
+        long feedback = JarvisPhoneMode.isActive() ? JarvisControlFeedback.begin() : 0L;
+        String result = null;
+        try { result = performInternal(command); return result; }
+        finally { JarvisControlFeedback.finish(feedback,JarvisControlFeedback.successfulReply(result),
+            android.os.SystemClock.uptimeMillis()); }
+    }
+
+    private String performInternal(DeviceCommands.Action command) {
         if (command == null) return "Команда не розпізнана.";
         switch (command.kind) {
             case TORCH_ON: return setTorch(true);

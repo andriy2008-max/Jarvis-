@@ -115,7 +115,7 @@ public final class JarvisSequenceExecutor {
         engine = null;
         planSteps = null;
         lastError = null;
-        JarvisPhoneModeManager.releaseForCommand(phoneLease);
+        JarvisPhoneModeManager.releaseForCommand(phoneLease, success);
         phoneLease = null;
         if (cb != null) cb.onFinished(success, summary);
     }

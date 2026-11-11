@@ -14,10 +14,12 @@ public final class JarvisPhoneModeManager {
 
     public static final class Lease {
         private final String id;
+        private final long feedback;
         public final boolean granted;
         public final String message;
         private Lease(String id, boolean granted, String message) {
             this.id = id;
+            this.feedback = granted ? JarvisControlFeedback.begin() : 0L;
             this.granted = granted;
             this.message = message;
         }
@@ -84,12 +86,19 @@ public final class JarvisPhoneModeManager {
     public static String perform(Context context, ScreenControlCommands.Action action) {
         Lease lease = acquireForCommand(context);
         if (!lease.granted) return lease.message;
-        try { return ScreenControlAccessibilityService.perform(action); }
-        finally { releaseForCommand(lease); }
+        String result = null;
+        try { result = ScreenControlAccessibilityService.perform(action); return result; }
+        finally { releaseForCommand(lease, JarvisControlFeedback.successfulReply(result)); }
     }
 
-    public static synchronized void releaseForCommand(Lease lease) {
-        if (lease == null || lease.id == null) return;
+    public static void releaseForCommand(Lease lease) {
+        releaseForCommand(lease, false);
+    }
+
+    public static synchronized void releaseForCommand(Lease lease, boolean success) {
+        if (lease == null) return;
+        JarvisControlFeedback.finish(lease.feedback,success,android.os.SystemClock.uptimeMillis());
+        if (lease.id == null) return;
         if (!lease.id.equals(automaticOwner)) return; // user has claimed control
         automaticOwner = null;
         ScreenControlAccessibilityService.stop();
@@ -97,6 +106,7 @@ public final class JarvisPhoneModeManager {
     }
 
     public static synchronized String exit() {
+        JarvisControlFeedback.clear();
         automaticOwner = null;
         if (!JarvisPhoneMode.isActive()) return "Звичайний режим Джарвіса вже активний.";
         ScreenControlAccessibilityService.stop();
