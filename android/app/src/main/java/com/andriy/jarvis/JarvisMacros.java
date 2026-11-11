@@ -255,6 +255,34 @@ public final class JarvisMacros {
                 "» не виконано: обмеження не виконуються.");
             return;
         }
+        if (macro.optBoolean("useMacroDroid", false)) {
+            if (!"voice".equals(macro.optString("trigger", "voice"))) {
+                report(listener, "Передавання в MacroDroid підтримує лише голосовий тригер.");
+                return;
+            }
+            try {
+                context.getPackageManager().getApplicationInfo("com.arlosoft.macrodroid", 0);
+                String phrase = CommandPatterns.normalize(macro.optString("triggerValue"))
+                    .replaceAll("\\s+", " ").trim();
+                if (phrase.isEmpty()) {
+                    report(listener, "У голосовому тригері немає фрази для MacroDroid.");
+                    return;
+                }
+                Intent signal = new Intent("com.andriy.jarvis.MACRO_TRIGGER")
+                    .setPackage("com.arlosoft.macrodroid")
+                    .putExtra("jarvis_trigger", phrase)
+                    .putExtra("jarvis_macro_name", macro.optString("name"))
+                    .putExtra("jarvis_macro_id", macro.optString("id"));
+                context.sendBroadcast(signal);
+                report(listener, "Сигнал MacroDroid надіслано для «" + phrase +
+                    "». Перевір журнал MacroDroid, якщо дія не запустилася.");
+            } catch (PackageManager.NameNotFoundException missing) {
+                report(listener, "MacroDroid не встановлено на цьому телефоні.");
+            } catch (Exception error) {
+                report(listener, "Не вдалося надіслати сигнал MacroDroid.");
+            }
+            return;
+        }
         JSONArray actions = macro.optJSONArray("actions");
         if (actions == null || actions.length() == 0) {
             report(listener, "У макросі немає дій.");

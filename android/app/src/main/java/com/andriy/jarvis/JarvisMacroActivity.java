@@ -56,7 +56,8 @@ public final class JarvisMacroActivity extends Activity {
     private EditText name, triggerValue, date, days, timeFrom, timeTo, battery, ssid,
         latitude, longitude, radius;
     private Spinner trigger, charging;
-    private LinearLayout actionList;
+    private LinearLayout actionList, actionsSection;
+    private CheckBox useMacroDroid;
     private final ArrayList<ActionRow> actionRows = new ArrayList<>();
 
     @Override public void onCreate(Bundle state) {
@@ -148,6 +149,8 @@ public final class JarvisMacroActivity extends Activity {
                 TRIGGERS[index(TRIGGER_KEYS,triggerText)] +
                 (m.optString("triggerValue").isEmpty() ? "" : " · " +
                     m.optString("triggerValue")), 13,false));
+            if (m.optBoolean("useMacroDroid", false))
+                item.addView(label("Виконання: MacroDroid", 13, true));
             CheckBox active = new CheckBox(this);
             active.setText("Увімкнено");
             active.setTextColor(TEXT);
@@ -240,19 +243,34 @@ public final class JarvisMacroActivity extends Activity {
         triggerValue = field(root,"Голосова фраза або час (HH:mm)",
             "Наприклад, режим роботи / 08:30",
             previous == null ? "" : previous.optString("triggerValue"));
-        root.addView(label("ДІЇ · виконуються по черзі",18,true));
-        root.addView(label("Команда Джарвіса: ліхтарик, звук, Wi-Fi, застосунки, "
+        useMacroDroid = new CheckBox(this);
+        useMacroDroid.setText("Передати запуск макросу в MacroDroid");
+        useMacroDroid.setTextColor(TEXT);
+        useMacroDroid.setChecked(previous != null && previous.optBoolean("useMacroDroid",false));
+        root.addView(useMacroDroid);
+        root.addView(label("У MacroDroid створи тригер «Інтент отриманий»: дія "
+            +"com.andriy.jarvis.MACRO_TRIGGER; додатковий параметр jarvis_trigger "
+            +"має дорівнювати цій голосовій фразі. Дії та обмеження налаштовуються в MacroDroid.",
+            12,false));
+        actionsSection = new LinearLayout(this);
+        actionsSection.setOrientation(LinearLayout.VERTICAL);
+        root.addView(actionsSection);
+        actionsSection.addView(label("ДІЇ · виконуються по черзі",18,true));
+        actionsSection.addView(label("Команда Джарвіса: ліхтарик, звук, Wi-Fi, застосунки, "
             +"екранні команди. Для екранних послідовностей потрібен дозвіл Accessibility.",
             13,false));
         actionList = new LinearLayout(this);
         actionList.setOrientation(LinearLayout.VERTICAL);
-        root.addView(actionList);
+        actionsSection.addView(actionList);
         JSONArray prevSteps = previous == null ? null : previous.optJSONArray("actions");
         if(prevSteps != null) {
             for (int i=0;i<prevSteps.length();i++) addAction(prevSteps.optJSONObject(i));
         }
         if(actionRows.isEmpty()) addAction(null);
-        root.addView(button("＋ Додати дію",()->addAction(null)));
+        actionsSection.addView(button("＋ Додати дію",()->addAction(null)));
+        actionsSection.setVisibility(useMacroDroid.isChecked() ? View.GONE : View.VISIBLE);
+        useMacroDroid.setOnCheckedChangeListener((view,checked) ->
+            actionsSection.setVisibility(checked ? View.GONE : View.VISIBLE));
 
         root.addView(label("ОБМЕЖЕННЯ · усі необов'язкові",18,true));
         root.addView(label("Якщо обмеження не заповнене — воно не перевіряється. "
@@ -321,6 +339,7 @@ public final class JarvisMacroActivity extends Activity {
         if (!v.isEmpty()) object.put(key,v);
     }
     private void confirmSave() {
+        if (useMacroDroid != null && useMacroDroid.isChecked()) { save(); return; }
         for(ActionRow step:actionRows) {
             if("root".equals(ACTION_KEYS[step.type.getSelectedItemPosition()])) {
                 if(!step.approved.isChecked()) {
@@ -341,10 +360,13 @@ public final class JarvisMacroActivity extends Activity {
     }
     private void save() {
         try {
-            if(value(name).isEmpty() || actionRows.isEmpty())
+            boolean macroDroid = useMacroDroid != null && useMacroDroid.isChecked();
+            if(value(name).isEmpty() || (!macroDroid && actionRows.isEmpty()))
                 throw new IllegalArgumentException("Вкажи назву і хоча б одну дію.");
             String chosen = TRIGGER_KEYS[trigger.getSelectedItemPosition()];
             String triggerText = value(triggerValue);
+            if(macroDroid && !"voice".equals(chosen))
+                throw new IllegalArgumentException("Передавання в MacroDroid доступне для голосового тригера.");
             if("voice".equals(chosen) && triggerText.isEmpty())
                 throw new IllegalArgumentException("Вкажи голосову команду.");
             if("time".equals(chosen) && !JarvisMacros.validTime(triggerText))
@@ -398,7 +420,7 @@ public final class JarvisMacroActivity extends Activity {
                 constraints.put("radius",m);
             }
             JSONArray actions = new JSONArray();
-            for(ActionRow row:actionRows) {
+            if (!macroDroid) for(ActionRow row:actionRows) {
                 String action = ACTION_KEYS[row.type.getSelectedItemPosition()];
                 String actionValue = value(row.value);
                 if(actionValue.isEmpty())
@@ -423,6 +445,7 @@ public final class JarvisMacroActivity extends Activity {
             macro.put("name",value(name));
             macro.put("trigger",chosen);
             macro.put("triggerValue",triggerText);
+            macro.put("useMacroDroid",macroDroid);
             macro.put("actions",actions);
             macro.put("constraints",constraints);
             JarvisMacros.save(this,macro);
