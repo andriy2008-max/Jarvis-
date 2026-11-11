@@ -3248,6 +3248,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void processCommand(String raw) {
         if (raw == null || raw.trim().isEmpty()) return;
+        if (!isWatchDevice && JarvisMacros.cancelIfRequested(raw, result -> {
+            appendDialogue("Джарвіс", result);
+            setStatus(result);
+        })) return;
         JarvisPhoneMode.Transition modeTransition = JarvisPhoneMode.transition(raw);
         if (isWatchDevice) {
             // Automated Spotify tasks use a temporary watch/phone face, not
