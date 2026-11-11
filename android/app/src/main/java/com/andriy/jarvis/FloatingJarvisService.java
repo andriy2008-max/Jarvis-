@@ -1039,7 +1039,9 @@ public final class FloatingJarvisService extends Service {
         }
         if (SongRecognitionCommands.matches(raw)) {
             pauseForSongRecognition();
-            message(SongRecognitionLauncher.launch(this));
+            message(SongRecognitionLauncher.launch(this, (success, detail) -> {
+                if (!closing) message(detail);
+            }));
             return;
         }
         SpotifyMusicCommands.Kind requestedMusic = SpotifyMusicCommands.parse(raw);

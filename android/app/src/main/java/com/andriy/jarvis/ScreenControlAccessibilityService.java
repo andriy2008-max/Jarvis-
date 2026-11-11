@@ -121,6 +121,42 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     }
 
     public interface Completion { void finished(boolean success, String detail); }
+
+    /**
+     * Only the explicit "Шазам" voice command may use this target. Never tap
+     * screen coordinates until Android confirms the foreground app is Shazam.
+     */
+    public static boolean shazamVisible() {
+        ScreenControlAccessibilityService service = connected.get();
+        return service != null && service.sessionActive &&
+            service.currentShazamRoot() != null;
+    }
+
+    public static void tapShazamCenter(Completion callback) {
+        ScreenControlAccessibilityService service = connected.get();
+        if (service == null || !service.sessionActive) {
+            callback.finished(false, "Керування екраном недоступне.");
+            return;
+        }
+        AccessibilityNodeInfo root = service.currentShazamRoot();
+        if (root == null) {
+            callback.finished(false, "Shazam не на передньому плані.");
+            return;
+        }
+        Rect bounds = new Rect();
+        root.getBoundsInScreen(bounds);
+        if (bounds.width() < 200 || bounds.height() < 200) {
+            callback.finished(false, "Екран Shazam ще не готовий.");
+            return;
+        }
+        Path tap = new Path();
+        tap.moveTo(bounds.exactCenterX(), bounds.exactCenterY());
+        GestureDescription gesture = new GestureDescription.Builder()
+            .addStroke(new GestureDescription.StrokeDescription(tap, 0, 95))
+            .build();
+        service.dispatchTrackedGesture(gesture, callback);
+    }
+
     private Completion gestureCompletion;
 
     public static void perform(ScreenControlCommands.Action action, Completion callback) {
@@ -143,9 +179,13 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     }
 
     private boolean dispatchTrackedGesture(GestureDescription gesture) {
-        long feedback = JarvisControlFeedback.begin();
         Completion callback = gestureCompletion;
         gestureCompletion = null;
+        return dispatchTrackedGesture(gesture, callback);
+    }
+
+    private boolean dispatchTrackedGesture(GestureDescription gesture, Completion callback) {
+        long feedback = JarvisControlFeedback.begin();
         AccessibilityNodeInfo originalRoot=currentExternalRoot();
         String expectedPackage=originalRoot==null ? "" : asString(originalRoot.getPackageName());
         Runnable restore = FloatingJarvisService.hideForGesture();
@@ -433,6 +473,13 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             recording = false;
             toast("Не вдалося розпочати розпізнавання. Перевір дозвіл мікрофона.");
         }
+    }
+
+    private AccessibilityNodeInfo currentShazamRoot() {
+        AccessibilityNodeInfo root = currentExternalRoot();
+        return root != null && root.isVisibleToUser() &&
+            root.getPackageName() != null &&
+            "com.shazam.android".contentEquals(root.getPackageName()) ? root : null;
     }
 
     private AccessibilityNodeInfo currentExternalRoot() {

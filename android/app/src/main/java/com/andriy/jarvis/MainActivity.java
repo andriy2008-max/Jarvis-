@@ -3406,7 +3406,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 if (headsetRoute != null) headsetRoute.end();
                 FloatingJarvisService.pauseForSongRecognition();
             }
-            String result = SongRecognitionLauncher.launch(this);
+            String result = SongRecognitionLauncher.launch(this, (success, detail) -> {
+                if (isFinishing() || isDestroyed()) return;
+                appendDialogue("Джарвіс", detail);
+                setStatus(detail);
+            });
             appendDialogue("Джарвіс", result);
             setStatus(result); // Remain silent while Google listens to the song.
             return;
