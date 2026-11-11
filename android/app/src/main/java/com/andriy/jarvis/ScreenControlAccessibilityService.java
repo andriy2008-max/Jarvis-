@@ -134,6 +134,17 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             service.tapBoltRides();
     }
 
+    /** The app appearing in foreground is NOT evidence that its rides card
+     * has loaded. Only expose readiness after locating a visible, enabled tile
+     * (or verifying that the destination editor is already focused). */
+    public static boolean boltRidesAvailable() {
+        ScreenControlAccessibilityService service = connected.get();
+        if (service == null || !service.sessionActive) return false;
+        AccessibilityNodeInfo root = service.currentBoltRoot();
+        return root != null && (service.isBoltDestinationFocused() ||
+            service.findBoltRidesTarget(root) != null);
+    }
+
     public static BoltStep boltTypeDestination(String address) {
         ScreenControlAccessibilityService service = connected.get();
         return service == null || !service.sessionActive ? BoltStep.BLOCKED :
@@ -175,16 +186,13 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             !isSensitiveFieldLabel(focus);
     }
 
-    /** Physical tap within the exact «Поїздки» tile. Some Bolt tiles expose
-     * their text but no ACTION_CLICK or clickable ancestor to Accessibility.
-     * Do not confuse the home search preview «Куди прямуємо?» with an opened
-     * destination form. */
-    private BoltStep tapBoltRides() {
-        AccessibilityNodeInfo root = currentBoltRoot();
-        if (root == null) return BoltStep.WAIT;
+    /** Select the rides tile only after Android exposes the actual home
+     * screen; return null for Bolt splash screens, blank frames or dialogs. */
+    private Rect findBoltRidesTarget(AccessibilityNodeInfo root) {
+        if (root == null || !root.isVisibleToUser()) return null;
         Rect screen = new Rect();
         root.getBoundsInScreen(screen);
-        if (screen.width() < 240 || screen.height() < 450) return BoltStep.WAIT;
+        if (screen.width() < 240 || screen.height() < 450) return null;
 
         ArrayDeque<AccessibilityNodeInfo> queue = new ArrayDeque<>();
         queue.add(root);
@@ -194,7 +202,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         int scanned = 0;
         while (!queue.isEmpty() && ++scanned <= MAX_SCAN) {
             AccessibilityNodeInfo item = queue.removeFirst();
-            if (!item.isVisibleToUser() || item.isPassword()) continue;
+            if (!item.isVisibleToUser() || !item.isEnabled() || item.isPassword()) continue;
             String text = asString(item.getText());
             String description = asString(item.getContentDescription());
             String joined = (text + " " + description).toLowerCase(Locale.ROOT);
@@ -211,8 +219,8 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                 Rect bounds = new Rect();
                 item.getBoundsInScreen(bounds);
                 float cx = bounds.exactCenterX(), cy = bounds.exactCenterY();
-                // Screenshot: rides tile occupies the top-left half, not the
-                // bottom navigation, promo banner, or full-page root.
+                // Target the first (top-left) passenger-rides card, not history,
+                // food, send, or an entire full-screen container.
                 boolean topLeft = cx > screen.left + screen.width() * .04f &&
                     cx < screen.left + screen.width() * .61f &&
                     cy > screen.top + screen.height() * .12f &&
@@ -222,8 +230,6 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                     bounds.height() < screen.height() * .43f) {
                     int score = title ? 3 : 2;
                     if (item.isClickable()) score++;
-                    // Prefer a visible label directly attached to the tile;
-                    // tapping its center lands inside the actual card.
                     if (score > bestScore) {
                         bestScore = score;
                         best = bounds;
@@ -235,19 +241,29 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                 if (child != null) queue.addLast(child);
             }
         }
-        if (scanned > MAX_SCAN) return BoltStep.WAIT;
+        if (scanned > MAX_SCAN) return null;
+        if (best != null) return best;
 
-        if (best != null) return gestureTapBolt(root,best.exactCenterX(),best.exactCenterY());
-
-        // If the tile's text is drawn on a canvas and has no accessible node,
-        // recognize the specific four-tile home screen shown by the user first.
-        // Never use hard-coded coordinates on an unverified Bolt screen.
-        if (plan && food && send && homeSearch && screen.height() > screen.width() * 1.45f) {
-            float cx = screen.left + screen.width() * .26f;
-            float cy = screen.top + screen.height() * .29f;
-            return gestureTapBolt(root,cx,cy);
+        // Some Bolt versions render the card on a canvas with no accessibility
+        // label. Use coordinates only when the surrounding 4-tile home screen
+        // is unambiguously recognized.
+        if (plan && food && send && homeSearch &&
+            screen.height() > screen.width() * 1.45f) {
+            int cx = Math.round(screen.left + screen.width() * .26f);
+            int cy = Math.round(screen.top + screen.height() * .29f);
+            return new Rect(cx-8,cy-8,cx+8,cy+8);
         }
-        return isBoltDestinationFocused() ? BoltStep.READY : BoltStep.WAIT;
+        return null;
+    }
+
+    /** Physical tap in the verified rides tile; don't tap while it's loading. */
+    private BoltStep tapBoltRides() {
+        AccessibilityNodeInfo root = currentBoltRoot();
+        if (root == null) return BoltStep.WAIT;
+        if (isBoltDestinationFocused()) return BoltStep.READY;
+        Rect target = findBoltRidesTarget(root);
+        return target == null ? BoltStep.WAIT :
+            gestureTapBolt(root,target.exactCenterX(),target.exactCenterY());
     }
 
     private BoltStep gestureTapBolt(AccessibilityNodeInfo root,float x,float y) {

@@ -10,8 +10,13 @@ import android.os.SystemClock;
 public final class BoltTaxiController {
     private static final String BOLT="ee.mtakso.client";
     private static final Handler HANDLER=new Handler(Looper.getMainLooper());
-    private static final long POLL_MS=400L;
-    private static final long TIMEOUT_MS=14000L;
+    private static final long POLL_MS=350L;
+    // Bolt can start with a splash/home skeleton before the actual rides tile
+    // is rendered. Never treat package visibility as button readiness.
+    private static final long RIDES_STABLE_MS=900L;
+    private static final long RETAP_AFTER_MS=2300L;
+    private static final long TIMEOUT_MS=30000L;
+    private static final long TOTAL_TIMEOUT_MS=45000L;
     private static BoltTaxiController active;
     public interface Listener {
         void onProgress(String status);
@@ -24,8 +29,10 @@ public final class BoltTaxiController {
     private final Runnable tick=this::poll;
     private Stage stage=Stage.OPEN_APP;
     private long started=SystemClock.elapsedRealtime();
+    private final long flowStarted=started;
+    private long ridesVisibleSince=-1L;
     private boolean finished;
-    private boolean ridesRetried;
+    private int ridesRetries;
 
     private BoltTaxiController(Listener listener,String address,JarvisPhoneModeManager.Lease lease){
         this.listener=listener;this.address=address;this.lease=lease;
@@ -80,17 +87,33 @@ public final class BoltTaxiController {
             finish(false,"Керування екраном вимкнулося.");return;
         }
         long age=SystemClock.elapsedRealtime()-started;
+        if(SystemClock.elapsedRealtime()-flowStarted>=TOTAL_TIMEOUT_MS){
+            finish(false,"Bolt не показав потрібний екран за 45 секунд. Нічого навмання не натискав.");
+            return;
+        }
         if(!ScreenControlAccessibilityService.boltVisible()){
+            ridesVisibleSince=-1L;
             if(age>=TIMEOUT_MS)finish(false,"Bolt не відкрився або екран заблоковано.");
             else HANDLER.postDelayed(tick,POLL_MS);
             return;
         }
         if(age>=TIMEOUT_MS){
-            finish(false,"Не знайшов потрібне поле Bolt. Нічого навмання не натискав.");
+            finish(false,"Не знайшов потрібну кнопку або поле Bolt за 30 секунд. Нічого навмання не натискав.");
             return;
         }
         switch(stage){
-            case OPEN_APP:move(Stage.RIDES,"Шукаю вкладку «Поїздки»...");break;
+            case OPEN_APP:
+                if(ScreenControlAccessibilityService.boltRidesReady()) {
+                    move(Stage.DELAY,"Пошук поїздки вже відкрито. Очікую 2 секунди...");
+                } else if(ScreenControlAccessibilityService.boltRidesAvailable()) {
+                    long now=SystemClock.elapsedRealtime();
+                    if(ridesVisibleSince<0L) ridesVisibleSince=now;
+                    if(now-ridesVisibleSince>=RIDES_STABLE_MS)
+                        move(Stage.RIDES,"Кнопка «Поїздки» з'явилася. Натискаю...");
+                } else {
+                    ridesVisibleSince=-1L;
+                }
+                break;
             case RIDES:{
                 ScreenControlAccessibilityService.BoltStep result=
                     ScreenControlAccessibilityService.boltRides();
@@ -106,11 +129,21 @@ public final class BoltTaxiController {
             case VERIFY_RIDES:
                 if(ScreenControlAccessibilityService.boltRidesReady()) {
                     move(Stage.DELAY,"«Поїздки» відкрито. Очікую 2 секунди...");
-                } else if(age >= 3500L && !ridesRetried) {
-                    // Retry only if the recognizable Bolt home tile is still
-                    // visible; never tap arbitrary elements on another screen.
-                    ridesRetried = true;
-                    ScreenControlAccessibilityService.boltRides();
+                } else if(age>=RETAP_AFTER_MS &&
+                    ScreenControlAccessibilityService.boltRidesAvailable()) {
+                    if(ridesRetries>=2) {
+                        finish(false,"Bolt показує «Поїздки», але не відкриває поле адреси. Спробуй натиснути плитку вручну.");
+                        return;
+                    }
+                    // A gesture can be accepted by Android before Bolt handles
+                    // it. Retap only while the verified tile is still present.
+                    ridesRetries++;
+                    ScreenControlAccessibilityService.BoltStep again=
+                        ScreenControlAccessibilityService.boltRides();
+                    if(again==ScreenControlAccessibilityService.BoltStep.BLOCKED) {
+                        finish(false,"Android не дозволив натиснути «Поїздки».");return;
+                    }
+                    move(Stage.VERIFY_RIDES,"Bolt ще показує «Поїздки». Перевіряю повторне натискання...");
                 }
                 break;
             case DELAY:
