@@ -53,6 +53,7 @@ public final class JarvisMacros {
     private static final AtomicBoolean RUNNING = new AtomicBoolean(false);
     private static long lastVoiceMs;
     private static String lastVoice;
+    private static volatile Execution active;
 
     private JarvisMacros() {}
 
@@ -103,6 +104,16 @@ public final class JarvisMacros {
         for (JSONObject item : items) data.put(item);
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .edit().putString(KEY, data.toString()).commit();
+    }
+
+    public static boolean cancelIfRequested(String words, Listener listener) {
+        String text = CommandPatterns.normalize(words);
+        if (!text.equals("скасуй макрос") && !text.equals("зупини макрос")
+            && !text.equals("стоп макрос")) return false;
+        Execution running = active;
+        if (running == null) report(listener, "Зараз немає активного макросу.");
+        else running.complete(false, "скасовано користувачем");
+        return true;
     }
 
     public static boolean handleVoice(Context context, String words, Listener listener) {
@@ -253,8 +264,10 @@ public final class JarvisMacros {
             report(listener, "Інший макрос ще виконується.");
             return;
         }
-        new Execution(context.getApplicationContext(), macro.optString("name"),
-            actions, listener).next();
+        Execution execution = new Execution(context.getApplicationContext(),
+            macro.optString("name"), actions, listener);
+        active = execution;
+        execution.next();
     }
 
     private static void report(Listener listener, String result) {
@@ -268,6 +281,7 @@ public final class JarvisMacros {
         final Listener listener;
         int index;
         boolean finished;
+        volatile Process rootProcess;
         Execution(Context context, String name, JSONArray steps, Listener listener) {
             this.context = context;
             this.name = name;
@@ -277,6 +291,8 @@ public final class JarvisMacros {
         void complete(boolean ok, String info) {
             if (finished) return;
             finished = true;
+            if (rootProcess != null) rootProcess.destroyForcibly();
+            if (active == this) active = null;
             RUNNING.set(false);
             report(listener, (ok ? "Макрос «" + name + "» завершено." :
                 "Макрос «" + name + "» зупинено: " + info));
@@ -353,6 +369,7 @@ public final class JarvisMacros {
                                 try {
                                     process = new ProcessBuilder("su", "-c", value)
                                         .redirectErrorStream(true).start();
+                                    rootProcess = process;
                                     ok = process.waitFor(8, TimeUnit.SECONDS) &&
                                         process.exitValue() == 0;
                                 } catch (Exception ignored) { }
