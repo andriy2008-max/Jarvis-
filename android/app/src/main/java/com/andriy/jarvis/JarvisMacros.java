@@ -132,15 +132,19 @@ public final class JarvisMacros {
         }
     }
 
-    public static void handleTime(Context context, String id) {
+    public static void handleTime(Context context, String id, Listener listener) {
+        boolean fired = false;
         for (JSONObject m : all(context)) {
             if (id.equals(m.optString("id"))) {
-                if (m.optBoolean("enabled", true) && "time".equals(m.optString("trigger")))
-                    execute(context, m, null);
+                if (m.optBoolean("enabled", true) && "time".equals(m.optString("trigger"))) {
+                    fired = true;
+                    execute(context, m, listener);
+                }
                 break;
             }
         }
         scheduleAll(context);
+        if (!fired) report(listener, "Макрос неактивний.");
     }
 
     public static boolean allowed(Context context, JSONObject m) {
@@ -311,7 +315,9 @@ public final class JarvisMacros {
                                 try { result = performer.perform(device); }
                                 finally { performer.close(); }
                                 if (result == null || result.contains("не дозвол") ||
-                                    result.contains("недоступ") || result.contains("не підтрим"))
+                                    result.contains("недоступ") || result.contains("не підтрим") ||
+                                    result.contains("потрібен дозвіл") ||
+                                    result.contains("Відкрий Джарвіс"))
                                     complete(false, result == null ? "дія не виконана" : result);
                                 else next();
                                 return;
