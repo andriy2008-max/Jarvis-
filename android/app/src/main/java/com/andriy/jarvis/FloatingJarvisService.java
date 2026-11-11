@@ -997,6 +997,9 @@ public final class FloatingJarvisService extends Service {
 
     private void executeCommand(String raw) {
         if (closing) return;
+        if (JarvisMacros.cancelIfRequested(raw, result -> {
+            if (!closing) reply(result);
+        })) return;
         // User-defined phrases take precedence over built-in commands.
         if (JarvisMacros.handleVoice(this, raw, result -> {
             if (!closing) reply(result);
