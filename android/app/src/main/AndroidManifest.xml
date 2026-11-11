@@ -9,6 +9,9 @@
     <!-- Only outgoing HTTPS to a user-configured AI proxy. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Optional user-configured Wi-Fi and geofence conditions. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- Explicit user approval through Android special-access settings required. -->
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
@@ -83,6 +86,18 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
         <receiver android:name=".TimerFireReceiver" android:exported="false" />
+        <receiver android:name=".JarvisMacroReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.ACTION_POWER_CONNECTED" />
+                <action android:name="android.intent.action.ACTION_POWER_DISCONNECTED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+        <activity android:name=".JarvisMacroActivity"
+            android:exported="false" android:screenOrientation="unspecified" />
         <receiver android:name=".TimerRestoreReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
