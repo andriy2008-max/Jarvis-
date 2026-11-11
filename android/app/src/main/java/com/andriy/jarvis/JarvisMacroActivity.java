@@ -44,7 +44,7 @@ public final class JarvisMacroActivity extends Activity {
         "voice", "time", "charger_on", "charger_off"
     };
     private static final String[] ACTIONS = {
-        "Команда Джарвіса", "Пауза (мілісекунди)",
+        "Команда керування Джарвіса", "Пауза (мілісекунди)",
         "Сповіщення", "Вібрація (мілісекунди)", "Root shell (su -c)"
     };
     private static final String[] ACTION_KEYS = {
@@ -127,6 +127,7 @@ public final class JarvisMacroActivity extends Activity {
 
     private void showList() {
         editing = null;
+        name = null;
         screen("⚙ Макроси");
         root.addView(button("← Джарвіс", this::finish));
         root.addView(button("＋ Створити макрос", () -> edit(null)));
@@ -198,6 +199,16 @@ public final class JarvisMacroActivity extends Activity {
         row.approved.setTextColor(TEXT);
         row.approved.setChecked(source != null && source.optBoolean("rootApproved"));
         row.view.addView(row.approved);
+        row.approved.setVisibility("root".equals(
+            ACTION_KEYS[row.type.getSelectedItemPosition()]) ? View.VISIBLE : View.GONE);
+        row.type.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> p, View v,
+                                                 int position, long id) {
+                row.approved.setVisibility("root".equals(ACTION_KEYS[position])
+                    ? View.VISIBLE : View.GONE);
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> p) {}
+        });
         row.view.addView(button("↑ Вище", () -> move(row,-1)));
         row.view.addView(button("↓ Нижче", () -> move(row,1)));
         row.view.addView(button("✕ Прибрати дію",()-> {
@@ -409,7 +420,7 @@ public final class JarvisMacroActivity extends Activity {
         }
     }
     @Override public void onBackPressed() {
-        if(editing != null || name != null) { name = null; showList(); }
+        if(name != null) showList();
         else super.onBackPressed();
     }
 }
