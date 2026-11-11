@@ -5,30 +5,22 @@ import android.content.Intent;
 import android.content.ActivityNotFoundException;
 import android.content.pm.PackageManager;
 
-/** User-initiated handoff, NOT a Now Playing API or a recognition-result callback. */
+/** Opens the installed Shazam app; does not claim recognition or retrieve its result. */
 public final class SongRecognitionLauncher {
-    private static final String GOOGLE = "com.google.android.googlequicksearchbox";
+    private static final String SHAZAM = "com.shazam.android";
     private SongRecognitionLauncher() {}
 
     public static String launch(Context context) {
         if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_WATCH))
-            return "Розпізнавання поки запускається лише на телефоні. Скажи цю команду Джарвісу на Pixel.";
-        // Optional Google app action. It is not a public Android contract:
-        // handle its absence/denial and never report that a song was identified.
-        Intent search = new Intent(GOOGLE + ".MUSIC_SEARCH").setPackage(GOOGLE)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            return "Запуск Shazam поки доступний на телефоні. Скажи «Шазам» Джарвісу на телефоні.";
+        Intent app = context.getPackageManager().getLaunchIntentForPackage(SHAZAM);
+        if (app == null)
+            return "Shazam не встановлений або вимкнений. Установи чи ввімкни Shazam і повтори команду «Шазам».";
         try {
-            context.startActivity(search);
-            return "Відкриваю розпізнавання Google. Результат з’явиться у Google. Щоб знову говорити з Джарвісом, натисни його іконку.";
+            context.startActivity(app.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            return "Відкриваю Shazam. Натисни його кнопку розпізнавання; результат з’явиться у Shazam.";
         } catch (ActivityNotFoundException | SecurityException unavailable) {
-            Intent app = context.getPackageManager().getLaunchIntentForPackage(GOOGLE);
-            if (app != null) {
-                try {
-                    context.startActivity(app.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                    return "Прямий запуск розпізнавання недоступний. У Google натисни мікрофон → «Знайти пісню».";
-                } catch (ActivityNotFoundException | SecurityException ignored) { }
-            }
-            return "Не вдалося відкрити розпізнавання. Перевір, чи встановлений і ввімкнений застосунок Google.";
+            return "Android не дозволив відкрити Shazam. Спробуй відкрити його вручну.";
         }
     }
 }

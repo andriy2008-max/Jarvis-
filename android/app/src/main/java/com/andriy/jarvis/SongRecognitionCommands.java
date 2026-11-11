@@ -11,6 +11,7 @@ public final class SongRecognitionCommands {
             case "яка це пісня": case "яка пісня грає":
             case "що зараз грає": case "розпізнай пісню":
             case "розпізнай музику": case "визнач пісню":
+            case "шазам": case "shazam": case "запусти шазам": case "відкрий шазам":
             case "зашазам": case "зашазам пісню": return true;
             default: return false;
         }
