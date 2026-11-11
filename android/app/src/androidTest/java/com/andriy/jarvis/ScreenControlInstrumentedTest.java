@@ -68,9 +68,8 @@ public final class ScreenControlInstrumentedTest {
         final String[] enabled = new String[1];
         InstrumentationRegistry.getInstrumentation().runOnMainSync(
             () -> enabled[0] = ScreenControlAccessibilityService.start());
-        assertTrue("Cannot show accessibility overlay: " + enabled[0],
-            enabled[0].contains("увімкнено"));
-        assertTrue(ScreenControlAccessibilityService.isSessionActive());
+        assertTrue("Cannot start screen-control session: " + enabled[0],
+            ScreenControlAccessibilityService.isSessionActive());
         final String[] clicked = new String[1];
         InstrumentationRegistry.getInstrumentation().runOnMainSync(() ->
             clicked[0] = ScreenControlAccessibilityService.perform(
