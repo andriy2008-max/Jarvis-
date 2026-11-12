@@ -23,8 +23,31 @@ public final class BoltUiLabels {
         return v.contains("куди")||v.contains("куда")||v.contains("where to")||
             v.contains("destination")||v.contains("пункт призначення")||
             v.contains("місце прибуття")||v.contains("адреса прибуття")||
-            v.contains("dropoff")||v.contains("drop off");
+            v.contains("dropoff")||v.contains("drop off")||
+            v.contains("місце висадки")||v.contains("место высадки");
     }
+    /** Confirm the Bolt trip-planning page, not a home tile or checkout. */
+    public static boolean routeTitle(String s){
+        String v=normal(s);
+        return v.equals("маршрут")||v.equals("route")||
+            v.equals("маршрут поїздки")||v.equals("маршрут поездки");
+    }
+
+    /** Physical screen coordinates calibrated from the user's 684x1536
+     * Bolt route screenshot; only usable after verifying route and pickup. */
+    public static int[] screenshotDropoffPoint(int width,int height) {
+        if(width<360 || height<width*2.05f || height>width*2.50f) return null;
+        int x=Math.round(width*(250f/684f));
+        int y=Math.round(height*(322f/1536f));
+        return dropoffRegion(x,y,width,height) ? new int[]{x,y} : null;
+    }
+
+    public static boolean dropoffRegion(int x,int y,int width,int height) {
+        return width>0 && height>0 &&
+            x>width*.14f && x<width*.80f &&
+            y>height*.15f && y<height*.34f;
+    }
+
     public static boolean pickup(String s){
         String v=normal(s);
         return v.contains("звідки")||v.contains("откуда")||
