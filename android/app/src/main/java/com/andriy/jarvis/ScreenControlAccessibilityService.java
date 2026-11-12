@@ -1076,8 +1076,9 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                         TelegramReplyCommands.Request telegram=
                             TelegramReplyCommands.parse(raw);
                         if(telegram!=null) {
-                            toast(TelegramReplyController.perform(
-                                ScreenControlAccessibilityService.this,telegram));
+                            TelegramReplyController.perform(
+                                ScreenControlAccessibilityService.this,telegram,
+                                (success,result)->toast(result));
                             return;
                         }
                         if (FinanceManagerController.isRunning()) {

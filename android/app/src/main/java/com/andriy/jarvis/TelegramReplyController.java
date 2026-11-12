@@ -2,21 +2,20 @@ package com.andriy.jarvis;
 
 import android.content.Context;
 
-/** Single dispatch for on-device or Wear voice commands. */
+/** Direct user-authorized MTProto actions; no notification access required. */
 public final class TelegramReplyController {
     private TelegramReplyController(){}
-
-    public static String perform(Context context,TelegramReplyCommands.Request command){
-        if(context==null || command==null)return "Невідома команда Telegram.";
-        if(context.getPackageManager().hasSystemFeature(
-            android.content.pm.PackageManager.FEATURE_WATCH))
-            return "На годиннику Telegram обробляється через підключений телефон.";
-        switch(command.kind) {
-            case STATUS:return TelegramNotificationReplyService.status(context);
-            case DRAFT:return TelegramNotificationReplyService.prepare(context,command);
-            case SEND:return TelegramNotificationReplyService.send(context);
-            case CANCEL:return TelegramNotificationReplyService.cancel();
-            default:return "Команда Telegram не підтримується.";
+    public static void perform(Context context,TelegramReplyCommands.Request command,
+                               TelegramTdClient.Callback callback) {
+        if(callback==null)return;
+        if(context==null||command==null) {
+            callback.done(false,"Невідома команда Telegram.");return;
         }
+        if(context.getPackageManager().hasSystemFeature(
+            android.content.pm.PackageManager.FEATURE_WATCH)) {
+            callback.done(false,"Telegram API виконується на підключеному телефоні.");
+            return;
+        }
+        TelegramTdClient.get(context).process(command,callback);
     }
 }

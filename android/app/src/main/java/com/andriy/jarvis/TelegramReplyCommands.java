@@ -4,21 +4,20 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Strict Ukrainian personal-Telegram reply commands.
+/** Explicit personal Telegram voice commands for TDLib/MTProto.
  * A draft is NEVER itself a send authorization: a separate "Надішли..."
- * command is always necessary. These are replies to currently active
- * Telegram notifications, NOT arbitrary chats or Telegram Bot API messages.
+ * command is always necessary. No bots, notification tricks or auto-replies.
  */
 public final class TelegramReplyCommands {
     public enum Kind { DRAFT, SEND, CANCEL, STATUS }
     public static final class Request {
         public final Kind kind;
-        public final String recipient; // null: exactly one reply-capable chat
+        public final String recipient; // mandatory for MTProto direct messages
         public final String text;      // draft body, never normalized
         private Request(Kind k,String r,String t){kind=k;recipient=r;text=t;}
     }
     private static final Pattern REPLY=Pattern.compile(
-        "(?iu)^(?:відповідай|відповісти|дай\\s+відповідь|відправ\\s+відповідь)\\s+"+
+        "(?iu)^(?:відповідай|відповісти|дай\\s+відповідь|відправ\\s+відповідь|напиши|написати|відправ|надішли)\\s+"+
         "(?:(?:на\\s+повідомлення\\s+)?(?:у|в|через)\\s+)?"+
         "(?:телеграм(?:і|і)?|telegram|тг)"+
         "(?:\\s+([^:]{1,80}?))?\\s*:\\s*(.+)$"
@@ -44,6 +43,7 @@ public final class TelegramReplyCommands {
             case "скасуй телеграм":case "не надсилай":
                 return new Request(Kind.CANCEL,null,null);
             case "статус телеграм":case "перевір телеграм":
+            case "статус телеграм api":case "перевір telegram api":
                 return new Request(Kind.STATUS,null,null);
             default: break;
         }

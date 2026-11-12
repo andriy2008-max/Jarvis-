@@ -209,8 +209,9 @@ public final class JarvisWearPhoneSession {
         }
         TelegramReplyCommands.Request telegram=TelegramReplyCommands.parse(command);
         if(telegram!=null) {
-            String message=TelegramReplyController.perform(context,telegram);
-            out.reply(true,message,session,false);
+            final String telegramSession=session;
+            TelegramReplyController.perform(context,telegram,(ok,message)->
+                out.reply(ok,message,telegramSession,false));
             return;
         }
         if(FinanceManagerController.isRunning()) {

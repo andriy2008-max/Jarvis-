@@ -643,7 +643,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             new LinearLayout.LayoutParams(-1,dp(46));
         spotifyDirectParams.topMargin=dp(7);
         content.addView(spotifyDirectTab,spotifyDirectParams);
-        Button telegramTab = secondaryButton("💬 Telegram · відповіді від мене",
+        Button telegramTab = secondaryButton("💬 Telegram API · мій акаунт",
             () -> startActivity(new Intent(this, TelegramReplySettingsActivity.class)));
         LinearLayout.LayoutParams telegramParams=
             new LinearLayout.LayoutParams(-1,dp(46));
@@ -3542,10 +3542,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
         TelegramReplyCommands.Request telegram=TelegramReplyCommands.parse(raw);
         if (!isWatchDevice && telegram!=null) {
-            String result=TelegramReplyController.perform(this,telegram);
-            appendDialogue("Джарвіс",result);
-            setStatus(result);
-            if(voiceEnabled)speakReply(result);
+            TelegramReplyController.perform(this,telegram,(success,result)->{
+                if(isFinishing()||isDestroyed())return;
+                appendDialogue("Джарвіс",result);
+                setStatus(result);
+                if(voiceEnabled)speakReply(result);
+            });
             return;
         }
         if (!isWatchDevice && FinanceManagerController.isRunning()) {
