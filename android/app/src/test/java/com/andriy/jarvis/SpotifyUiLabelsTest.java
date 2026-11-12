@@ -45,6 +45,19 @@ public final class SpotifyUiLabelsTest {
             SpotifyUiLabels.shuffleRequest("стрілка назад")) throw new AssertionError("arrow intent");
         if (!SpotifyUiLabels.toolbarPair(205,110,265,158,302,70,428,196,1f))
             throw new AssertionError("reference toolbar pair");
+        // Screenshot coordinates: green download arrow on far LEFT x~48,
+        // correct crossed arrows x~530, green playlist Play x~610.
+        if (!SpotifyUiLabels.playlistPlayAt(573,330,650,410,
+            0,0,684,1500,2.6f) ||
+            !SpotifyUiLabels.toolbarPair(505,345,553,391,
+                573,330,650,410,2.6f))
+            throw new AssertionError("RIGHT shuffle beside large Play");
+        if (SpotifyUiLabels.toolbarPair(27,350,68,391,
+            573,330,650,410,2.6f))
+            throw new AssertionError("LEFT download must never be shuffle");
+        if (SpotifyUiLabels.playlistPlayAt(573,1320,650,1400,
+            0,0,684,1500,2.6f))
+            throw new AssertionError("bottom mini player not playlist Play");
         if (SpotifyUiLabels.toolbarPair(205,710,265,758,302,70,428,196,1f) ||
             SpotifyUiLabels.toolbarPair(205,110,265,158,302,110,322,130,1f) ||
             SpotifyUiLabels.toolbarPair(305,110,365,158,102,70,228,196,1f))

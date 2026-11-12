@@ -67,14 +67,30 @@ public final class SpotifyUiLabels {
             s.equals("ці стрілки") || s.equals("дві стрілочки") || s.equals("дві стрілки");
     }
 
-    /** The small crossed arrows sit LEFT of the large playlist Play, on the same row. */
+    /** The large playlist Play is in the top-right toolbar, not the
+     * bottom mini-player. Coordinates are physical pixels. */
+    public static boolean playlistPlayAt(int l,int t,int r,int b,
+                                         int rootL,int rootT,int rootR,int rootB,
+                                         float density) {
+        int w=r-l,h=b-t,rw=rootR-rootL,rh=rootB-rootT;
+        return rw>=240 && rh>=400 && w>=24*density && h>=24*density &&
+            w<rw*.30f && h<rh*.18f &&
+            w>=h*.62f && h>=w*.62f &&
+            (l+r)/2f>rootL+rw*.74f &&
+            (t+b)/2f<rootT+rh*.62f;
+    }
+
+    /** The correct Shuffle button is immediately left of the big playlist
+     * Play. A far-left green DOWNLOAD arrow cannot satisfy this geometry. */
     public static boolean toolbarPair(int sl,int st,int sr,int sb,
                                       int pl,int pt,int pr,int pb,float density) {
-        int sw=sr-sl, sh=sb-st, pw=pr-pl, ph=pb-pt;
-        return sw>0 && sh>0 && pw>=36*density && ph>=36*density &&
-            (pl+pr)>(sl+sr) && pl>=sl && pw>=sw*.8f &&
-            Math.abs((pt+pb)-(st+sb))/2f<=Math.max(sh,ph)*.65f &&
-            pl-sr<Math.max(pw,sw)*3f;
+        int sw=sr-sl,sh=sb-st,pw=pr-pl,ph=pb-pt,gap=pl-sr;
+        return sw>=10*density && sh>=10*density &&
+            pw>=24*density && ph>=24*density &&
+            sw<=pw*1.35f && sh<=ph*1.35f &&
+            gap>=-pw*.10f && gap<=pw*1.4f &&
+            (sl+sr)<(pl+pr) &&
+            Math.abs((pt+pb)-(st+sb))/2f<=Math.max(sh,ph)*.55f;
     }
 
     public static boolean shuffleOn(String label, boolean selected, boolean checked) {

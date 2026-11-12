@@ -774,8 +774,9 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             SpotifyStep step = tapSpotifyControl(SpotifyUiLabels.Target.SHUFFLE, null);
             if (step == SpotifyStep.CLICKED) return "Знайшов потрібну кнопку й натиснув.";
             if (step == SpotifyStep.ALREADY) return "Перемішування вже ввімкнено.";
-            return "Не зміг однозначно визначити кнопку для «перемішування». " +
-                "Потрібні перехрещені стрілки ліворуч від великої кнопки Play.";
+            return "Не знайшов кнопку перемішування праворуч, " +
+                "безпосередньо ліворуч від великого зеленого Play. " +
+                "Ліву стрілку завантаження не натискатиму.";
         }
         ArrayDeque<AccessibilityNodeInfo> queue = new ArrayDeque<>();
         queue.add(root);
@@ -931,10 +932,106 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         }
     }
 
+    /**
+     * Spotify shuffle: only the small button next to the large, upper-right
+     * playlist Play is eligible. This cannot select the download arrow at the
+     * upper-left of Liked Songs. No unverified absolute screen tap is used.
+     */
+    private SpotifyStep tapSpotifyRightShuffle(AccessibilityNodeInfo root,
+                                                SpotifyUiLabels.Target playlist) {
+        if (playlist != null && !spotifyHasTitle(root,playlist))
+            return SpotifyStep.WAIT;
+        if (playlist == null &&
+            !spotifyHasTitle(root,SpotifyUiLabels.Target.LIKED_SONGS) &&
+            !spotifyHasTitle(root,SpotifyUiLabels.Target.UKR_MUSIC))
+            return SpotifyStep.WAIT;
+        Rect frame = new Rect();
+        root.getBoundsInScreen(frame);
+        float density=getResources().getDisplayMetrics().density;
+        ArrayDeque<AccessibilityNodeInfo> queue=new ArrayDeque<>();
+        queue.add(root);
+        ArrayList<SpotifyChoice> plays=new ArrayList<>();
+        ArrayList<SpotifyChoice> arrows=new ArrayList<>();
+        ArrayList<SpotifyChoice> unnamed=new ArrayList<>();
+        int visited=0;
+        while(!queue.isEmpty() && ++visited<=MAX_SCAN) {
+            AccessibilityNodeInfo node=queue.removeFirst();
+            if(!node.isVisibleToUser() || !node.isEnabled() || node.isPassword()) continue;
+            AccessibilityNodeInfo control=clickable(node);
+            if(control!=null && control.isEnabled()) {
+                Rect rect=new Rect();
+                control.getBoundsInScreen(rect);
+                if(rect.width()>0 && rect.height()>0 &&
+                   rect.width()<frame.width()*.32f &&
+                   rect.height()<frame.height()*.18f) {
+                    String label=asString(node.getText())+" "+
+                        asString(node.getContentDescription())+" "+
+                        asString(control.getContentDescription());
+                    String normalized=SpotifyUiLabels.normalize(label);
+                    boolean download=normalized.contains("download") ||
+                        normalized.contains("завантаж") ||
+                        normalized.contains("загруз") ||
+                        normalized.contains("скачат");
+                    if(spotifyTextMatches(SpotifyUiLabels.Target.PLAY,node) &&
+                        SpotifyUiLabels.playlistPlayAt(rect.left,rect.top,
+                            rect.right,rect.bottom,frame.left,frame.top,
+                            frame.right,frame.bottom,density))
+                        plays.add(new SpotifyChoice(control,label,rect,100));
+                    if(!download && SpotifyUiLabels.matches(
+                        SpotifyUiLabels.Target.SHUFFLE,label))
+                        arrows.add(new SpotifyChoice(control,label,rect,100));
+                    else if(!download && node==control &&
+                        normalized.trim().isEmpty())
+                        unnamed.add(new SpotifyChoice(control,label,rect,10));
+                }
+            }
+            for(int i=0;i<node.getChildCount();i++){
+                AccessibilityNodeInfo child=node.getChild(i);
+                if(child!=null)queue.addLast(child);
+            }
+        }
+        if(visited>MAX_SCAN || plays.isEmpty())return SpotifyStep.WAIT;
+        SpotifyChoice play=null;
+        for(SpotifyChoice choice:plays){
+            if(play==null)play=choice;
+            else if(!play.bounds.equals(choice.bounds))return SpotifyStep.WAIT;
+        }
+        SpotifyChoice found=rightShuffleCandidate(arrows,play,frame,density);
+        if(found==null)found=rightShuffleCandidate(unnamed,play,frame,density);
+        if(found==null || !sessionActive || currentSpotifyRoot()==null ||
+            !found.node.isEnabled() || !found.node.isVisibleToUser() ||
+            !found.node.isClickable())return SpotifyStep.WAIT;
+        if(playlist!=null && SpotifyUiLabels.shuffleOn(found.description,
+            found.node.isSelected(),found.node.isChecked()))
+            return SpotifyStep.ALREADY;
+        FloatingJarvisService.avoidControl(found.bounds);
+        return found.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
+    }
+
+    /** A single matched icon is required; ambiguous overlapping controls
+     * fail closed rather than pressing a possibly different Spotify action. */
+    private SpotifyChoice rightShuffleCandidate(ArrayList<SpotifyChoice> options,
+                                                 SpotifyChoice play,Rect frame,
+                                                 float density) {
+        SpotifyChoice result=null;
+        for(SpotifyChoice candidate:options) {
+            Rect r=candidate.bounds,p=play.bounds;
+            if(r.centerX()<=frame.left+frame.width()*.56f ||
+               !SpotifyUiLabels.toolbarPair(r.left,r.top,r.right,r.bottom,
+                    p.left,p.top,p.right,p.bottom,density))continue;
+            if(result==null || result.bounds.equals(r))result=candidate;
+            else return null;
+        }
+        return result;
+    }
+
     private SpotifyStep tapSpotifyControl(SpotifyUiLabels.Target target,
                                            SpotifyUiLabels.Target playlist) {
         AccessibilityNodeInfo root = currentSpotifyRoot();
         if (root == null) return SpotifyStep.WAIT;
+        if (target == SpotifyUiLabels.Target.SHUFFLE)
+            return tapSpotifyRightShuffle(root,playlist);
         // Never press shuffle/play on an unrelated screen even within Spotify.
         if ((target == SpotifyUiLabels.Target.SHUFFLE ||
              target == SpotifyUiLabels.Target.PLAY ||
