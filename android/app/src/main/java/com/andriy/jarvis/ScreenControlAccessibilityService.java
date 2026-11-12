@@ -863,6 +863,115 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         return service.tapSpotifyControl(target, playlist);
     }
 
+    /** Open one saved playlist selected by an explicit voice command.
+     * A library item must have an exact visible title and a clickable row.
+     * Ambiguous duplicates do not get clicked. */
+    public static SpotifyStep spotifyOpenNamedPlaylist(String name) {
+        ScreenControlAccessibilityService service=connected.get();
+        if(service==null || !service.sessionActive || name==null)
+            return SpotifyStep.BLOCKED;
+        AccessibilityNodeInfo root=service.currentSpotifyRoot();
+        if(root==null)return SpotifyStep.WAIT;
+        if(service.spotifyNamedPlaylistReady(root,name))return SpotifyStep.ALREADY;
+        Rect frame=new Rect();
+        root.getBoundsInScreen(frame);
+        ArrayDeque<AccessibilityNodeInfo> q=new ArrayDeque<>();
+        q.add(root);
+        AccessibilityNodeInfo found=null;
+        Rect foundBounds=null;
+        int examined=0;
+        while(!q.isEmpty() && ++examined<=MAX_SCAN){
+            AccessibilityNodeInfo n=q.removeFirst();
+            if(!n.isVisibleToUser() || !n.isEnabled() || n.isPassword())continue;
+            boolean title=SpotifyUiLabels.namedPlaylist(name,asString(n.getText())) ||
+                SpotifyUiLabels.namedPlaylist(name,asString(n.getContentDescription()));
+            if(title){
+                Rect labelBounds=new Rect();
+                n.getBoundsInScreen(labelBounds);
+                AccessibilityNodeInfo control=clickable(n);
+                if(control!=null && control.isEnabled() && control.isClickable() &&
+                   labelBounds.centerY()>frame.top+frame.height()*.13f &&
+                   labelBounds.centerY()<frame.top+frame.height()*.86f) {
+                    Rect box=new Rect();
+                    control.getBoundsInScreen(box);
+                    // Exclude the bottom mini-player and full-screen controls.
+                    if(box.width()>16 && box.height()>16 &&
+                       box.height()<frame.height()*.24f &&
+                       box.centerY()<frame.bottom-frame.height()*.13f) {
+                        if(foundBounds!=null && !foundBounds.equals(box))
+                            return SpotifyStep.WAIT;
+                        found=control;
+                        foundBounds=box;
+                    }
+                }
+            }
+            for(int k=0;k<n.getChildCount();k++){
+                AccessibilityNodeInfo child=n.getChild(k);
+                if(child!=null)q.addLast(child);
+            }
+        }
+        if(examined>MAX_SCAN || found==null || service.currentSpotifyRoot()==null)
+            return SpotifyStep.WAIT;
+        FloatingJarvisService.avoidControl(foundBounds);
+        return found.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
+    }
+
+    /** PLAY and SHUFFLE can only target the exact already-open playlist,
+     * never a visually similar song, other list row or bottom mini-player. */
+    public static SpotifyStep spotifyNamedPlaylistControl(SpotifyUiLabels.Target action,
+                                                           String name,boolean shuffleEnabled) {
+        ScreenControlAccessibilityService service=connected.get();
+        if(service==null || !service.sessionActive || name==null)
+            return SpotifyStep.BLOCKED;
+        AccessibilityNodeInfo root=service.currentSpotifyRoot();
+        if(root==null || !service.spotifyNamedPlaylistReady(root,name))
+            return SpotifyStep.WAIT;
+        if(action==SpotifyUiLabels.Target.SHUFFLE)
+            return service.tapSpotifyRightShuffle(root,null,name,shuffleEnabled);
+        if(action==SpotifyUiLabels.Target.PLAY)
+            return service.tapSpotifyControl(SpotifyUiLabels.Target.PLAY,null);
+        return SpotifyStep.BLOCKED;
+    }
+
+    /** Verify the actual playlist header AND its top-right Play button after
+     * a library row click, not merely text somewhere in a library list. */
+    private boolean spotifyNamedPlaylistReady(AccessibilityNodeInfo root,String name){
+        Rect frame=new Rect();
+        root.getBoundsInScreen(frame);
+        float density=getResources().getDisplayMetrics().density;
+        boolean header=false,play=false;
+        ArrayDeque<AccessibilityNodeInfo> q=new ArrayDeque<>();
+        q.add(root);
+        int examined=0;
+        while(!q.isEmpty() && ++examined<=MAX_SCAN){
+            AccessibilityNodeInfo n=q.removeFirst();
+            if(!n.isVisibleToUser())continue;
+            Rect bounds=new Rect();
+            n.getBoundsInScreen(bounds);
+            if(bounds.centerY()<frame.top+frame.height()*.62f &&
+               (SpotifyUiLabels.namedPlaylist(name,asString(n.getText())) ||
+                SpotifyUiLabels.namedPlaylist(name,asString(n.getContentDescription()))))
+                header=true;
+            if(spotifyTextMatches(SpotifyUiLabels.Target.PLAY,n)){
+                AccessibilityNodeInfo btn=clickable(n);
+                if(btn!=null){
+                    Rect rect=new Rect();
+                    btn.getBoundsInScreen(rect);
+                    if(SpotifyUiLabels.playlistPlayAt(rect.left,rect.top,
+                        rect.right,rect.bottom,frame.left,frame.top,
+                        frame.right,frame.bottom,density))play=true;
+                }
+            }
+            if(header && play)return true;
+            for(int i=0;i<n.getChildCount();i++){
+                AccessibilityNodeInfo child=n.getChild(i);
+                if(child!=null)q.addLast(child);
+            }
+        }
+        return false;
+    }
+
     public static boolean spotifyVisible() {
         ScreenControlAccessibilityService s = connected.get();
         return s != null && s.sessionActive && s.currentSpotifyRoot() != null;
@@ -939,9 +1048,17 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
      */
     private SpotifyStep tapSpotifyRightShuffle(AccessibilityNodeInfo root,
                                                 SpotifyUiLabels.Target playlist) {
-        if (playlist != null && !spotifyHasTitle(root,playlist))
+        return tapSpotifyRightShuffle(root,playlist,null,true);
+    }
+
+    private SpotifyStep tapSpotifyRightShuffle(AccessibilityNodeInfo root,
+                                                SpotifyUiLabels.Target playlist,
+                                                String named,boolean desiredOn) {
+        if (named!=null && !spotifyNamedPlaylistReady(root,named))
             return SpotifyStep.WAIT;
-        if (playlist == null &&
+        if (named==null && playlist!=null && !spotifyHasTitle(root,playlist))
+            return SpotifyStep.WAIT;
+        if (named==null && playlist==null &&
             !spotifyHasTitle(root,SpotifyUiLabels.Target.LIKED_SONGS) &&
             !spotifyHasTitle(root,SpotifyUiLabels.Target.UKR_MUSIC))
             return SpotifyStep.WAIT;
@@ -1001,9 +1118,11 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if(found==null || !sessionActive || currentSpotifyRoot()==null ||
             !found.node.isEnabled() || !found.node.isVisibleToUser() ||
             !found.node.isClickable())return SpotifyStep.WAIT;
-        if(playlist!=null && SpotifyUiLabels.shuffleOn(found.description,
-            found.node.isSelected(),found.node.isChecked()))
-            return SpotifyStep.ALREADY;
+        if(playlist!=null || named!=null) {
+            boolean on=SpotifyUiLabels.shuffleOn(found.description,
+                found.node.isSelected(),found.node.isChecked());
+            if(desiredOn==on)return SpotifyStep.ALREADY;
+        }
         FloatingJarvisService.avoidControl(found.bounds);
         return found.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
             ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
