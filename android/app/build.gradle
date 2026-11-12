@@ -20,6 +20,11 @@ android {
         versionCode 35
         versionName '0.1.25'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        // Optional user-requested Pixel/ARM64 delivery: universal stable is
+        // still built by default when the property is not set.
+        if (project.hasProperty('jarvisArm64Only')) {
+            ndk { abiFilters 'arm64-v8a' }
+        }
     }
 
     signingConfigs {
