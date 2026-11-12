@@ -22,7 +22,7 @@ public final class BoltTaxiController {
         void onProgress(String status);
         void onFinished(boolean ok,String status);
     }
-    private enum Stage { OPEN_APP, RIDES, VERIFY_RIDES, DELAY, FOCUS_DROPOFF, WAIT_DROPOFF, TYPE }
+    private enum Stage { OPEN_APP, RIDES, VERIFY_RIDES, DELAY, FOCUS_DROPOFF, WAIT_DROPOFF, TYPE, ENTER }
     private final Listener listener;
     private final String address;
     private final JarvisPhoneModeManager.Lease lease;
@@ -184,12 +184,31 @@ public final class BoltTaxiController {
                 ScreenControlAccessibilityService.BoltStep result=
                     ScreenControlAccessibilityService.boltTypeDestination(address);
                 if(result==ScreenControlAccessibilityService.BoltStep.ENTERED){
-                    finish(true,"У Bolt введено: "+address+
-                        ". Обери правильну підказку й підтвердь поїздку вручну.");
-                    return;
+                    // ACTION_SET_TEXT can finish before Bolt refreshes its editor.
+                    // Wait for the exact address to appear before pressing
+                    // the keyboard Enter/Search key, not a Bolt confirmation.
+                    move(Stage.ENTER,"Адресу введено. Натискаю Enter / Пошук...");
+                    break;
                 }
                 if(result==ScreenControlAccessibilityService.BoltStep.BLOCKED){
                     finish(false,"Bolt не дозволив безпечно ввести адресу.");return;
+                }
+                break;
+            }
+            case ENTER:{
+                ScreenControlAccessibilityService.BoltStep result=
+                    ScreenControlAccessibilityService.boltPressDestinationEnter(address);
+                if(result==ScreenControlAccessibilityService.BoltStep.SUBMITTED){
+                    finish(true,"У Bolt введено: "+address+
+                        ". Натиснув Enter / Пошук. Обери потрібну адресу з результатів " +
+                        "і підтвердь поїздку вручну.");
+                    return;
+                }
+                if(result==ScreenControlAccessibilityService.BoltStep.BLOCKED){
+                    finish(false,"Адресу введено, але Android або Bolt не дозволив натиснути " +
+                        "Enter через Спеціальні можливості. Натисни Enter / Пошук " +
+                        "на клавіатурі вручну. Поїздку не підтверджував.");
+                    return;
                 }
                 break;
             }
