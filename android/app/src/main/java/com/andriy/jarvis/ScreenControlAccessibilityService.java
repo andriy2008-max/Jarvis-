@@ -1042,9 +1042,11 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     }
 
     /**
-     * Spotify shuffle: only the small button next to the large, upper-right
-     * playlist Play is eligible. This cannot select the download arrow at the
-     * upper-left of Liked Songs. No unverified absolute screen tap is used.
+     * Tap the right-hand Spotify shuffle icon at a REAL screen coordinate,
+     * rather than clicking an Accessibility parent or matching the green
+     * download arrow at the far left. First use the visible big Play as the
+     * geometric anchor. The user's Pixel Liked Songs screenshot is the
+     * strictly-scoped fallback when Spotify hides Play's accessible label.
      */
     private SpotifyStep tapSpotifyRightShuffle(AccessibilityNodeInfo root,
                                                 SpotifyUiLabels.Target playlist) {
@@ -1054,6 +1056,8 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     private SpotifyStep tapSpotifyRightShuffle(AccessibilityNodeInfo root,
                                                 SpotifyUiLabels.Target playlist,
                                                 String named,boolean desiredOn) {
+        if (!sessionActive || root==null || currentSpotifyRoot()==null)
+            return SpotifyStep.WAIT;
         if (named!=null && !spotifyNamedPlaylistReady(root,named))
             return SpotifyStep.WAIT;
         if (named==null && playlist!=null && !spotifyHasTitle(root,playlist))
@@ -1062,87 +1066,133 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             !spotifyHasTitle(root,SpotifyUiLabels.Target.LIKED_SONGS) &&
             !spotifyHasTitle(root,SpotifyUiLabels.Target.UKR_MUSIC))
             return SpotifyStep.WAIT;
-        Rect frame = new Rect();
+
+        Rect frame=new Rect();
         root.getBoundsInScreen(frame);
         float density=getResources().getDisplayMetrics().density;
         ArrayDeque<AccessibilityNodeInfo> queue=new ArrayDeque<>();
         queue.add(root);
-        ArrayList<SpotifyChoice> plays=new ArrayList<>();
-        ArrayList<SpotifyChoice> arrows=new ArrayList<>();
-        ArrayList<SpotifyChoice> unnamed=new ArrayList<>();
-        int visited=0;
-        while(!queue.isEmpty() && ++visited<=MAX_SCAN) {
+        Rect play=null;
+        ArrayList<SpotifyChoice> rightArrows=new ArrayList<>();
+        int seen=0;
+        while(!queue.isEmpty() && ++seen<=MAX_SCAN) {
             AccessibilityNodeInfo node=queue.removeFirst();
-            if(!node.isVisibleToUser() || !node.isEnabled() || node.isPassword()) continue;
-            AccessibilityNodeInfo control=clickable(node);
-            if(control!=null && control.isEnabled()) {
-                Rect rect=new Rect();
-                control.getBoundsInScreen(rect);
-                if(rect.width()>0 && rect.height()>0 &&
-                   rect.width()<frame.width()*.32f &&
-                   rect.height()<frame.height()*.18f) {
+            if(!node.isVisibleToUser() || node.isPassword() || !node.isEnabled())
+                continue;
+            AccessibilityNodeInfo clickable=clickable(node);
+            if(clickable!=null && clickable.isEnabled()) {
+                Rect bounds=new Rect();
+                clickable.getBoundsInScreen(bounds);
+                if(bounds.width()>0 && bounds.height()>0) {
+                    if(spotifyTextMatches(SpotifyUiLabels.Target.PLAY,node) &&
+                       SpotifyUiLabels.playlistPlayAt(bounds.left,bounds.top,
+                           bounds.right,bounds.bottom,frame.left,frame.top,
+                           frame.right,frame.bottom,density)) {
+                        if(play!=null && !play.equals(bounds))
+                            return SpotifyStep.WAIT;
+                        play=bounds;
+                    }
                     String label=asString(node.getText())+" "+
                         asString(node.getContentDescription())+" "+
-                        asString(control.getContentDescription());
-                    String normalized=SpotifyUiLabels.normalize(label);
-                    boolean download=normalized.contains("download") ||
-                        normalized.contains("завантаж") ||
-                        normalized.contains("загруз") ||
-                        normalized.contains("скачат");
-                    if(spotifyTextMatches(SpotifyUiLabels.Target.PLAY,node) &&
-                        SpotifyUiLabels.playlistPlayAt(rect.left,rect.top,
-                            rect.right,rect.bottom,frame.left,frame.top,
-                            frame.right,frame.bottom,density))
-                        plays.add(new SpotifyChoice(control,label,rect,100));
-                    if(!download && SpotifyUiLabels.matches(
-                        SpotifyUiLabels.Target.SHUFFLE,label))
-                        arrows.add(new SpotifyChoice(control,label,rect,100));
-                    else if(!download && node==control &&
-                        normalized.trim().isEmpty())
-                        unnamed.add(new SpotifyChoice(control,label,rect,10));
+                        asString(clickable.getContentDescription());
+                    if(SpotifyUiLabels.matches(SpotifyUiLabels.Target.SHUFFLE,label))
+                        rightArrows.add(new SpotifyChoice(clickable,label,bounds,100));
                 }
             }
-            for(int i=0;i<node.getChildCount();i++){
+            for(int i=0;i<node.getChildCount();i++) {
                 AccessibilityNodeInfo child=node.getChild(i);
                 if(child!=null)queue.addLast(child);
             }
         }
-        if(visited>MAX_SCAN || plays.isEmpty())return SpotifyStep.WAIT;
-        SpotifyChoice play=null;
-        for(SpotifyChoice choice:plays){
-            if(play==null)play=choice;
-            else if(!play.bounds.equals(choice.bounds))return SpotifyStep.WAIT;
+        if(seen>MAX_SCAN)return SpotifyStep.WAIT;
+
+        int[] position=play==null ? null :
+            SpotifyUiLabels.shufflePointFromPlay(play.left,play.top,
+                play.right,play.bottom,frame.left,frame.top,frame.right,
+                frame.bottom,density);
+        if(position==null && named==null &&
+           (playlist==SpotifyUiLabels.Target.LIKED_SONGS ||
+            playlist==null && spotifyHasTitle(root,SpotifyUiLabels.Target.LIKED_SONGS)) &&
+           spotifyLikedHeaderNearTop(root,frame)) {
+            // User-confirmed Pixel 9 screenshot, scaled to physical display.
+            android.graphics.Point physical=new android.graphics.Point();
+            android.view.Display display=getDisplay();
+            if(display==null) {
+                WindowManager window=(WindowManager)getSystemService(Context.WINDOW_SERVICE);
+                if(window!=null)display=window.getDefaultDisplay();
+            }
+            if(display!=null) {
+                display.getRealSize(physical);
+                position=SpotifyUiLabels.screenshotShufflePoint(physical.x,physical.y);
+            }
         }
-        SpotifyChoice found=rightShuffleCandidate(arrows,play,frame,density);
-        if(found==null)found=rightShuffleCandidate(unnamed,play,frame,density);
-        if(found==null || !sessionActive || currentSpotifyRoot()==null ||
-            !found.node.isEnabled() || !found.node.isVisibleToUser() ||
-            !found.node.isClickable())return SpotifyStep.WAIT;
-        if(playlist!=null || named!=null) {
-            boolean on=SpotifyUiLabels.shuffleOn(found.description,
-                found.node.isSelected(),found.node.isChecked());
-            if(desiredOn==on)return SpotifyStep.ALREADY;
+        if(position==null)return SpotifyStep.WAIT;
+        int x=position[0],y=position[1];
+        if(!frame.contains(x,y) ||
+           !SpotifyUiLabels.safeRightShufflePoint(x,y,
+                frame.left,frame.top,frame.right,frame.bottom))
+            return SpotifyStep.WAIT;
+
+        // Check current shuffle state only against an icon actually occupying
+        // the correct right-hand point, never a left download label.
+        boolean known=false,on=false;
+        for(SpotifyChoice arrow:rightArrows) {
+            Rect b=arrow.bounds;
+            int dx=b.centerX()-x,dy=b.centerY()-y;
+            if(Math.abs(dx)>Math.max(30*density,frame.width()*.06f) ||
+               Math.abs(dy)>Math.max(25*density,frame.height()*.04f))
+                continue;
+            if(known && on!=SpotifyUiLabels.shuffleOn(arrow.description,
+                arrow.node.isSelected(),arrow.node.isChecked()))
+                return SpotifyStep.WAIT;
+            on=SpotifyUiLabels.shuffleOn(arrow.description,
+                arrow.node.isSelected(),arrow.node.isChecked());
+            known=true;
         }
-        FloatingJarvisService.avoidControl(found.bounds);
-        return found.node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-            ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
+        if(named!=null || playlist!=null) {
+            if(known && on==desiredOn)return SpotifyStep.ALREADY;
+            // Without an observable OFF state it would be unsafe to toggle
+            // an unknown shuffle setting into ON for "без перемішування".
+            if(!desiredOn && !known)return SpotifyStep.WAIT;
+        }
+
+        if(currentSpotifyRoot()==null)return SpotifyStep.WAIT;
+        Rect target=new Rect(x-16,y-16,x+16,y+16);
+        FloatingJarvisService.avoidControl(target);
+        Path path=new Path();
+        path.moveTo(x,y);
+        GestureDescription tap=new GestureDescription.Builder()
+            .addStroke(new GestureDescription.StrokeDescription(path,0,90))
+            .build();
+        // dispatchTrackedGesture checks the foreground package after hiding
+        // the floating face; it does not send touches to unrelated apps.
+        return dispatchTrackedGesture(tap,(ok,detail)->{
+            if(!ok && sessionActive)toast("Spotify: натискання перемішування не виконано. "+detail);
+        }) ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
     }
 
-    /** A single matched icon is required; ambiguous overlapping controls
-     * fail closed rather than pressing a possibly different Spotify action. */
-    private SpotifyChoice rightShuffleCandidate(ArrayList<SpotifyChoice> options,
-                                                 SpotifyChoice play,Rect frame,
-                                                 float density) {
-        SpotifyChoice result=null;
-        for(SpotifyChoice candidate:options) {
-            Rect r=candidate.bounds,p=play.bounds;
-            if(r.centerX()<=frame.left+frame.width()*.56f ||
-               !SpotifyUiLabels.toolbarPair(r.left,r.top,r.right,r.bottom,
-                    p.left,p.top,p.right,p.bottom,density))continue;
-            if(result==null || result.bounds.equals(r))result=candidate;
-            else return null;
+    /** Ensure the screenshot fallback applies only to a visible Liked Songs
+     * header near the top, never to a scrolled list or another Spotify page. */
+    private static boolean spotifyLikedHeaderNearTop(AccessibilityNodeInfo root,Rect frame) {
+        ArrayDeque<AccessibilityNodeInfo> queue=new ArrayDeque<>();
+        queue.add(root);
+        int visited=0;
+        while(!queue.isEmpty() && ++visited<=MAX_SCAN) {
+            AccessibilityNodeInfo node=queue.removeFirst();
+            if(!node.isVisibleToUser())continue;
+            if(spotifyTextMatches(SpotifyUiLabels.Target.LIKED_SONGS,node)) {
+                Rect bounds=new Rect();
+                node.getBoundsInScreen(bounds);
+                if(bounds.centerY()>frame.top+frame.height()*.04f &&
+                   bounds.centerY()<frame.top+frame.height()*.30f)
+                    return true;
+            }
+            for(int i=0;i<node.getChildCount();i++) {
+                AccessibilityNodeInfo child=node.getChild(i);
+                if(child!=null)queue.addLast(child);
+            }
         }
-        return result;
+        return false;
     }
 
     private SpotifyStep tapSpotifyControl(SpotifyUiLabels.Target target,
