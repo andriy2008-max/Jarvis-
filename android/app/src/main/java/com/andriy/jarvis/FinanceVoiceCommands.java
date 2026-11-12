@@ -25,11 +25,11 @@ public final class FinanceVoiceCommands {
         "(?:запиши|додай|занеси|зафіксуй)\\s+";
     private static final Pattern EXP=Pattern.compile(
         PREFIX+"(?:витрату|витрати)\\s+([0-9]{1,7}(?:[,.][0-9]{1,2})?)"+
-        "\\s*(?:грн\\.?|грив(?:ня|ні|ень|ню))?\\s*(?:на|за|категорія|категорію)?\\s*(.+)$",
+        "\\s*(?:грн\\.?|грив(?:ня|ні|ень|ню))?(?:\\s+(?:на|за|категорія|категорію))?\\s+(.+)$",
         Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
     private static final Pattern INC=Pattern.compile(
         PREFIX+"(?:дохід|доход|надходження)\\s+([0-9]{1,7}(?:[,.][0-9]{1,2})?)"+
-        "\\s*(?:грн\\.?|грив(?:ня|ні|ень|ню))?\\s*(?:від|за|категорія|категорію)?\\s*(.+)$",
+        "\\s*(?:грн\\.?|грив(?:ня|ні|ень|ню))?(?:\\s+(?:від|за|категорія|категорію))?\\s+(.+)$",
         Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
     private FinanceVoiceCommands(){}
 
