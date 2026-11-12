@@ -19,6 +19,27 @@ public final class TelegramReplyCommandsTest {
         yes(r!=null && "Ігор".equals(r.recipient));
         r=TelegramReplyCommands.parse("відповідай у телеграм Олена скажи Уже йду");
         yes(r!=null && "Олена".equals(r.recipient) && "Уже йду".equals(r.text));
+        r=TelegramReplyCommands.parse(
+            "Джарвіс, напиши в telegram Яна Привіт, це тест.");
+        yes(r!=null && r.kind==TelegramReplyCommands.Kind.DRAFT_AUTO &&
+            r.recipient==null && "Яна Привіт, це тест.".equals(r.text));
+        yes("Привіт, це тест.".equals(
+            TelegramReplyCommands.messageAfterContact(r.text,"Яна")));
+        r=TelegramReplyCommands.parse(
+            "Напиши в Telegram Яна Петрівна Буду через 10 хвилин");
+        yes(r!=null && r.kind==TelegramReplyCommands.Kind.DRAFT_AUTO &&
+            "Буду через 10 хвилин".equals(
+                TelegramReplyCommands.messageAfterContact(r.text,"Яна Петрівна")));
+        yes(TelegramReplyCommands.messageAfterContact(
+            "Яна Петрівна Буду через 10 хвилин","Яна Сидоренко")==null);
+        yes(TelegramReplyCommands.messageAfterContact(
+            "Яна","Яна")==null);
+        yes("Привіт".equals(TelegramReplyCommands.messageAfterContact(
+            "Яна, Привіт","Яна")));
+        yes(TelegramReplyCommands.parse("напиши в telegram")!=null &&
+            TelegramReplyCommands.parse("напиши в telegram").kind==
+                TelegramReplyCommands.Kind.HELP);
+        yes(TelegramReplyCommands.parse("напиши Привіт") == null);
         yes(TelegramReplyCommands.parse("надішли в телеграм").kind==
             TelegramReplyCommands.Kind.SEND);
         yes(TelegramReplyCommands.parse("скасуй відповідь").kind==
