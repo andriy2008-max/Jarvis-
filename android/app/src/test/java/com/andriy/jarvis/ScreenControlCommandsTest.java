@@ -16,6 +16,8 @@ public final class ScreenControlCommandsTest {
     public static void main(String[] args) {
         is("увімкни керування екраном", ScreenControlCommands.Kind.ENABLE, null);
         is("вимкни керування екраном", ScreenControlCommands.Kind.DISABLE, null);
+        is("включи керування екраном", ScreenControlCommands.Kind.ENABLE, null);
+        is("виключи керування екраном", ScreenControlCommands.Kind.DISABLE, null);
         is("зупинись", ScreenControlCommands.Kind.DISABLE, null);
         is("доступ до екрана", ScreenControlCommands.Kind.SETTINGS, null);
         is("стан керування екраном", ScreenControlCommands.Kind.STATUS, null);

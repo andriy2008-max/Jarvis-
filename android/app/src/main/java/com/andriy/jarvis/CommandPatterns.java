@@ -28,6 +28,18 @@ public final class CommandPatterns {
     }
 
     /**
+     * Canonicalize only the FIRST imperative, never the user's dictated
+     * text, playlist name or note contents.
+     * «включи» / «увімкни» and «виключи» / «вимкни» are
+     * equivalent control verbs.
+     */
+    public static String normalizeControlVerb(String raw) {
+        String normalized = normalize(raw);
+        return normalized.replaceFirst("^(?:включи|ввімкни)(?=\\s|$)", "увімкни")
+            .replaceFirst("^виключи(?=\\s|$)", "вимкни");
+    }
+
+    /**
      * Spoken command «Скажи [текст]»: null means another command, empty string
      * means the user did not supply anything to say. Preserve user punctuation
      * and case; do not route requested speech through the conversational AI.

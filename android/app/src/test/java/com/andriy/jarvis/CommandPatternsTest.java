@@ -11,6 +11,17 @@ public final class CommandPatternsTest {
     public static void main(String[] args) {
         eq(CommandPatterns.normalize("Джарвіс, Таймер на 5 хвилин!"), "таймер на 5 хвилин");
         eq(CommandPatterns.normalize("Jarvis: ЗНАЙДИ КОТА."), "знайди кота");
+        eq(CommandPatterns.normalizeControlVerb("Джарвіс, включи ліхтарик!"), "увімкни ліхтарик");
+        eq(CommandPatterns.normalizeControlVerb("Джарвіс, увімкни ліхтарик!"), "увімкни ліхтарик");
+        eq(CommandPatterns.normalizeControlVerb("виключи wifi"), "вимкни wifi");
+        eq(CommandPatterns.normalizeControlVerb("вимкни wifi"), "вимкни wifi");
+        eq(CommandPatterns.normalizeControlVerb("ввімкни голос"), "увімкни голос");
+        eq(CommandPatterns.normalizeControlVerb("увімкни плейлист Включи світло"),
+            "увімкни плейлист включи світло");
+        eq(CommandPatterns.normalizeControlVerb("напиши включи ліхтарик"),
+            "напиши включи ліхтарик");
+        eq(CommandPatterns.normalizeControlVerb("розкажи про виключи звук"),
+            "розкажи про виключи звук");
         eq(CommandPatterns.spokenText("Скажи Привіт!"), "Привіт!");
         eq(CommandPatterns.spokenText("Джарвіс, скажи: Я тут. Як справи?"), "Я тут. Як справи?");
         eq(CommandPatterns.spokenText("Jarvis — СКАЖИ 100%"), "100%");

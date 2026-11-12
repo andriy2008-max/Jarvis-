@@ -44,8 +44,8 @@ public final class ScreenControlCommands {
             String payload = write.group(1) == null ? "" : write.group(1).trim();
             return new Action(Kind.TYPE_TEXT, payload);
         }
-        String s = original.toLowerCase(Locale.forLanguageTag("uk-UA"))
-            .replaceAll("[.!?]+$", "").trim().replaceAll("\\s+", " ");
+        String s = CommandPatterns.normalizeControlVerb(original)
+            .replaceAll("\\s+", " ");
         switch (s) {
             case "свайпни вверх": case "свайпни верх": case "свайпни в верх":
             case "свайпни у верх": case "свайпни вгору": case "свайп вверх":

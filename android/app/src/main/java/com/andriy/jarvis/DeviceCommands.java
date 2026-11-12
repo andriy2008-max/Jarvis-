@@ -47,8 +47,8 @@ public final class DeviceCommands {
     /** Input is normalized speech/text; null means unrelated command. */
     public static Action parse(String utterance) {
         if (utterance == null) return null;
-        String s = utterance.toLowerCase(Locale.forLanguageTag("uk-UA"))
-            .trim().replaceAll("[.!?]+$", "").trim().replaceAll("\\s+", " ");
+        String s = CommandPatterns.normalizeControlVerb(utterance)
+            .replaceAll("\\s+", " ");
         if (s.isEmpty()) return null;
         switch (s) {
             case "увімкни ліхтарик": case "ввімкни ліхтарик":
@@ -62,6 +62,7 @@ public final class DeviceCommands {
                 return action(Kind.TORCH_OFF);
             case "постав музику на паузу": case "пауза музики":
             case "призупини музику": case "зупини музику":
+            case "вимкни музику": case "вимкни spotify": case "вимкни спотіфай":
             case "пауза пісні":
                 return action(Kind.MUSIC_PAUSE);
             case "продовж музику": case "віднови музику":

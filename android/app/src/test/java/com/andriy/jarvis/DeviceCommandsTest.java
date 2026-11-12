@@ -84,6 +84,14 @@ public final class DeviceCommandsTest {
         kind("виключи звук", DeviceCommands.Kind.VOLUME_MUTE);
         kind("включи ліхтарик", DeviceCommands.Kind.TORCH_ON);
         kind("виключи ліхтарик", DeviceCommands.Kind.TORCH_OFF);
+        kind("вимкни музику", DeviceCommands.Kind.MUSIC_PAUSE);
+        kind("виключи музику", DeviceCommands.Kind.MUSIC_PAUSE);
+        kind("вимкни spotify", DeviceCommands.Kind.MUSIC_PAUSE);
+        kind("виключи spotify", DeviceCommands.Kind.MUSIC_PAUSE);
+        kind("виключи звук", DeviceCommands.Kind.VOLUME_MUTE);
+        kind("включи звук", DeviceCommands.Kind.VOLUME_UNMUTE);
+        kind("включи геодані", DeviceCommands.Kind.LOCATION_ON);
+        kind("виключи геодані", DeviceCommands.Kind.LOCATION_OFF);
         kind("налаштування екрана", DeviceCommands.Kind.DISPLAY_SETTINGS);
         volume("постав гучність на 50%", 50);
         volume("гучність 0", 0);
