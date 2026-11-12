@@ -45,7 +45,7 @@ public final class BoltUiLabels {
     public static boolean dropoffRegion(int x,int y,int width,int height) {
         return width>0 && height>0 &&
             x>width*.14f && x<width*.80f &&
-            y>height*.15f && y<height*.34f;
+            y>height*.18f && y<height*.34f;
     }
 
     public static boolean pickup(String s){
