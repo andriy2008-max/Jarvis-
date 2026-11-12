@@ -4,7 +4,9 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.location.Location;
@@ -54,7 +56,7 @@ public final class JarvisMacroActivity extends Activity {
     private LinearLayout root;
     private JSONObject editing;
     private EditText name, triggerValue, date, days, timeFrom, timeTo, battery, ssid,
-        latitude, longitude, radius;
+        latitude, longitude, radius, foregroundApp;
     private Spinner trigger, charging;
     private LinearLayout actionList, actionsSection;
     private CheckBox useMacroDroid;
@@ -287,6 +289,17 @@ public final class JarvisMacroActivity extends Activity {
             "yes".equals(c.optString("charging")) ? 1 :
                 "no".equals(c.optString("charging")) ? 2 : 0);
         ssid = field(root,"Підключений Wi-Fi (точний SSID)","HomeWiFi",c.optString("ssid"));
+        root.addView(label("Умова «Якщо відкрита певна програма» перевіряє "+
+            "саме програму на передньому плані. Потрібно увімкнути "+
+            "«Джарвіс — керування екраном» у Спеціальних можливостях. "+
+            "Якщо стан невідомий, макрос не виконається.",13,false));
+        foregroundApp = field(root,"Якщо відкрита програма (пакет Android)",
+            "Обери програму зі списку або введи com.spotify.music",
+            c.optString("foregroundApp"));
+        root.addView(button("📱 Вибрати встановлену програму",this::selectForegroundApp));
+        root.addView(label("Залиш це поле порожнім, щоб не обмежувати макрос програмою. "+
+            "Для перевірки використай плаваюче обличчя Джарвіса поверх потрібної програми.",
+            12,false));
         root.addView(label("Геозона: використовує останню геопозицію до 10 хв. "
             +"Без дозволу геолокації макрос не виконається.",13,false));
         latitude = field(root,"Широта","49.0",c.has("lat") ?
@@ -299,6 +312,36 @@ public final class JarvisMacroActivity extends Activity {
         root.addView(label("Root доступний тільки для вручну схвалених shell-дій. "
             +"Команди можуть змінити систему або видалити дані.",13,false));
         root.addView(button("💾 Зберегти макрос", this::confirmSave));
+    }
+
+    /** Select a launchable installed app rather than asking for a package ID. */
+    private void selectForegroundApp() {
+        Intent launcher = new Intent(Intent.ACTION_MAIN);
+        launcher.addCategory(Intent.CATEGORY_LAUNCHER);
+        PackageManager pm = getPackageManager();
+        java.util.TreeMap<String,String> options = new java.util.TreeMap<>(
+            String.CASE_INSENSITIVE_ORDER);
+        for (ResolveInfo entry : pm.queryIntentActivities(launcher,0)) {
+            if(entry.activityInfo==null)continue;
+            String pkg=entry.activityInfo.packageName;
+            if(pkg==null || pkg.equals(getPackageName()) ||
+               !JarvisForegroundApp.validPackage(pkg))continue;
+            String label=String.valueOf(entry.loadLabel(pm)).trim();
+            if(label.isEmpty())label=pkg;
+            options.put(label+"  ·  "+pkg,pkg);
+        }
+        if(options.isEmpty()){
+            Toast.makeText(this,"Не знайдено програм для вибору.",
+                Toast.LENGTH_LONG).show();
+            return;
+        }
+        String[] titles=options.keySet().toArray(new String[0]);
+        String[] packages=options.values().toArray(new String[0]);
+        new AlertDialog.Builder(this)
+            .setTitle("Якщо відкрита програма")
+            .setItems(titles,(dialog,which)->foregroundApp.setText(packages[which]))
+            .setNegativeButton("Скасувати",null)
+            .show();
     }
 
     private void useLastLocation() {
@@ -408,6 +451,12 @@ public final class JarvisMacroActivity extends Activity {
             constraints.put("charging",charging.getSelectedItemPosition() == 1 ? "yes" :
                 charging.getSelectedItemPosition() == 2 ? "no" : "any");
             optional(constraints,"ssid",ssid);
+            String selectedApp=value(foregroundApp);
+            if(!selectedApp.isEmpty()){
+                if(!JarvisForegroundApp.validPackage(selectedApp))
+                    throw new IllegalArgumentException("Обери програму зі списку або вкажи її пакет Android.");
+                constraints.put("foregroundApp",selectedApp);
+            }
             if(!value(latitude).isEmpty() || !value(longitude).isEmpty()
                 || !value(radius).isEmpty()) {
                 double lat = Double.parseDouble(value(latitude));
