@@ -166,6 +166,13 @@ public final class JarvisMacros {
     public static boolean allowed(Context context, JSONObject m) {
         JSONObject c = m.optJSONObject("constraints");
         if (c == null) return true; // no constraints = always allowed
+        // Exact foreground app, not merely installed/running in background.
+        // Never infer success when Accessibility is off or Jarvis has focus.
+        String requiredForeground = c.optString("foregroundApp", "").trim();
+        if (!requiredForeground.isEmpty() &&
+            !JarvisForegroundApp.matches(requiredForeground,
+                ScreenControlAccessibilityService.foregroundPackageForMacro()))
+            return false;
         Calendar now = Calendar.getInstance();
         String date = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());
         String exact = c.optString("date").trim();
