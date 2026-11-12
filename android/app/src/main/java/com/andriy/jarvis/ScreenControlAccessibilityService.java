@@ -1322,11 +1322,9 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         root.getBoundsInScreen(rootBounds);
         int scanned = 0;
 
-        // The playlist's giant green Play and Shuffle are in the same toolbar
-        // row; this rejects buttons in the mini-player and on individual songs.
-        Rect shuffleBounds = null;
-        ArrayList<SpotifyChoice> possibleShuffle = new ArrayList<>();
-        ArrayList<SpotifyChoice> possiblePlay = new ArrayList<>();
+        // Play is identified by its OWN top-right toolbar bounds. Shuffle
+        // arrows are irrelevant and must never be clicked in this workflow.
+        final float displayDensity = getResources().getDisplayMetrics().density;
         while (!queue.isEmpty() && ++scanned <= MAX_SCAN) {
             AccessibilityNodeInfo n = queue.removeFirst();
             if (!n.isVisibleToUser() || n.isPassword()) continue;
@@ -1339,19 +1337,20 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                         asString(n.getContentDescription()) + " " +
                         asString(n.getViewIdResourceName());
                     String selfDesc = asString(n.getContentDescription());
-                    if (spotifyTextMatches(SpotifyUiLabels.Target.PLAY, n))
-                        possiblePlay.add(new SpotifyChoice(control,selfDesc,r,100));
-                    if (spotifyTextMatches(SpotifyUiLabels.Target.SHUFFLE, n))
-                        possibleShuffle.add(new SpotifyChoice(control,
-                            selfDesc + " " + asString(control.getContentDescription()),r,100));
                     if (spotifyTextMatches(target,n)) {
                         // Don't target a control under Spotify's bottom mini player.
                         int score = 100;
                         if (target == SpotifyUiLabels.Target.LIBRARY)
                             score += r.centerY() / 15;
                         if (target == SpotifyUiLabels.Target.PLAY) {
-                            if (r.centerX() <= rootBounds.centerX() ||
-                                r.centerY() > rootBounds.bottom - Math.max(65,rootBounds.height()/8))
+                            // Only the large Play in the UPPER-RIGHT of the
+                            // playlist page. Never the bottom mini-player,
+                            // a track's small Play, or any arrow icon.
+                            if (!SpotifyUiLabels.playlistPlayAt(
+                                    r.left,r.top,r.right,r.bottom,
+                                    rootBounds.left,rootBounds.top,
+                                    rootBounds.right,rootBounds.bottom,
+                                    displayDensity))
                                 score = 0;
                             else score += Math.min(80,r.width()/3);
                         }
@@ -1367,37 +1366,6 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             }
         }
         if (scanned > MAX_SCAN) return SpotifyStep.WAIT;
-        if (target == SpotifyUiLabels.Target.SHUFFLE) {
-            float density = getResources().getDisplayMetrics().density;
-            matches.removeIf(c -> {
-                for (SpotifyChoice play : possiblePlay) {
-                    Rect a=c.bounds, b=play.bounds;
-                    if (SpotifyUiLabels.toolbarPair(a.left,a.top,a.right,a.bottom,
-                        b.left,b.top,b.right,b.bottom,density)) return false;
-                }
-                return true;
-            });
-        }
-        if (target == SpotifyUiLabels.Target.PLAY) {
-            // Prefer the visible green playlist Play adjacent to Shuffle.
-            for (SpotifyChoice c : possibleShuffle) {
-                if (shuffleBounds == null || c.bounds.width() < shuffleBounds.width())
-                    shuffleBounds = c.bounds;
-            }
-            if (shuffleBounds == null) {
-                // Without the reference shuffle icon we cannot distinguish the
-                // requested large green Play from a mini-player/individual track.
-                return SpotifyStep.WAIT;
-            }
-            final Rect shuffle = shuffleBounds;
-            final int minimumPlaySize = Math.round(36f * getResources()
-                .getDisplayMetrics().density);
-            matches.removeIf(c -> c.bounds.centerX() <= shuffle.centerX() ||
-                c.bounds.width() < minimumPlaySize ||
-                c.bounds.height() < minimumPlaySize ||
-                Math.abs(c.bounds.centerY()-shuffle.centerY()) > Math.max(
-                    shuffle.height()*2,rootBounds.height()/7));
-        }
         if (matches.isEmpty()) return SpotifyStep.WAIT;
         // For Library choose the bottom tab, which is the last control.
         SpotifyChoice best = null;
