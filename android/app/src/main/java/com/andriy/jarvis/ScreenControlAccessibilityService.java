@@ -628,7 +628,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                             if (spotifyPlayback == null)
                                 spotifyPlayback = new SpotifyPlaybackController(
                                     ScreenControlAccessibilityService.this);
-                            spotifyPlayback.start(selection, new SpotifyPlaybackController.Listener() {
+                            spotifyPlayback.start(selection,raw,new SpotifyPlaybackController.Listener() {
                                 @Override public void onProgress(String progress) {
                                     if (sessionActive) toast(progress);
                                 }
