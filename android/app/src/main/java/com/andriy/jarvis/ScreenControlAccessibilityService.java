@@ -120,6 +120,273 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             packageName.contentEquals(focused.getPackageName());
     }
 
+    /** Money Manager (Freeman): only the exact installed package can be
+     * targeted. Financial amounts, notes and account names never leave the
+     * device. A single user-initiated command cannot trigger bank transfers. */
+    public enum FinanceScreen { HOME, CATEGORY, ACCOUNTS, AMOUNT, UNKNOWN }
+    public enum FinanceStep { WAIT, TAPPED, BLOCKED }
+
+    private AccessibilityNodeInfo financeRoot() {
+        AccessibilityNodeInfo root=currentExternalRoot();
+        return root!=null && root.isVisibleToUser() &&
+            root.getPackageName()!=null &&
+            "com.freeman.moneymanager".contentEquals(root.getPackageName())
+            ? root : null;
+    }
+
+    public static boolean financeVisible() {
+        ScreenControlAccessibilityService s=connected.get();
+        return s!=null && s.sessionActive && s.financeRoot()!=null;
+    }
+
+    private static String financeLabel(AccessibilityNodeInfo node) {
+        return asString(node.getText())+" "+asString(node.getContentDescription())+
+            " "+asString(node.getHintText());
+    }
+    private static boolean financeLabelEquals(AccessibilityNodeInfo node,String text) {
+        return FinanceManagerUiLabels.exact(asString(node.getText()),text) ||
+            FinanceManagerUiLabels.exact(asString(node.getContentDescription()),text);
+    }
+
+    private FinanceScreen detectFinanceScreen(AccessibilityNodeInfo root) {
+        if(root==null)return FinanceScreen.UNKNOWN;
+        ArrayDeque<AccessibilityNodeInfo> q=new ArrayDeque<>();
+        q.add(root);
+        int visited=0;
+        boolean home=false,transactions=false,add=false,expense=false,
+            income=false,transfer=false,accounts=false,accountName=false,
+            notes=false,seven=false,eight=false,nine=false;
+        while(!q.isEmpty()&&++visited<=MAX_SCAN){
+            AccessibilityNodeInfo n=q.removeFirst();
+            if(!n.isVisibleToUser())continue;
+            String label=financeLabel(n);
+            String norm=FinanceManagerUiLabels.normalize(label);
+            if(norm.contains("менеджер фінансів"))home=true;
+            if(financeLabelEquals(n,"Транзакції"))transactions=true;
+            if(financeLabelEquals(n,"Додати"))add=true;
+            if(financeLabelEquals(n,"Витрата"))expense=true;
+            if(financeLabelEquals(n,"Дохід"))income=true;
+            if(financeLabelEquals(n,"Переказ"))transfer=true;
+            if(financeLabelEquals(n,"Рахунки"))accounts=true;
+            if(financeLabelEquals(n,"готівка")||financeLabelEquals(n,"карта моно"))
+                accountName=true;
+            if(norm.contains("примітка"))notes=true;
+            if(financeLabelEquals(n,"7"))seven=true;
+            if(financeLabelEquals(n,"8"))eight=true;
+            if(financeLabelEquals(n,"9"))nine=true;
+            for(int i=0;i<n.getChildCount();i++) {
+                AccessibilityNodeInfo child=n.getChild(i);
+                if(child!=null)q.addLast(child);
+            }
+        }
+        if(visited>MAX_SCAN)return FinanceScreen.UNKNOWN;
+        if(accounts && accountName)return FinanceScreen.ACCOUNTS;
+        if(add && expense && income && transfer && notes &&
+            seven && eight && nine)return FinanceScreen.AMOUNT;
+        if(add && expense && income && transfer)return FinanceScreen.CATEGORY;
+        if(home && transactions)return FinanceScreen.HOME;
+        return FinanceScreen.UNKNOWN;
+    }
+
+    public static FinanceScreen financeScreen() {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null || !s.sessionActive)return FinanceScreen.UNKNOWN;
+        AccessibilityNodeInfo root=s.financeRoot();
+        return root==null?FinanceScreen.UNKNOWN:s.detectFinanceScreen(root);
+    }
+
+    private AccessibilityNodeInfo findFinanceText(AccessibilityNodeInfo root,
+                                                   String exact) {
+        ArrayDeque<AccessibilityNodeInfo> q=new ArrayDeque<>();
+        q.add(root);
+        AccessibilityNodeInfo found=null;
+        int scanned=0;
+        while(!q.isEmpty() && ++scanned<=MAX_SCAN) {
+            AccessibilityNodeInfo n=q.removeFirst();
+            if(!n.isVisibleToUser() || !n.isEnabled() || n.isPassword())continue;
+            if(financeLabelEquals(n,exact)) {
+                if(found!=null) {
+                    Rect prev=new Rect(),cur=new Rect();
+                    found.getBoundsInScreen(prev);
+                    n.getBoundsInScreen(cur);
+                    if(!prev.equals(cur) && !prev.contains(cur) &&
+                        !cur.contains(prev))return null; // Ambiguous
+                    if(cur.width()*cur.height()<prev.width()*prev.height())
+                        found=n;
+                }else found=n;
+            }
+            for(int i=0;i<n.getChildCount();i++) {
+                AccessibilityNodeInfo child=n.getChild(i);
+                if(child!=null)q.addLast(child);
+            }
+        }
+        return scanned>MAX_SCAN?null:found;
+    }
+
+    /** One user-initiated tap, re-checking the app, page and screen geometry.
+     * The fallback coordinates are ONLY those in the supplied screenshots. */
+    private FinanceStep financeTap(FinanceScreen expected, String name, int[] fallback) {
+        AccessibilityNodeInfo root=financeRoot();
+        if(root==null)return FinanceStep.WAIT;
+        if(detectFinanceScreen(root)!=expected)return FinanceStep.WAIT;
+        android.graphics.Point display=new android.graphics.Point();
+        android.view.Display screen=getDisplay();
+        if(screen==null){
+            WindowManager wm=(WindowManager)getSystemService(Context.WINDOW_SERVICE);
+            if(wm!=null)screen=wm.getDefaultDisplay();
+        }
+        if(screen==null)return FinanceStep.WAIT;
+        screen.getRealSize(display);
+        if(!FinanceManagerUiLabels.screenshotShape(display.x,display.y))
+            return FinanceStep.BLOCKED;
+        float x=-1,y=-1;
+        // Prefer a visible labelled node to coordinates, but always ensure
+        // its bounds fall inside the screenshot-calibrated target region.
+        if(name!=null && fallback!=null){
+            AccessibilityNodeInfo node=findFinanceText(root,name);
+            if(node!=null) {
+                Rect bounds=new Rect();
+                node.getBoundsInScreen(bounds);
+                float distance=Math.abs(bounds.centerX()-fallback[0])+
+                    Math.abs(bounds.centerY()-fallback[1]);
+                if(bounds.width()>5 && bounds.height()>5 &&
+                    distance<display.x*.34f) {
+                    x=bounds.exactCenterX();y=bounds.exactCenterY();
+                }
+            }
+        }
+        if(x<0||y<0){
+            if(fallback==null)return FinanceStep.WAIT;
+            x=fallback[0];y=fallback[1];
+        }
+        if(x<8||x>=display.x-8||y<display.y*.06f||y>=display.y*.95f)
+            return FinanceStep.BLOCKED;
+        Path path=new Path();
+        path.moveTo(x,y);
+        GestureDescription gesture=new GestureDescription.Builder()
+            .addStroke(new GestureDescription.StrokeDescription(path,0,100))
+            .build();
+        return dispatchTrackedGesture(gesture,(ok,description)->{
+            if(!ok && sessionActive)toast("Менеджер фінансів: "+description);
+        })?FinanceStep.TAPPED:FinanceStep.BLOCKED;
+    }
+
+    private int[] financeDisplaySize() {
+        android.view.Display screen=getDisplay();
+        if(screen==null){
+            WindowManager wm=(WindowManager)getSystemService(Context.WINDOW_SERVICE);
+            if(wm!=null)screen=wm.getDefaultDisplay();
+        }
+        if(screen==null)return null;
+        android.graphics.Point p=new android.graphics.Point();
+        screen.getRealSize(p);
+        return FinanceManagerUiLabels.screenshotShape(p.x,p.y)
+            ?new int[]{p.x,p.y}:null;
+    }
+
+    public static FinanceStep financePlus() {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null||!s.sessionActive)return FinanceStep.BLOCKED;
+        int[] d=s.financeDisplaySize();
+        return d==null?FinanceStep.BLOCKED:
+            s.financeTap(FinanceScreen.HOME,null,
+                FinanceManagerUiLabels.plusPoint(d[0],d[1]));
+    }
+    public static FinanceStep financeType(FinanceVoiceCommands.Kind kind) {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null||!s.sessionActive||kind==null)return FinanceStep.BLOCKED;
+        int[] d=s.financeDisplaySize();
+        return d==null?FinanceStep.BLOCKED:
+            s.financeTap(FinanceScreen.CATEGORY,
+                kind==FinanceVoiceCommands.Kind.EXPENSE?"Витрата":"Дохід",
+                FinanceManagerUiLabels.typePoint(kind,d[0],d[1]));
+    }
+    public static FinanceStep financeCategory(FinanceVoiceCommands.Entry entry) {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null||!s.sessionActive||entry==null)return FinanceStep.BLOCKED;
+        int[] d=s.financeDisplaySize();
+        if(d==null)return FinanceStep.BLOCKED;
+        int[] point=FinanceManagerUiLabels.categoryPoint(
+            entry.kind,entry.category,d[0],d[1]);
+        return point==null?FinanceStep.BLOCKED:
+            s.financeTap(FinanceScreen.CATEGORY,entry.category,point);
+    }
+    public static FinanceStep financeAccount(String account) {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null||!s.sessionActive)return FinanceStep.BLOCKED;
+        int[] d=s.financeDisplaySize();
+        if(d==null)return FinanceStep.BLOCKED;
+        String selected=account==null?"карта моно":account;
+        int[] point=FinanceManagerUiLabels.accountPoint(selected,d[0],d[1]);
+        return point==null?FinanceStep.BLOCKED:
+            s.financeTap(FinanceScreen.ACCOUNTS,selected,point);
+    }
+    public static FinanceStep financeOpenAccounts() {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null||!s.sessionActive)return FinanceStep.BLOCKED;
+        int[] d=s.financeDisplaySize();
+        return d==null?FinanceStep.BLOCKED:
+            s.financeTap(FinanceScreen.AMOUNT,null,
+                new int[]{Math.round(d[0]*45f/684f),
+                    Math.round(d[1]*942f/1536f)});
+    }
+    public static FinanceStep financeDigit(char digit) {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null||!s.sessionActive)return FinanceStep.BLOCKED;
+        int[] d=s.financeDisplaySize();
+        if(d==null)return FinanceStep.BLOCKED;
+        int[] point=FinanceManagerUiLabels.keypadPoint(digit,d[0],d[1]);
+        return point==null?FinanceStep.BLOCKED:
+            s.financeTap(FinanceScreen.AMOUNT,String.valueOf(digit),point);
+    }
+
+    /** Return only the large current transaction amount on the add screen,
+     * not an account balance or a keypad digit. */
+    public static String financeVisibleAmount() {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null||!s.sessionActive)return null;
+        AccessibilityNodeInfo root=s.financeRoot();
+        if(root==null||s.detectFinanceScreen(root)!=FinanceScreen.AMOUNT)
+            return null;
+        int[] d=s.financeDisplaySize();
+        if(d==null)return null;
+        ArrayDeque<AccessibilityNodeInfo> q=new ArrayDeque<>();
+        q.add(root);
+        String value=null;
+        int scanned=0;
+        while(!q.isEmpty()&&++scanned<=MAX_SCAN){
+            AccessibilityNodeInfo n=q.removeFirst();
+            if(!n.isVisibleToUser())continue;
+            Rect b=new Rect();
+            n.getBoundsInScreen(b);
+            if(b.centerX()>d[0]*.68f && b.centerY()>d[1]*.55f &&
+                b.centerY()<d[1]*.67f) {
+                String label=asString(n.getText()).trim();
+                if(label.matches("[0-9][0-9 ,.\\u00a0\\u202f]*")){
+                    if(value!=null && !value.equals(label))return null;
+                    value=label;
+                }
+            }
+            for(int i=0;i<n.getChildCount();i++){
+                AccessibilityNodeInfo child=n.getChild(i);
+                if(child!=null)q.addLast(child);
+            }
+        }
+        return scanned>MAX_SCAN?null:value;
+    }
+
+    public static FinanceStep financeConfirm(String expectedAmount) {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null||!s.sessionActive)return FinanceStep.BLOCKED;
+        String shown=financeVisibleAmount();
+        if(!FinanceManagerUiLabels.amountEquals(expectedAmount,shown))
+            return FinanceStep.WAIT;
+        int[] d=s.financeDisplaySize();
+        return d==null?FinanceStep.BLOCKED:
+            s.financeTap(FinanceScreen.AMOUNT,null,
+                FinanceManagerUiLabels.confirmPoint(d[0],d[1]));
+    }
+
     /** Only the user-requested Bolt passenger app may be controlled by these methods. */
     public enum BoltStep { WAIT, CLICKED, READY, ENTERED, SUBMITTED, BLOCKED }
 
