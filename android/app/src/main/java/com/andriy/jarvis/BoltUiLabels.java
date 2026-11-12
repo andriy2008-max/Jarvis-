@@ -18,6 +18,28 @@ public final class BoltUiLabels {
             v.equals("rides")||v.equals("rides let s go")||
             v.equals("ride")||v.equals("таксі")||v.equals("taxi");
     }
+    /** Visible on the passenger home screen above the four service tiles. */
+    public static boolean ridesHomeHeading(String s) {
+        String v=normal(s);
+        return v.equals("тебе підвезти") || v.equals("need a ride");
+    }
+
+    /** Bolt may render service tiles without accessible text. Only allow a
+     * screenshot-calibrated fallback when multiple independent HOME cues agree. */
+    public static boolean ridesHomeFallback(boolean heading,boolean plan,
+                                             boolean food,boolean send,boolean search) {
+        int cues=(plan?1:0)+(food?1:0)+(send?1:0)+(search?1:0);
+        return cues>=3 || (heading && cues>=2);
+    }
+
+    /** Center of the top-left rides tile on the user's 684x1536 portrait
+     * Bolt home screenshot; scale using the real display size, not root bounds. */
+    public static int[] screenshotRidesPoint(int width,int height) {
+        if(width<360 || height<width*2.05f || height>width*2.50f)return null;
+        return new int[]{Math.round(width*(184f/684f)),
+                         Math.round(height*(482f/1536f))};
+    }
+
     public static boolean destination(String s){
         String v=normal(s);
         return v.contains("куди")||v.contains("куда")||v.contains("where to")||
