@@ -11,6 +11,17 @@ public final class BoltUiLabelsTest {
         yes(!BoltUiLabels.rides("Мої поїздки"));
         yes(!BoltUiLabels.rides("Історія поїздок"));
         yes(!BoltUiLabels.rides("Замовити авто"));
+        yes(BoltUiLabels.ridesHomeHeading("Тебе підвезти?"));
+        yes(!BoltUiLabels.ridesHomeHeading("Маршрут"));
+        yes(BoltUiLabels.ridesHomeFallback(false,true,true,true,true));
+        yes(BoltUiLabels.ridesHomeFallback(false,true,true,false,true));
+        yes(BoltUiLabels.ridesHomeFallback(true,true,true,false,false));
+        yes(!BoltUiLabels.ridesHomeFallback(false,false,true,false,true));
+        yes(!BoltUiLabels.ridesHomeFallback(true,false,false,false,true));
+        int[] rides=BoltUiLabels.screenshotRidesPoint(684,1536);
+        yes(rides!=null && rides[0]==184 && rides[1]==482);
+        yes(BoltUiLabels.screenshotRidesPoint(1536,684)==null);
+        yes(BoltUiLabels.screenshotRidesPoint(684,900)==null);
         yes(BoltUiLabels.destination("Куди поїдемо?"));
         yes(BoltUiLabels.destination("destination_input"));
         yes(BoltUiLabels.destination("Місце висадки"));
