@@ -48,6 +48,13 @@ public final class BoltUiLabels {
             y>height*.18f && y<height*.34f;
     }
 
+    /** Only submit a focused Bolt editor when it displays the exact address
+     * that Jarvis just inserted. Never submit empty or unrelated text. */
+    public static boolean typedDestinationMatches(String expected, CharSequence actual) {
+        return expected != null && !expected.trim().isEmpty() &&
+            expected.length() <= 250 && actual != null && expected.contentEquals(actual);
+    }
+
     public static boolean pickup(String s){
         String v=normal(s);
         return v.contains("звідки")||v.contains("откуда")||
