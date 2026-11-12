@@ -66,6 +66,11 @@ on:
       - 'android/app/src/main/java/com/andriy/jarvis/SpotifyMusicCommands.java'
       - 'android/app/src/main/java/com/andriy/jarvis/SpotifyUiLabels.java'
       - 'android/app/src/main/java/com/andriy/jarvis/SpotifyPlaybackController.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/SpotifyUriRules.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/SpotifyDirectSettings.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/SpotifyAppRemoteBridge.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/SpotifyDirectSettingsActivity.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/SpotifyUriRulesTest.java'
       - 'android/app/src/test/java/com/andriy/jarvis/SpotifyMusicCommandsTest.java'
       - 'android/app/src/test/java/com/andriy/jarvis/SpotifyUiLabelsTest.java'
       - 'android/app/src/test/java/com/andriy/jarvis/ScreenControlCommandsTest.java'
@@ -135,6 +140,7 @@ jobs:
             android/app/src/test/java/com/andriy/jarvis/BoltUiLabelsTest.java \
             android/app/src/main/java/com/andriy/jarvis/SpotifyMusicCommands.java \
             android/app/src/main/java/com/andriy/jarvis/SpotifyUiLabels.java \
+            android/app/src/main/java/com/andriy/jarvis/SpotifyUriRules.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisSearchRouting.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisVoicePause.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisWavEnvelope.java \
@@ -164,6 +170,7 @@ jobs:
             android/app/src/test/java/com/andriy/jarvis/CommandPatternsTest.java \
             android/app/src/test/java/com/andriy/jarvis/SpotifyMusicCommandsTest.java \
             android/app/src/test/java/com/andriy/jarvis/SpotifyUiLabelsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/SpotifyUriRulesTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisSearchRoutingTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisVoicePauseTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisWavEnvelopeTest.java \
@@ -194,6 +201,7 @@ jobs:
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.CommandPatternsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyMusicCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyUiLabelsTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyUriRulesTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisSearchRoutingTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisVoicePauseTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisWavEnvelopeTest
