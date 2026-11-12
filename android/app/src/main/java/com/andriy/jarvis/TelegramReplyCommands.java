@@ -9,7 +9,7 @@ import java.util.regex.Pattern;
  * command is always necessary. No bots, notification tricks or auto-replies.
  */
 public final class TelegramReplyCommands {
-    public enum Kind { DRAFT, SEND, CANCEL, STATUS, HELP }
+    public enum Kind { DRAFT, DRAFT_AUTO, SEND, CANCEL, STATUS, HELP }
     public static final class Request {
         public final Kind kind;
         public final String recipient; // mandatory for MTProto direct messages
@@ -37,6 +37,9 @@ public final class TelegramReplyCommands {
     private static final Pattern TELEGRAM_INTENT=Pattern.compile(
         COMMAND_PREFIX+"(?:\\s|$|[:;,]).*$"
     );
+    private static final Pattern REPLY_FREE=Pattern.compile(
+        COMMAND_PREFIX+"\\s+(.+)$"
+    );
 
     private TelegramReplyCommands(){}
 
@@ -61,10 +64,19 @@ public final class TelegramReplyCommands {
         Matcher m=REPLY.matcher(input);
         if(!m.matches())m=REPLY_SAY.matcher(input);
         if(!m.matches())m=REPLY_GREETING.matcher(input);
-        // Don't turn a Telegram message into a generic "write to screen"
-        // action when speech recognition omitted the message separator.
-        if(!m.matches())return TELEGRAM_INTENT.matcher(input).matches()
-            ? new Request(Kind.HELP,null,null) : null;
+        if(!m.matches()){
+            Matcher free=REPLY_FREE.matcher(input);
+            if(free.matches()) {
+                String rest=free.group(1).trim();
+                if(rest.length()<=1100 && !rest.isEmpty())
+                    // TDLib resolves the longest exact chat-title prefix;
+                    // the remaining words become the body. No guessing by AI.
+                    return new Request(Kind.DRAFT_AUTO,null,rest);
+            }
+            // Never pass an attempted Telegram command to generic text insertion.
+            return TELEGRAM_INTENT.matcher(input).matches()
+                ? new Request(Kind.HELP,null,null) : null;
+        }
         String contact=m.group(1)==null?null:m.group(1).trim();
         if(contact!=null && (contact.isEmpty() ||
             contact.equalsIgnoreCase("повідомлення")))contact=null;
@@ -85,5 +97,30 @@ public final class TelegramReplyCommands {
     public static boolean exactContact(String asked,String actual){
         String a=nameKey(asked),b=nameKey(actual);
         return !a.isEmpty() && a.equals(b);
+    }
+
+    /** Only a known Telegram chat title may delimit the voice command.
+     * Return null when that title is not the exact prefix, or no body follows.
+     * Preserve the dictated message case and punctuation. */
+    public static String messageAfterContact(String speech,String chatTitle) {
+        if(speech==null || chatTitle==null || chatTitle.isEmpty())return null;
+        String[] words=speech.trim().split("\\s+");
+        if(words.length<2)return null;
+        StringBuilder title=new StringBuilder();
+        for(int i=0;i<words.length-1;i++){
+            if(i>0)title.append(' ');
+            title.append(words[i]);
+            if(exactContact(title.toString(),chatTitle)){
+                StringBuilder body=new StringBuilder();
+                for(int j=i+1;j<words.length;j++){
+                    if(body.length()>0)body.append(' ');
+                    body.append(words[j]);
+                }
+                String text=body.toString().trim();
+                return !text.isEmpty() && text.length()<=1000 ? text : null;
+            }
+            if(title.length()>100)return null;
+        }
+        return null;
     }
 }
