@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker, {
   validateInput, extractText, safeBearer, validAttachment,
-  extractSources, extractImage, createPayload,
+  extractSources, extractImage, createPayload, providerErrorKind,
 } from '../src/index.mjs';
 
 const token = 'local_testing_token_please_rotate';
@@ -126,6 +126,30 @@ test('live web and image generation produce attributed, optional output',async()
     assert.equal(payloads[0].tools[0].type,'web_search');
     assert.equal(payloads[1].tools[0].type,'image_generation');
   } finally {globalThis.fetch=prior;}
+});
+
+test('AI provider errors are classified without revealing raw diagnostics',async()=>{
+  assert.equal(providerErrorKind(401,'invalid_api_key'),'invalid_api_key');
+  assert.equal(providerErrorKind(429,'insufficient_quota'),'billing_limit');
+  assert.equal(providerErrorKind(403,'organization_verification_required'),'verification_required');
+  assert.equal(providerErrorKind(404,'model_not_found'),'model_unavailable');
+  assert.equal(providerErrorKind(429,'rate_limit_exceeded'),'rate_limit');
+  assert.equal(providerErrorKind(400,'invalid_request_error'),'invalid_request');
+  const old=globalThis.fetch;
+  globalThis.fetch=async()=>new Response(JSON.stringify({
+    error:{code:'insufficient_quota',message:'Sensitive provider diagnostic'},
+  }),{status:429,headers:{'Content-Type':'application/json'}});
+  try{
+    const response=await worker.fetch(request('/chat',token,JSON.stringify({
+      message:'Намалюй корову',mode:'image',
+    })),env);
+    assert.equal(response.status,502);
+    const data=await response.json();
+    assert.equal(data.reason,'billing_limit');
+    assert.equal(data.mode,'image');
+    assert.equal(data.provider_status,429);
+    assert.equal(JSON.stringify(data).includes('Sensitive provider diagnostic'),false);
+  }finally{globalThis.fetch=old;}
 });
 
 test('bad JSON and excessive payload are rejected early',async()=>{

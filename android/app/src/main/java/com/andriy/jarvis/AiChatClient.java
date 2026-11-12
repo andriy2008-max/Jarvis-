@@ -237,8 +237,32 @@ public final class AiChatClient {
                 if (status == 400) throw new Exception(
                     "Сервер не прийняв фото або документ. Перевір, чи оновлено Worker.");
                 if (status == 413) throw new Exception("Файл завеликий для сервера.");
-                if (status == 502) throw new Exception(
-                    "Модель або інструмент ШІ недоступний. Перевір налаштування API.");
+                if (status == 502) {
+                    String reason = "";
+                    int providerStatus = 0;
+                    try (InputStream details = conn.getErrorStream()) {
+                        if (details != null) {
+                            JSONObject diagnostic = new JSONObject(readLimited(details));
+                            reason = diagnostic.optString("reason","");
+                            providerStatus = diagnostic.optInt("provider_status",0);
+                        }
+                    } catch (Exception ignored) { }
+                    if ("invalid_api_key".equals(reason))
+                        throw new Exception("OpenAI API відхилив ключ. Перевір OPENAI_API_KEY у Cloudflare.");
+                    if ("billing_limit".equals(reason))
+                        throw new Exception("Недостатньо коштів або досягнуто ліміт OpenAI API. Перевір Billing.");
+                    if ("verification_required".equals(reason))
+                        throw new Exception("Для генерації зображень потрібна перевірка організації OpenAI API.");
+                    if ("model_unavailable".equals(reason))
+                        throw new Exception("Обрана модель недоступна цьому API-проєкту. Перевір OPENAI_IMAGE_MODEL у Cloudflare.");
+                    if ("permission_denied".equals(reason))
+                        throw new Exception("API-проєкт не має дозволу на цей інструмент або модель.");
+                    if ("invalid_request".equals(reason))
+                        throw new Exception("OpenAI API відхилив параметри запиту. Код HTTP " + providerStatus + ".");
+                    if ("provider_unavailable".equals(reason))
+                        throw new Exception("Сервіс OpenAI тимчасово недоступний. Спробуй пізніше.");
+                    throw new Exception("Модель або інструмент ШІ недоступний. Перевір налаштування API.");
+                }
                 throw new Exception("ШІ-сервер відповів помилкою HTTP " + status + ".");
             }
             try (InputStream input = conn.getInputStream()) {

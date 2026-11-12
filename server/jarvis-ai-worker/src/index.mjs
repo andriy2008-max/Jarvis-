@@ -145,6 +145,27 @@ function extractImage(output) {
   return null;
 }
 
+/**
+ * Map provider error codes to a bounded allowlist. Never return OpenAI's raw
+ * error text, request metadata, response bodies or credentials to Android.
+ */
+function providerErrorKind(status,code) {
+  if (status === 401 || code === 'invalid_api_key') return 'invalid_api_key';
+  if (code === 'insufficient_quota' || code === 'billing_hard_limit_reached' ||
+      code === 'billing_not_active' || code === 'usage_limit_reached')
+    return 'billing_limit';
+  if (code === 'organization_verification_required' ||
+      code === 'organization_not_verified') return 'verification_required';
+  if (code === 'model_not_found' || code === 'model_not_available' ||
+      code === 'model_access_denied') return 'model_unavailable';
+  if (status === 403 || code === 'access_denied' ||
+      code === 'permission_denied') return 'permission_denied';
+  if (status === 429 || code === 'rate_limit_exceeded') return 'rate_limit';
+  if (status === 400 || status === 422) return 'invalid_request';
+  if (status >= 500) return 'provider_unavailable';
+  return 'provider_error';
+}
+
 function createPayload(body, input, env) {
   const mode = body.mode ?? 'chat';
   const payload = {
@@ -195,8 +216,17 @@ export default {
       });
     } catch { return json({error:'Model provider unavailable'},502); }
     if (!upstream.ok) {
-      if (upstream.status === 429) return json({error:'AI provider rate limit reached'},429);
-      return json({error:'AI provider error',provider_status:upstream.status},502);
+      let providerCode = '';
+      try {
+        const details = await upstream.json();
+        if (typeof details?.error?.code === 'string')
+          providerCode = details.error.code.slice(0,100);
+      } catch { /* The provider may return no JSON; never forward raw text. */ }
+      const reason = providerErrorKind(upstream.status,providerCode);
+      // Preserve 429 so existing clients keep showing the rate-limit message.
+      const status = reason === 'rate_limit' ? 429 : 502;
+      return json({error:'AI provider error',provider_status:upstream.status,
+        reason,mode:body.mode || 'chat'},status);
     }
     let data;
     try { data = await upstream.json(); } catch { return json({error:'Invalid AI response'},502); }
@@ -210,4 +240,4 @@ export default {
     return json(result);
   },
 };
-export {validateInput,extractText,safeBearer,validAttachment,extractSources,extractImage,createPayload};
+export {validateInput,extractText,safeBearer,validAttachment,extractSources,extractImage,createPayload,providerErrorKind};
