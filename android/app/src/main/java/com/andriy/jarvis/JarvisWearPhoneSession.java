@@ -207,6 +207,23 @@ public final class JarvisWearPhoneSession {
                 (ok,status) -> out.reply(ok,status,token,false));
             return;
         }
+        if(FinanceManagerController.isRunning()) {
+            if(FinanceVoiceCommands.cancel(command)) {
+                FinanceManagerController.cancel();
+                out.reply(true,"Зупинив фінансовий запис.",session,false);
+            } else out.reply(false,"Фінансова команда ще виконується.",session,false);
+            return;
+        }
+        if(FinanceVoiceCommands.parse(command)!=null) {
+            final String token=session;
+            FinanceManagerController.start(context,command,new FinanceManagerController.Listener(){
+                @Override public void onProgress(String detail) { }
+                @Override public void onFinished(boolean success,String detail) {
+                    out.reply(success,detail,token,false);
+                }
+            });
+            return;
+        }
         SpotifyMusicCommands.Kind music = SpotifyMusicCommands.parse(command);
         if (music != null) {
             if (spotify == null) spotify = new SpotifyPlaybackController(context);
@@ -283,7 +300,8 @@ public final class JarvisWearPhoneSession {
         expiry = () -> {
             if (!session.isEmpty() && SystemClock.elapsedRealtime() >= deadline) {
                 if ((sequences != null && sequences.isRunning()) ||
-                    (spotify != null && spotify.isRunning())) extend();
+                    (spotify != null && spotify.isRunning()) ||
+                    FinanceManagerController.isRunning()) extend();
                 else endSession();
             }
         };
@@ -298,6 +316,7 @@ public final class JarvisWearPhoneSession {
         deadline = 0L;
         if (sequences != null) sequences.cancel();
         if (spotify != null) spotify.cancel();
+        if(FinanceManagerController.isRunning())FinanceManagerController.cancel();
         ScreenControlAccessibilityService.stop();
         JarvisPhoneMode.setActive(false);
     }

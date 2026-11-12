@@ -32,6 +32,8 @@
     <queries>
         <package android:name="com.shazam.android" />
         <package android:name="ee.mtakso.client" />
+        <!-- Explicit local voice entry into Money Manager's UI only. -->
+        <package android:name="com.freeman.moneymanager" />
         <package android:name="com.arlosoft.macrodroid" />
         <!-- Spotify: user-requested app launch and verified accessibility controls. -->
         <package android:name="com.spotify.music" />

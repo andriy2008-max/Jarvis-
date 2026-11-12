@@ -3534,6 +3534,23 @@ public final class MainActivity extends Activity implements RecognitionListener 
             setStatus("Для ШІ після струшування двічі скажи «Джарвіс».");
             return;
         }
+        if (!isWatchDevice && FinanceManagerController.isRunning()) {
+            if(FinanceVoiceCommands.cancel(raw))FinanceManagerController.cancel();
+            else setStatus("Фінансовий запис виконується. Скажи «Скасуй витрату», щоб зупинити.");
+            return;
+        }
+        if (!isWatchDevice && FinanceVoiceCommands.parse(raw)!=null) {
+            FinanceManagerController.start(this,raw,new FinanceManagerController.Listener(){
+                @Override public void onProgress(String detail){setStatus(detail);}
+                @Override public void onFinished(boolean ok,String detail){
+                    if(isFinishing()||isDestroyed())return;
+                    appendDialogue("Джарвіс",detail);
+                    setStatus(detail);
+                    if(!ok && voiceEnabled)speakReply(detail);
+                }
+            });
+            return;
+        }
         if (!isWatchDevice && JarvisTaxiCommands.destination(raw) != null) {
             BoltTaxiController.start(this, raw, new BoltTaxiController.Listener() {
                 @Override public void onProgress(String detail) {setStatus(detail);}
@@ -3884,6 +3901,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         cancelPendingWakeCommand();
         if (commandSequenceExecutor != null) commandSequenceExecutor.cancel();
         if (spotifyPlayback != null) spotifyPlayback.cancel();
+        if(FinanceManagerController.isRunning())FinanceManagerController.cancel();
         cancelAutoWakeSchedule();
         wakeConversation.end();
         // Never cancel AlarmManager timers when Android destroys the UI.

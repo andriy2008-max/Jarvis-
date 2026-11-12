@@ -1073,6 +1073,20 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                             else toast("Зачекай завершення Spotify або скажи «Скасуй Spotify».");
                             return;
                         }
+                        if (FinanceManagerController.isRunning()) {
+                            if(FinanceVoiceCommands.cancel(raw))FinanceManagerController.cancel();
+                            else toast("Фінансовий запис триває. Скажи «Скасуй витрату».");
+                            return;
+                        }
+                        if(FinanceVoiceCommands.parse(raw)!=null) {
+                            FinanceManagerController.start(
+                                ScreenControlAccessibilityService.this,raw,
+                                new FinanceManagerController.Listener(){
+                                    @Override public void onProgress(String detail){toast(detail);}
+                                    @Override public void onFinished(boolean ok,String detail){toast(detail);}
+                                });
+                            return;
+                        }
                         if (JarvisTaxiCommands.destination(raw) != null) {
                             BoltTaxiController.start(ScreenControlAccessibilityService.this,
                                 raw,new BoltTaxiController.Listener() {
