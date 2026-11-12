@@ -34,7 +34,11 @@ public final class SpotifyMusicCommands {
         if (!shuffle) title=title.replaceFirst(without,"").trim();
         title=title.replaceAll("^[«\"']+|[»\"']+$","").trim();
         if (title.isEmpty() || title.length()>75 ||
-            title.equals("без") || title.equals("перемішування")) return null;
+            title.equals("без") || title.equals("перемішування") ||
+            title.equals("без перемішування") ||
+            title.equals("без перемешивания") ||
+            title.equals("без шафлу") || title.equals("без shuffle"))
+            return null;
         return new NamedPlaylist(title,shuffle);
     }
 
