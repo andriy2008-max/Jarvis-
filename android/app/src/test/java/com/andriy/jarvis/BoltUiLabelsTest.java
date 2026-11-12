@@ -25,6 +25,11 @@ public final class BoltUiLabelsTest {
         yes(!BoltUiLabels.dropoffRegion(200,240,684,1536));
         yes(BoltUiLabels.screenshotDropoffPoint(1536,684)==null);
         yes(!BoltUiLabels.destination("Підтвердити"));
+        yes(BoltUiLabels.typedDestinationMatches("вулиця Шевченка 5", "вулиця Шевченка 5"));
+        yes(!BoltUiLabels.typedDestinationMatches("вулиця Шевченка 5", "вулиця Шевченка 50"));
+        yes(!BoltUiLabels.typedDestinationMatches("вулиця Шевченка 5", "інша адреса"));
+        yes(!BoltUiLabels.typedDestinationMatches("", ""));
+        yes(!BoltUiLabels.typedDestinationMatches("вулиця Шевченка 5", null));
         yes(BoltUiLabels.pickup("Звідки?"));
         yes(BoltUiLabels.pickup("Pickup location"));
         yes(!BoltUiLabels.pickup("Куди?"));
