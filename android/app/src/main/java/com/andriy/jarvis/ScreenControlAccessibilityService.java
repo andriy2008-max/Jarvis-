@@ -316,10 +316,16 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if(s==null||!s.sessionActive)return FinanceStep.BLOCKED;
         int[] d=s.financeDisplaySize();
         if(d==null)return FinanceStep.BLOCKED;
-        String selected=account==null?"карта моно":account;
-        int[] point=FinanceManagerUiLabels.accountPoint(selected,d[0],d[1]);
+        // Without an explicit account, dismiss the sheet using its X.
+        // This preserves the user's CURRENT app selection (cash/card/etc),
+        // rather than guessing from the screenshot's old selection.
+        if(account==null)
+            return s.financeTap(FinanceScreen.ACCOUNTS,null,
+                new int[]{Math.round(d[0]*46f/684f),
+                    Math.round(d[1]*805f/1536f)});
+        int[] point=FinanceManagerUiLabels.accountPoint(account,d[0],d[1]);
         return point==null?FinanceStep.BLOCKED:
-            s.financeTap(FinanceScreen.ACCOUNTS,selected,point);
+            s.financeTap(FinanceScreen.ACCOUNTS,account,point);
     }
     public static FinanceStep financeOpenAccounts() {
         ScreenControlAccessibilityService s=connected.get();
