@@ -31,7 +31,7 @@ public final class TelegramReplyCommands {
     private TelegramReplyCommands(){}
 
     public static Request parse(String raw) {
-        if(raw==null)return null;
+        if(raw==null || raw.contains("\n") || raw.contains("\r"))return null;
         String input=raw.trim()
             .replaceFirst("(?iu)^(?:джарвіс|джарвис|jarvis)[,\\s:—-]*","");
         String shortForm=CommandPatterns.normalize(input);
