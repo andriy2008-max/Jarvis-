@@ -104,6 +104,39 @@ public final class SpotifyUiLabels {
             Math.abs((pt+pb)-(st+sb))/2f<=Math.max(sh,ph)*.55f;
     }
 
+    /** A tap position to the LEFT of the large top-right Play button.
+     * This uses visible Play bounds, not the label of another arrow icon.
+     * The gap in the Spotify screenshot is approximately one Play diameter. */
+    public static int[] shufflePointFromPlay(int pl,int pt,int pr,int pb,
+                                              int fl,int ft,int fr,int fb,
+                                              float density) {
+        if (!playlistPlayAt(pl,pt,pr,pb,fl,ft,fr,fb,density)) return null;
+        int diameter = Math.max(pr-pl,pb-pt);
+        int x = Math.round((pl+pr)/2f - diameter*1.04f);
+        int y = Math.round((pt+pb)/2f);
+        return safeRightShufflePoint(x,y,fl,ft,fr,fb) ? new int[]{x,y} : null;
+    }
+
+    /** Verified reference: user's Pixel screenshot, 684 × 1536 pixels,
+     * right shuffle centre (530, 369), not left download centre (48, 369).
+     * Proportionally scale only for near-identical portrait screen shapes. */
+    public static int[] screenshotShufflePoint(int width,int height) {
+        if (width<360 || height<width*2.05f || height>width*2.45f) return null;
+        int x=Math.round(width*(530f/684f));
+        int y=Math.round(height*(369f/1536f));
+        return safeRightShufflePoint(x,y,0,0,width,height)
+            ? new int[]{x,y} : null;
+    }
+
+    /** Refuse any coordinate outside the right-hand playlist action toolbar. */
+    public static boolean safeRightShufflePoint(int x,int y,int left,int top,
+                                                int right,int bottom) {
+        int w=right-left,h=bottom-top;
+        return w>0 && h>0 &&
+            x>left+w*.66f && x<left+w*.87f &&
+            y>top+h*.10f && y<top+h*.53f;
+    }
+
     public static boolean shuffleOn(String label, boolean selected, boolean checked) {
         String s = normalize(label);
         if (selected || checked) return true;
