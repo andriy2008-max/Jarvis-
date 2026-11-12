@@ -2,9 +2,6 @@ name: Android APK (Jarvis)
 
 # Manual only. Building or publishing must be explicitly requested.
 on:
-  push:
-    paths:
-      - '.github/workflows/android-apk.yml'
   workflow_dispatch:
     inputs:
       variant:
@@ -18,9 +15,6 @@ on:
 
 permissions:
   contents: write
-
-env:
-  JARVIS_BUILD_VARIANT: ${{ inputs.variant || 'stable' }}
 
 jobs:
   apk:
@@ -73,7 +67,7 @@ jobs:
             java -cp android/build/parser-tests "com.andriy.jarvis.$test"
           done
       - name: Restore stable signing keystore (stable only)
-        if: env.JARVIS_BUILD_VARIANT == 'stable'
+        if: inputs.variant == 'stable'
         shell: bash
         env:
           JARVIS_SIGNING_KEYSTORE_BASE64: ${{ secrets.JARVIS_SIGNING_KEYSTORE_BASE64 }}
@@ -97,8 +91,8 @@ jobs:
           JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ "${{ env.JARVIS_BUILD_VARIANT }}" = stable ]; then
-            gradle -p android --no-daemon --stacktrace :app:assembleRelease -PjarvisArm64Only=true
+          if [ "${{ inputs.variant }}" = stable ]; then
+            gradle -p android --no-daemon --stacktrace :app:assembleRelease
           else
             gradle -p android --no-daemon --stacktrace :app:assembleDebug
           fi
@@ -110,8 +104,8 @@ jobs:
           JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ "${{ env.JARVIS_BUILD_VARIANT }}" = stable ]; then
-            gradle -p android --no-daemon --rerun-tasks --stacktrace :app:assembleRelease -PjarvisArm64Only=true
+          if [ "${{ inputs.variant }}" = stable ]; then
+            gradle -p android --no-daemon --rerun-tasks --stacktrace :app:assembleRelease
           else
             gradle -p android --no-daemon --rerun-tasks --stacktrace :app:assembleDebug
           fi
@@ -119,7 +113,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          variant='${{ env.JARVIS_BUILD_VARIANT }}'
+          variant='${{ inputs.variant }}'
           if [ "$variant" = stable ]; then
             apk='android/app/build/outputs/apk/release/app-release.apk'
             package='com.andriy.jarvis.stable'
@@ -153,13 +147,13 @@ jobs:
       - name: Upload verified APK as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: JARVIS-${{ env.JARVIS_VERSION_NAME }}-${{ env.JARVIS_BUILD_VARIANT }}-APK
+          name: JARVIS-${{ env.JARVIS_VERSION_NAME }}-${{ inputs.variant }}-APK
           path: |
-            android/dist/JARVIS-${{ env.JARVIS_VERSION_NAME }}-${{ env.JARVIS_BUILD_VARIANT }}.apk
-            android/dist/JARVIS-${{ env.JARVIS_VERSION_NAME }}-${{ env.JARVIS_BUILD_VARIANT }}.sha256
+            android/dist/JARVIS-${{ env.JARVIS_VERSION_NAME }}-${{ inputs.variant }}.apk
+            android/dist/JARVIS-${{ env.JARVIS_VERSION_NAME }}-${{ inputs.variant }}.sha256
           if-no-files-found: error
       - name: Publish stable signed APK to direct GitHub release
-        if: github.event_name == 'workflow_dispatch' && env.JARVIS_BUILD_VARIANT == 'stable'
+        if: inputs.variant == 'stable'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
