@@ -67,6 +67,10 @@ on:
       - 'android/app/src/main/java/com/andriy/jarvis/ScreenTargetMatcher.java'
       - 'android/app/src/test/java/com/andriy/jarvis/ScreenTargetMatcherTest.java'
       - 'android/app/src/main/java/com/andriy/jarvis/ScreenControlAccessibilityService.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisMacros.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisMacroActivity.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisForegroundApp.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/JarvisForegroundAppTest.java'
       - 'android/app/src/main/java/com/andriy/jarvis/SpotifyMusicCommands.java'
       - 'android/app/src/main/java/com/andriy/jarvis/SpotifyUiLabels.java'
       - 'android/app/src/main/java/com/andriy/jarvis/SpotifyPlaybackController.java'
@@ -143,6 +147,8 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/FinanceVoiceCommands.java \
             android/app/src/main/java/com/andriy/jarvis/FinanceManagerUiLabels.java \
             android/app/src/main/java/com/andriy/jarvis/TelegramReplyCommands.java \
+            android/app/src/main/java/com/andriy/jarvis/JarvisForegroundApp.java \
+            android/app/src/test/java/com/andriy/jarvis/JarvisForegroundAppTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisTaxiCommandsTest.java \
             android/app/src/test/java/com/andriy/jarvis/BoltUiLabelsTest.java \
             android/app/src/test/java/com/andriy/jarvis/FinanceVoiceCommandsTest.java \
@@ -211,6 +217,7 @@ jobs:
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.FinanceVoiceCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.FinanceManagerUiLabelsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.TelegramReplyCommandsTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisForegroundAppTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.CommandPatternsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyMusicCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyUiLabelsTest
