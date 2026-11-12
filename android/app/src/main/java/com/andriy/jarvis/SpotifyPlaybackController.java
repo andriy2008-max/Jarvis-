@@ -21,13 +21,17 @@ public final class SpotifyPlaybackController {
     private static final long POLL_MS = 430L;
     private static final long STAGE_TIMEOUT_MS = 20000L;
     private static final int MAX_LIBRARY_SCROLLS = 4;
+    private static final int MAX_NAMED_SCROLLS = 16;
+    private static final long NAMED_FIND_TIMEOUT_MS = 52000L;
 
-    private enum Stage { WAIT_APP, OPEN_LIBRARY, OPEN_COLLECTION, CHOOSE_RAP, SHUFFLE, PLAY }
+    private enum Stage { WAIT_APP, OPEN_LIBRARY, OPEN_COLLECTION, CHOOSE_RAP, SHUFFLE, SHUFFLE_OFF, PLAY }
 
     private final Context context;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable poll = this::tick;
     private SpotifyMusicCommands.Kind requested;
+    private String namedPlaylist;
+    private boolean shuffleRequested = true;
     private Listener listener;
     private Stage stage;
     private long stageStart;
@@ -42,7 +46,17 @@ public final class SpotifyPlaybackController {
     public boolean isRunning() { return active; }
 
     public void start(SpotifyMusicCommands.Kind kind, Listener callback) {
+        start(kind,null,callback);
+    }
+
+    public void start(SpotifyMusicCommands.Kind kind,String voice,Listener callback) {
         if (kind == null) return;
+        SpotifyMusicCommands.NamedPlaylist named = kind == SpotifyMusicCommands.Kind.PLAYLIST
+            ? SpotifyMusicCommands.namedPlaylist(voice) : null;
+        if (kind == SpotifyMusicCommands.Kind.PLAYLIST && named == null) {
+            if (callback!=null) callback.onFinished(false,"Назви плейлист після команди «Увімкни плейлист».");
+            return;
+        }
         if (active) {
             if (callback != null) callback.onFinished(false,
                 "Spotify вже виконує попередню команду. Скажи «Скасуй Spotify».");
@@ -85,6 +99,9 @@ public final class SpotifyPlaybackController {
         }
         temporaryControl = lease;
         requested = kind;
+        namedPlaylist = named == null ? null : named.name;
+        shuffleRequested = named == null || named.shuffle;
+        scrolled = 0;
         listener = callback;
         active = true;
         move(Stage.WAIT_APP, "Режим «Телефон»: очікую відкриття Spotify...");
@@ -109,7 +126,9 @@ public final class SpotifyPlaybackController {
             return;
         }
         long age = SystemClock.elapsedRealtime() - stageStart;
-        if (age > STAGE_TIMEOUT_MS) {
+        long limit = requested == SpotifyMusicCommands.Kind.PLAYLIST &&
+            stage == Stage.OPEN_COLLECTION ? NAMED_FIND_TIMEOUT_MS : STAGE_TIMEOUT_MS;
+        if (age > limit) {
             String reason;
             switch (stage) {
                 case WAIT_APP:
@@ -121,13 +140,16 @@ public final class SpotifyPlaybackController {
                 case OPEN_COLLECTION:
                     reason = requested == SpotifyMusicCommands.Kind.RAP
                         ? "Не знайшов «Пісні, що сподобалися» в бібліотеці."
-                        : "Не знайшов плейлист «Укр муз» у бібліотеці.";
+                        : requested == SpotifyMusicCommands.Kind.PLAYLIST
+                            ? "Не знайшов плейлист «"+namedPlaylist+"» у Моїй бібліотеці."
+                            : "Не знайшов плейлист «Укр муз» у бібліотеці.";
                     break;
                 case CHOOSE_RAP:
                     reason = "Не знайшов жанрову кнопку «Реп» у вподобаних піснях. " +
                         "Spotify може не показувати цей фільтр у твоєму акаунті.";
                     break;
                 case SHUFFLE:
+                case SHUFFLE_OFF:
                     reason = "Не знайшов кнопку перемішування на сторінці добірки. " +
                         "Значок може не мати доступного опису у Spotify.";
                     break;
@@ -150,27 +172,41 @@ public final class SpotifyPlaybackController {
                     SpotifyUiLabels.Target.LIBRARY, null)))
                     move(Stage.OPEN_COLLECTION, requested == SpotifyMusicCommands.Kind.RAP
                         ? "Чекаю «Пісні, що сподобалися»..."
-                        : "Шукаю плейлист «Укр муз»...");
+                        : requested == SpotifyMusicCommands.Kind.PLAYLIST
+                            ? "Шукаю плейлист «"+namedPlaylist+"» у бібліотеці..."
+                            : "Шукаю плейлист «Укр муз»...");
                 break;
-            case OPEN_COLLECTION:
-                SpotifyUiLabels.Target item = requested == SpotifyMusicCommands.Kind.RAP
-                    ? SpotifyUiLabels.Target.LIKED_SONGS
-                    : SpotifyUiLabels.Target.UKR_MUSIC;
-                if (successful(ScreenControlAccessibilityService.spotifyControl(item,null))) {
-                    move(requested == SpotifyMusicCommands.Kind.RAP ?
-                        Stage.CHOOSE_RAP : Stage.SHUFFLE,
+            case OPEN_COLLECTION: {
+                ScreenControlAccessibilityService.SpotifyStep found;
+                if (requested == SpotifyMusicCommands.Kind.PLAYLIST) {
+                    found = ScreenControlAccessibilityService.spotifyOpenNamedPlaylist(namedPlaylist);
+                } else {
+                    SpotifyUiLabels.Target item = requested == SpotifyMusicCommands.Kind.RAP
+                        ? SpotifyUiLabels.Target.LIKED_SONGS : SpotifyUiLabels.Target.UKR_MUSIC;
+                    found = ScreenControlAccessibilityService.spotifyControl(item,null);
+                }
+                if (successful(found)) {
+                    move(requested == SpotifyMusicCommands.Kind.RAP ? Stage.CHOOSE_RAP :
+                        !shuffleRequested ? Stage.SHUFFLE_OFF : Stage.SHUFFLE,
                         requested == SpotifyMusicCommands.Kind.RAP
                             ? "Чекаю кнопку жанру «Реп»..."
-                            : "Чекаю кнопки перемішування в «Укр муз»...");
-                } else if (requested == SpotifyMusicCommands.Kind.UKRAINIAN &&
-                           age >= 5500L + scrolled * 2600L &&
-                           scrolled < MAX_LIBRARY_SCROLLS &&
-                           ScreenControlAccessibilityService.spotifyScrollLibrary()) {
-                    scrolled++;
-                    if (listener != null) listener.onProgress(
-                        "Переглядаю бібліотеку Spotify: " + scrolled + "/" + MAX_LIBRARY_SCROLLS);
+                            : "Плейлист відкрито. Перевіряю перемішування...");
+                } else {
+                    boolean canScroll = requested == SpotifyMusicCommands.Kind.UKRAINIAN ||
+                        requested == SpotifyMusicCommands.Kind.PLAYLIST;
+                    int limitScroll = requested == SpotifyMusicCommands.Kind.PLAYLIST ?
+                        MAX_NAMED_SCROLLS : MAX_LIBRARY_SCROLLS;
+                    long scrollAfter = requested == SpotifyMusicCommands.Kind.PLAYLIST ?
+                        2200L + scrolled * 2500L : 5500L + scrolled * 2600L;
+                    if (canScroll && age >= scrollAfter && scrolled < limitScroll &&
+                        ScreenControlAccessibilityService.spotifyScrollLibrary()) {
+                        scrolled++;
+                        if (listener != null) listener.onProgress(
+                            "Переглядаю бібліотеку Spotify: "+scrolled+"/"+limitScroll);
+                    }
                 }
                 break;
+            }
             case CHOOSE_RAP:
                 if (successful(ScreenControlAccessibilityService.spotifyControl(
                     SpotifyUiLabels.Target.RAP_FILTER,
@@ -178,17 +214,35 @@ public final class SpotifyPlaybackController {
                     move(Stage.SHUFFLE, "Знайшов «Реп». Чекаю кнопку перемішування...");
                 break;
             case SHUFFLE:
-                if (successful(ScreenControlAccessibilityService.spotifyControl(
-                    SpotifyUiLabels.Target.SHUFFLE, pageTarget())))
-                    move(Stage.PLAY, "Перемішування увімкнено. Чекаю зелену кнопку Play...");
+            case SHUFFLE_OFF: {
+                boolean enable = stage == Stage.SHUFFLE;
+                ScreenControlAccessibilityService.SpotifyStep step =
+                    requested == SpotifyMusicCommands.Kind.PLAYLIST
+                        ? ScreenControlAccessibilityService.spotifyNamedPlaylistControl(
+                            SpotifyUiLabels.Target.SHUFFLE,namedPlaylist,enable)
+                        : ScreenControlAccessibilityService.spotifyControl(
+                            SpotifyUiLabels.Target.SHUFFLE,pageTarget());
+                if (successful(step))
+                    move(Stage.PLAY,enable
+                        ? "Перемішування ввімкнено. Чекаю Play..."
+                        : "Перемішування вимкнено. Чекаю Play...");
                 break;
-            case PLAY:
-                if (successful(ScreenControlAccessibilityService.spotifyControl(
-                    SpotifyUiLabels.Target.PLAY, pageTarget())))
+            }
+            case PLAY: {
+                ScreenControlAccessibilityService.SpotifyStep result =
+                    requested == SpotifyMusicCommands.Kind.PLAYLIST
+                        ? ScreenControlAccessibilityService.spotifyNamedPlaylistControl(
+                            SpotifyUiLabels.Target.PLAY,namedPlaylist,shuffleRequested)
+                        : ScreenControlAccessibilityService.spotifyControl(
+                            SpotifyUiLabels.Target.PLAY,pageTarget());
+                if (successful(result))
                     finish(true, requested == SpotifyMusicCommands.Kind.RAP
                         ? "Натиснув відтворення «Реп» у Spotify."
-                        : "Натиснув відтворення плейлиста «Укр муз» у Spotify.");
+                        : requested == SpotifyMusicCommands.Kind.PLAYLIST
+                            ? "Натиснув Play плейлиста «"+namedPlaylist+"» у Spotify."
+                            : "Натиснув відтворення плейлиста «Укр муз» у Spotify.");
                 break;
+            }
         }
         if (active) handler.postDelayed(poll, POLL_MS);
     }
@@ -209,6 +263,7 @@ public final class SpotifyPlaybackController {
         Listener cb = listener;
         listener = null;
         stage = null;
+        namedPlaylist = null;
         JarvisPhoneModeManager.Lease lease = temporaryControl;
         temporaryControl = null;
         // Always restore Jarvis' normal face, even on errors/cancellation.
