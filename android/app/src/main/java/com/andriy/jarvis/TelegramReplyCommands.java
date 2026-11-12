@@ -9,22 +9,33 @@ import java.util.regex.Pattern;
  * command is always necessary. No bots, notification tricks or auto-replies.
  */
 public final class TelegramReplyCommands {
-    public enum Kind { DRAFT, SEND, CANCEL, STATUS }
+    public enum Kind { DRAFT, SEND, CANCEL, STATUS, HELP }
     public static final class Request {
         public final Kind kind;
         public final String recipient; // mandatory for MTProto direct messages
         public final String text;      // draft body, never normalized
         private Request(Kind k,String r,String t){kind=k;recipient=r;text=t;}
     }
-    private static final Pattern REPLY=Pattern.compile(
+    private static final String COMMAND_PREFIX =
         "(?iu)^(?:відповідай|відповісти|дай\\s+відповідь|відправ\\s+відповідь|напиши|написати|відправ|надішли)\\s+"+
         "(?:(?:на\\s+повідомлення\\s+)?(?:у|в|через)\\s+)?"+
-        "(?:телеграм(?:і|і)?|telegram|тг)"+
-        "(?:\\s+([^:]{1,80}?))?\\s*:\\s*(.+)$"
+        "(?:телеграм(?:і)?|telegram|тг)";
+    private static final Pattern REPLY=Pattern.compile(
+        COMMAND_PREFIX+"(?:\\s+([^:]{1,80}?))?\\s*:\\s*(.+)$"
     );
     private static final Pattern REPLY_SAY=Pattern.compile(
-        "(?iu)^(?:відповідай|відповісти)\\s+(?:у|в|через)\\s+"+
-        "(?:телеграм(?:і)?|telegram|тг)\\s+(.{1,80}?)\\s+скажи\\s+(.+)$"
+        COMMAND_PREFIX+"\\s+(.{1,80}?)\\s+(?:скажи|текст|повідомлення)\\s+(.+)$"
+    );
+    // Speech recognition often drops punctuation. Support unambiguous
+    // "Яна Привіт, це тест" without guessing recipients from arbitrary text.
+    private static final Pattern REPLY_GREETING=Pattern.compile(
+        COMMAND_PREFIX+"\\s+(.{1,80}?)\\s+"+
+        "((?:привіт|вітаю|добрий\\s+день|доброго\\s+дня|"+
+        "добрий\\s+вечір|доброго\\s+вечора|"+
+        "добрий\\s+ранок|доброго\\s+ранку)(?:[!?,.:]|\\s|$).*)$"
+    );
+    private static final Pattern TELEGRAM_INTENT=Pattern.compile(
+        COMMAND_PREFIX+"(?:\\s|$|[:;,]).*$"
     );
 
     private TelegramReplyCommands(){}
@@ -49,7 +60,11 @@ public final class TelegramReplyCommands {
         }
         Matcher m=REPLY.matcher(input);
         if(!m.matches())m=REPLY_SAY.matcher(input);
-        if(!m.matches())return null;
+        if(!m.matches())m=REPLY_GREETING.matcher(input);
+        // Don't turn a Telegram message into a generic "write to screen"
+        // action when speech recognition omitted the message separator.
+        if(!m.matches())return TELEGRAM_INTENT.matcher(input).matches()
+            ? new Request(Kind.HELP,null,null) : null;
         String contact=m.group(1)==null?null:m.group(1).trim();
         if(contact!=null && (contact.isEmpty() ||
             contact.equalsIgnoreCase("повідомлення")))contact=null;
