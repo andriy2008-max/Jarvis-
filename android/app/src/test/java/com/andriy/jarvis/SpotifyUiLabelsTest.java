@@ -62,6 +62,26 @@ public final class SpotifyUiLabelsTest {
         if (SpotifyUiLabels.toolbarPair(27,350,68,391,
             573,330,650,410,2.6f))
             throw new AssertionError("LEFT download must never be shuffle");
+        int[] marked = SpotifyUiLabels.screenshotShufflePoint(684,1536);
+        if (marked==null || Math.abs(marked[0]-530)>1 ||
+            Math.abs(marked[1]-369)>1 || marked[0]<450)
+            throw new AssertionError("screenshot must target right crossed arrows");
+        int[] fullPixel = SpotifyUiLabels.screenshotShufflePoint(1080,2424);
+        if (fullPixel==null || Math.abs(fullPixel[0]-837)>2 ||
+            Math.abs(fullPixel[1]-582)>2)
+            throw new AssertionError("Pixel coordinate scaling");
+        int[] relative = SpotifyUiLabels.shufflePointFromPlay(
+            573,330,650,410,0,0,684,1536,2.6f);
+        if (relative==null || Math.abs(relative[0]-529)>6 ||
+            Math.abs(relative[1]-370)>2)
+            throw new AssertionError("right shuffle relative to Play");
+        if (SpotifyUiLabels.safeRightShufflePoint(48,369,0,0,684,1536))
+            throw new AssertionError("left download coordinate forbidden");
+        if (SpotifyUiLabels.screenshotShufflePoint(1536,684)!=null)
+            throw new AssertionError("landscape not calibrated");
+        if (SpotifyUiLabels.shufflePointFromPlay(573,1300,650,1380,
+            0,0,684,1536,2.6f)!=null)
+            throw new AssertionError("bottom mini-player not a shuffle anchor");
         if (SpotifyUiLabels.playlistPlayAt(573,1320,650,1400,
             0,0,684,1500,2.6f))
             throw new AssertionError("bottom mini player not playlist Play");
