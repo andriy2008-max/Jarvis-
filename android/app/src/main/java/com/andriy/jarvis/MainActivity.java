@@ -3309,7 +3309,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private JarvisSequenceExecutor commandSequenceExecutor;
     private SpotifyPlaybackController spotifyPlayback;
 
-    private void startSpotifyMusic(SpotifyMusicCommands.Kind selection) {
+    private void startSpotifyMusic(SpotifyMusicCommands.Kind selection,String voice) {
         if (spotifyPlayback == null) spotifyPlayback = new SpotifyPlaybackController(this);
         // Only reuse the user's already granted overlay access. Never request
         // a new permission or create a second screen-control microphone icon.
@@ -3329,7 +3329,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 // Android may prohibit launching a foreground overlay service.
             }
         }
-        spotifyPlayback.start(selection, new SpotifyPlaybackController.Listener() {
+        spotifyPlayback.start(selection,voice,new SpotifyPlaybackController.Listener() {
             @Override public void onProgress(String detail) { setStatus(detail); }
             @Override public void onFinished(boolean success, String detail) {
                 if (isFinishing() || isDestroyed()) return;
@@ -3567,7 +3567,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
         SpotifyMusicCommands.Kind musicRequest = SpotifyMusicCommands.parse(raw);
         if (musicRequest != null) {
-            startSpotifyMusic(musicRequest);
+            startSpotifyMusic(musicRequest,raw);
             return;
         }
 
