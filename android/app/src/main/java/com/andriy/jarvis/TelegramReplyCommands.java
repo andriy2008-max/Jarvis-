@@ -26,14 +26,6 @@ public final class TelegramReplyCommands {
     private static final Pattern REPLY_SAY=Pattern.compile(
         COMMAND_PREFIX+"\\s+(.{1,80}?)\\s+(?:скажи|текст|повідомлення)\\s+(.+)$"
     );
-    // Speech recognition often drops punctuation. Support unambiguous
-    // "Яна Привіт, це тест" without guessing recipients from arbitrary text.
-    private static final Pattern REPLY_GREETING=Pattern.compile(
-        COMMAND_PREFIX+"\\s+(.{1,80}?)\\s+"+
-        "((?:привіт|вітаю|добрий\\s+день|доброго\\s+дня|"+
-        "добрий\\s+вечір|доброго\\s+вечора|"+
-        "добрий\\s+ранок|доброго\\s+ранку)(?:[!?,.:]|\\s|$).*)$"
-    );
     private static final Pattern TELEGRAM_INTENT=Pattern.compile(
         COMMAND_PREFIX+"(?:\\s|$|[:;,]).*$"
     );
@@ -63,7 +55,6 @@ public final class TelegramReplyCommands {
         }
         Matcher m=REPLY.matcher(input);
         if(!m.matches())m=REPLY_SAY.matcher(input);
-        if(!m.matches())m=REPLY_GREETING.matcher(input);
         if(!m.matches()){
             Matcher free=REPLY_FREE.matcher(input);
             if(free.matches()) {
