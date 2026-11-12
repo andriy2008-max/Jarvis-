@@ -17,6 +17,25 @@ public final class SpotifyMusicCommandsTest {
         is("Включи українське",SpotifyMusicCommands.Kind.UKRAINIAN);
         is("Джарвіс, увімкни українську музику",SpotifyMusicCommands.Kind.UKRAINIAN);
         is("включи укр муз",SpotifyMusicCommands.Kind.UKRAINIAN);
+        is("Джарвіс, увімкни плейлист Рок",SpotifyMusicCommands.Kind.PLAYLIST);
+        is("увімкни плейліст Укр муз",SpotifyMusicCommands.Kind.PLAYLIST);
+        is("Запусти playlist Workout 2026",SpotifyMusicCommands.Kind.PLAYLIST);
+        is("Джарвіс, увімкни плейлист Рок без перемішування",SpotifyMusicCommands.Kind.PLAYLIST);
+        SpotifyMusicCommands.NamedPlaylist named = SpotifyMusicCommands.namedPlaylist(
+            "Джарвіс, увімкни плейлист Рок");
+        if (named==null || !named.name.equals("рок") || !named.shuffle)
+            throw new AssertionError("shuffle playlist name");
+        named = SpotifyMusicCommands.namedPlaylist(
+            "Джарвіс, увімкни плейлист Тренування без перемішування");
+        if (named==null || !named.name.equals("тренування") || named.shuffle)
+            throw new AssertionError("playlist ordered playback");
+        named = SpotifyMusicCommands.namedPlaylist("ввімкни плейлист «Мої хіти»");
+        if (named==null || !named.name.equals("мої хіти"))
+            throw new AssertionError("quoted playlist");
+        if (SpotifyMusicCommands.namedPlaylist("увімкни плейлист")!=null ||
+            SpotifyMusicCommands.namedPlaylist("увімкни плейлист без перемішування")!=null ||
+            SpotifyMusicCommands.namedPlaylist("відкрий плейлист Рок")!=null)
+            throw new AssertionError("invalid playlist command");
         is(null,null);
         is("вимкни музику",null);
         is("постав музику на паузу",null);
