@@ -1060,7 +1060,7 @@ public final class FloatingJarvisService extends Service {
         if (requestedMusic != null) {
             if (spotifyPlayback == null)
                 spotifyPlayback = new SpotifyPlaybackController(this);
-            spotifyPlayback.start(requestedMusic, new SpotifyPlaybackController.Listener() {
+            spotifyPlayback.start(requestedMusic,raw,new SpotifyPlaybackController.Listener() {
                 @Override public void onProgress(String status) {
                     if (!closing) message(status);
                 }
