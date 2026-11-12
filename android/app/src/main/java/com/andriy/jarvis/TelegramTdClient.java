@@ -48,6 +48,11 @@ public final class TelegramTdClient {
             chatId=c.id;recipient=c.title;this.text=text;
         }
     }
+    private static final class ResolvedChat {
+        final TdApi.Chat chat;
+        final String text;
+        ResolvedChat(TdApi.Chat chat,String text){this.chat=chat;this.text=text;}
+    }
     private TelegramTdClient(Context c){context=c.getApplicationContext();}
     public static synchronized TelegramTdClient get(Context c){
         if(instance==null)instance=new TelegramTdClient(c);
@@ -228,12 +233,18 @@ public final class TelegramTdClient {
             cb.done(true,"Скасував чернетку Telegram. Нічого не надсилав.");
             return;
         }
+        if(command.kind==TelegramReplyCommands.Kind.HELP){
+            cb.done(false,"Скажи: «Напиши в Telegram Яна Привіт, це тест». "+
+                "Джарвіс знайде особистий чат за назвою і попросить підтвердження.");
+            return;
+        }
         if(!isAuthorized()){
             start(null);
             cb.done(false,status()+" Відкрий «💬 Telegram API» в Джарвісі.");
             return;
         }
-        if(command.kind==TelegramReplyCommands.Kind.DRAFT){
+        if(command.kind==TelegramReplyCommands.Kind.DRAFT ||
+            command.kind==TelegramReplyCommands.Kind.DRAFT_AUTO){
             createDraft(command,cb);
             return;
         }
@@ -242,23 +253,35 @@ public final class TelegramTdClient {
         }
     }
     private void createDraft(TelegramReplyCommands.Request command,Callback cb){
-        if(command.recipient==null || command.recipient.trim().isEmpty()){
-            cb.done(false,"Назви контакт: «Напиши у телеграм Олена: Привіт».");return;
+        String lookup=command.recipient;
+        if(command.kind==TelegramReplyCommands.Kind.DRAFT_AUTO){
+            String speech=command.text==null?"":command.text.trim();
+            String[] words=speech.split("\\s+");
+            if(words.length<2){
+                cb.done(false,"Назви контакт і повідомлення: «Напиши в Telegram Яна Привіт».");return;
+            }
+            // Look up the first spoken word; an exact private-chat title
+            // determines the full contact name (including multiple words).
+            lookup=TelegramReplyCommands.nameKey(words[0]);
+        }
+        if(lookup==null || lookup.trim().isEmpty()){
+            cb.done(false,"Назви контакт і повідомлення: «Напиши в Telegram Яна Привіт».");return;
         }
         if(busy){cb.done(false,"Telegram ще шукає контакт. Повтори після завершення.");return;}
         draft=null;
         busy=true;
         final int op=++revision;
-        client.send(new TdApi.SearchChats(command.recipient,null,50),
-            result -> MAIN.post(() -> inspectChats(op,command,result,true,cb)));
+        final String query=lookup;
+        client.send(new TdApi.SearchChats(query,null,50),
+            result -> MAIN.post(() -> inspectChats(op,command,query,result,true,cb)));
     }
     private void inspectChats(int op,TelegramReplyCommands.Request command,
-                              TdApi.Object object,boolean first,Callback cb){
+                              String query,TdApi.Object object,boolean first,Callback cb){
         if(op!=revision)return;
         if(!(object instanceof TdApi.Chats)){
             if(first){
-                client.send(new TdApi.SearchChatsOnServer(command.recipient,null,50),
-                    result -> MAIN.post(() -> inspectChats(op,command,result,false,cb)));
+                client.send(new TdApi.SearchChatsOnServer(query,null,50),
+                    result -> MAIN.post(() -> inspectChats(op,command,query,result,false,cb)));
             }else {
                 busy=false;
                 cb.done(false,resultMessage(object,"Не вдалося знайти чат."));
@@ -268,42 +291,48 @@ public final class TelegramTdClient {
         long[] ids=((TdApi.Chats)object).chatIds;
         if(ids==null||ids.length==0){
             if(first){
-                client.send(new TdApi.SearchChatsOnServer(command.recipient,null,50),
-                    result -> MAIN.post(() -> inspectChats(op,command,result,false,cb)));
+                client.send(new TdApi.SearchChatsOnServer(query,null,50),
+                    result -> MAIN.post(() -> inspectChats(op,command,query,result,false,cb)));
             }else {
                 busy=false;
-                cb.done(false,"Немає відомого особистого чату з точною назвою «"+
-                    command.recipient+"». Перевір ім'я в Telegram.");
+                cb.done(false,"Не знайшов особистого чату, який починається з «"+
+                    query+"». Перевір ім'я в Telegram.");
             }
             return;
         }
-        ArrayList<TdApi.Chat> matches=new ArrayList<>();
+        ArrayList<ResolvedChat> matches=new ArrayList<>();
         final int[] remaining={ids.length};
         for(long id:ids){
             client.send(new TdApi.GetChat(id),result -> MAIN.post(() ->{
                 if(op!=revision)return;
                 if(result instanceof TdApi.Chat){
                     TdApi.Chat chat=(TdApi.Chat)result;
-                    if(chat.type instanceof TdApi.ChatTypePrivate &&
-                        TelegramReplyCommands.exactContact(command.recipient,chat.title))
-                        matches.add(chat);
+                    if(chat.type instanceof TdApi.ChatTypePrivate) {
+                        String body=command.kind==TelegramReplyCommands.Kind.DRAFT_AUTO
+                            ? TelegramReplyCommands.messageAfterContact(command.text,chat.title)
+                            : (TelegramReplyCommands.exactContact(command.recipient,chat.title)
+                                ? command.text : null);
+                        if(body!=null)matches.add(new ResolvedChat(chat,body));
+                    }
                 }
                 if(--remaining[0]!=0)return;
                 if(matches.isEmpty()&&first){
-                    client.send(new TdApi.SearchChatsOnServer(command.recipient,null,50),
-                        found -> MAIN.post(()->inspectChats(op,command,found,false,cb)));
+                    client.send(new TdApi.SearchChatsOnServer(query,null,50),
+                        found -> MAIN.post(()->inspectChats(op,command,query,found,false,cb)));
                     return;
                 }
                 busy=false;
                 if(matches.size()!=1){
                     cb.done(false,matches.isEmpty()?
-                        "Не знайшов особистий чат «"+command.recipient+
-                        "». Перевір точну назву контакту.":
-                        "Є кілька чатів із назвою «"+command.recipient+
-                        "». Уточни отримувача, нічого не відправляв.");
+                        "Не знайшов особистий чат за продиктованим ім'ям. "+
+                        "Назви контакт як у Telegram.":
+                        "Підійшло кілька особистих чатів. Уточни контакт, "+
+                        "наприклад: «Напиши в Telegram Ім'я Прізвище: текст». "+
+                        "Нічого не відправляв.");
                     return;
                 }
-                draft=new Draft(matches.get(0),command.text);
+                ResolvedChat chosen=matches.get(0);
+                draft=new Draft(chosen.chat,chosen.text);
                 cb.done(true,"Чернетка для «"+draft.recipient+"»: «"+
                     draft.text+"». Скажи «Надішли в телеграм» для підтвердження.");
             }));
