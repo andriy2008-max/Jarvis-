@@ -22,7 +22,7 @@ public final class BoltTaxiController {
         void onProgress(String status);
         void onFinished(boolean ok,String status);
     }
-    private enum Stage { OPEN_APP, RIDES, VERIFY_RIDES, DELAY, TYPE }
+    private enum Stage { OPEN_APP, RIDES, VERIFY_RIDES, DELAY, FOCUS_DROPOFF, WAIT_DROPOFF, TYPE }
     private final Listener listener;
     private final String address;
     private final JarvisPhoneModeManager.Lease lease;
@@ -33,6 +33,7 @@ public final class BoltTaxiController {
     private long ridesVisibleSince=-1L;
     private boolean finished;
     private int ridesRetries;
+    private int dropoffRetries;
 
     private BoltTaxiController(Listener listener,String address,JarvisPhoneModeManager.Lease lease){
         this.listener=listener;this.address=address;this.lease=lease;
@@ -104,7 +105,7 @@ public final class BoltTaxiController {
         switch(stage){
             case OPEN_APP:
                 if(ScreenControlAccessibilityService.boltRidesReady()) {
-                    move(Stage.DELAY,"Пошук поїздки вже відкрито. Очікую 2 секунди...");
+                    move(Stage.DELAY,"Екран «Маршрут» відкрито. Перевіряю місце висадки...");
                 } else if(ScreenControlAccessibilityService.boltRidesAvailable()) {
                     long now=SystemClock.elapsedRealtime();
                     if(ridesVisibleSince<0L) ridesVisibleSince=now;
@@ -120,7 +121,7 @@ public final class BoltTaxiController {
                 if(result==ScreenControlAccessibilityService.BoltStep.CLICKED)
                     move(Stage.VERIFY_RIDES,"Натиснув плитку «Поїздки». Перевіряю, чи відкрився пошук...");
                 else if(result==ScreenControlAccessibilityService.BoltStep.READY)
-                    move(Stage.DELAY,"Поле Bolt готове. Очікую 2 секунди...");
+                    move(Stage.DELAY,"Маршрут Bolt відкрито. Перевіряю поле висадки...");
                 else if(result==ScreenControlAccessibilityService.BoltStep.BLOCKED){
                     finish(false,"Не вдалося відкрити «Поїздки».");return;
                 }
@@ -128,7 +129,7 @@ public final class BoltTaxiController {
             }
             case VERIFY_RIDES:
                 if(ScreenControlAccessibilityService.boltRidesReady()) {
-                    move(Stage.DELAY,"«Поїздки» відкрито. Очікую 2 секунди...");
+                    move(Stage.DELAY,"«Поїздки» відкрито. Шукаю «Місце висадки»...");
                 } else if(age>=RETAP_AFTER_MS &&
                     ScreenControlAccessibilityService.boltRidesAvailable()) {
                     if(ridesRetries>=2) {
@@ -147,13 +148,36 @@ public final class BoltTaxiController {
                 }
                 break;
             case DELAY:
-                if(age>=2000L){
+                if(age>=1400L){
                     if(address.isEmpty()){
                         finish(true,"Відкрив Bolt → «Поїздки». Назви пункт призначення.");return;
                     }
-                    // Bolt automatically activates the address field after "Поїздки".
-                    // Do not tap any search/destination control again.
-                    move(Stage.TYPE,"Вводжу адресу в уже активне поле Bolt...");
+                    // After «Поїздки», Bolt displays a two-row route form.
+                    // The destination row isn't editable until tapped.
+                    move(Stage.FOCUS_DROPOFF,"Натискаю «Місце висадки»...");
+                }
+                break;
+            case FOCUS_DROPOFF:{
+                ScreenControlAccessibilityService.BoltStep action=
+                    ScreenControlAccessibilityService.boltFocusDestination();
+                if(action==ScreenControlAccessibilityService.BoltStep.READY)
+                    move(Stage.TYPE,"Поле висадки активне. Вводжу адресу...");
+                else if(action==ScreenControlAccessibilityService.BoltStep.CLICKED)
+                    move(Stage.WAIT_DROPOFF,"Натиснув «Місце висадки». Очікую поле вводу...");
+                else if(action==ScreenControlAccessibilityService.BoltStep.BLOCKED){
+                    finish(false,"Не вдалося безпечно натиснути поле «Місце висадки».");return;
+                }
+                break;
+            }
+            case WAIT_DROPOFF:
+                if(ScreenControlAccessibilityService.boltDestinationFocused()){
+                    move(Stage.TYPE,"Поле висадки активне. Вводжу адресу...");
+                }else if(age>=2600L){
+                    if(dropoffRetries>=2){
+                        finish(false,"Bolt не відкрив поле введення після натискання «Місце висадки».");return;
+                    }
+                    dropoffRetries++;
+                    move(Stage.FOCUS_DROPOFF,"Повторно шукаю поле «Місце висадки»...");
                 }
                 break;
             case TYPE:{
