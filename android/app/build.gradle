@@ -83,7 +83,13 @@ tasks.register('downloadSpotifyAppRemote') {
         }
     }
 }
-tasks.matching { it.name == 'compileDebugJavaWithJavac' ||
+// AAR extraction and JNI merges for assembleRelease run BEFORE javac.
+ // Download Spotify's official AAR before *any* task that consumes its native
+ // or Java classes, including signed release packaging.
+tasks.matching { it.name == 'preBuild' ||
+                 it.name == 'mergeReleaseNativeLibs' ||
+                 it.name == 'mergeDebugNativeLibs' ||
+                 it.name == 'compileDebugJavaWithJavac' ||
                  it.name == 'compileReleaseJavaWithJavac' }.configureEach {
     dependsOn tasks.named('downloadSpotifyAppRemote')
 }
