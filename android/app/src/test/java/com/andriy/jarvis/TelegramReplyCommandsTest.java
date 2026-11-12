@@ -47,7 +47,8 @@ public final class TelegramReplyCommandsTest {
         yes(TelegramReplyCommands.parse("перевір телеграм").kind==
             TelegramReplyCommands.Kind.STATUS);
         yes(TelegramReplyCommands.parse("надішли гроші") == null);
-        yes(TelegramReplyCommands.parse("відповідай у телеграм: ") == null);
+        yes(TelegramReplyCommands.parse("відповідай у телеграм: ").kind==
+            TelegramReplyCommands.Kind.HELP);
         yes(TelegramReplyCommands.parse("відповідай у телеграм: \nновий") == null);
         yes(TelegramReplyCommands.exactContact("Олена-К.", "олена к"));
         yes(!TelegramReplyCommands.exactContact("Олена","Олена С."));
