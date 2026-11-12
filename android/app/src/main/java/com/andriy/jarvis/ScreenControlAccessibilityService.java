@@ -582,6 +582,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         Rect best = null;
         int bestScore = -1;
         boolean plan = false, food = false, send = false, homeSearch = false;
+        boolean homeHeading = false, routePage = false;
         int scanned = 0;
         while (!queue.isEmpty() && ++scanned <= MAX_SCAN) {
             AccessibilityNodeInfo item = queue.removeFirst();
@@ -589,6 +590,10 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             String text = asString(item.getText());
             String description = asString(item.getContentDescription());
             String joined = (text + " " + description).toLowerCase(Locale.ROOT);
+            if (BoltUiLabels.ridesHomeHeading(text) ||
+                BoltUiLabels.ridesHomeHeading(description)) homeHeading = true;
+            if (BoltUiLabels.routeTitle(text) ||
+                BoltUiLabels.routeTitle(description)) routePage = true;
             if (joined.contains("запланувати") || joined.contains("schedule"))
                 plan = true;
             if (joined.contains("bolt food")) food = true;
@@ -627,14 +632,24 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if (scanned > MAX_SCAN) return null;
         if (best != null) return best;
 
-        // Some Bolt versions render the card on a canvas with no accessibility
-        // label. Use coordinates only when the surrounding 4-tile home screen
-        // is unambiguously recognized.
-        if (plan && food && send && homeSearch &&
-            screen.height() > screen.width() * 1.45f) {
-            int cx = Math.round(screen.left + screen.width() * .26f);
-            int cy = Math.round(screen.top + screen.height() * .29f);
-            return new Rect(cx-8,cy-8,cx+8,cy+8);
+        // Pixel/Bolt can draw a four-tile home grid as inaccessible canvas.
+        // Accept 3 independent home markers, or the exact home heading plus 2.
+        // Never use the screenshot fallback on a route/checkout screen.
+        if (!routePage && screen.height() > screen.width() * 1.45f &&
+            BoltUiLabels.ridesHomeFallback(homeHeading,plan,food,send,homeSearch)) {
+            android.graphics.Point physical = new android.graphics.Point();
+            android.view.Display display = getDisplay();
+            if (display == null) {
+                WindowManager wm = (WindowManager)getSystemService(Context.WINDOW_SERVICE);
+                if (wm != null)display = wm.getDefaultDisplay();
+            }
+            if (display != null) {
+                display.getRealSize(physical);
+                int[] point = BoltUiLabels.screenshotRidesPoint(physical.x,physical.y);
+                if (point != null && screen.contains(point[0],point[1]))
+                    return new Rect(point[0]-8,point[1]-8,
+                                    point[0]+8,point[1]+8);
+            }
         }
         return null;
     }
