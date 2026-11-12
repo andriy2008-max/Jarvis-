@@ -142,7 +142,22 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if (service == null || !service.sessionActive) return false;
         AccessibilityNodeInfo root = service.currentBoltRoot();
         return root != null && (service.isBoltDestinationFocused() ||
+            service.findBoltDropoffTarget(root) != null ||
             service.findBoltRidesTarget(root) != null);
+    }
+
+    /** The route screen has a destination placeholder that must be tapped
+     * before its search editor receives input. */
+    public static BoltStep boltFocusDestination() {
+        ScreenControlAccessibilityService service = connected.get();
+        return service == null || !service.sessionActive ? BoltStep.BLOCKED :
+            service.focusBoltDropoff();
+    }
+
+    public static boolean boltDestinationFocused() {
+        ScreenControlAccessibilityService service = connected.get();
+        return service != null && service.sessionActive &&
+            service.isBoltDestinationFocused();
     }
 
     public static BoltStep boltTypeDestination(String address) {
@@ -164,12 +179,14 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             asString(node.getViewIdResourceName());
     }
 
-    /** The rides tile is not enough to prove navigation succeeded. We only
-     * advance after Bolt has actually focused an editable destination field. */
+    /** A recognized route/drop-off screen means Bolt has opened «Поїздки»,
+     * even when the destination editor is NOT focused yet. */
     public static boolean boltRidesReady() {
         ScreenControlAccessibilityService service = connected.get();
-        return service != null && service.sessionActive &&
-            service.isBoltDestinationFocused();
+        if (service == null || !service.sessionActive) return false;
+        AccessibilityNodeInfo root = service.currentBoltRoot();
+        return root != null && (service.isBoltDestinationFocused() ||
+            service.findBoltDropoffTarget(root) != null);
     }
 
     private boolean isBoltDestinationFocused() {
@@ -184,6 +201,91 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         return !BoltUiLabels.pickup(boltNodeLabel(focus)) &&
             !isSensitiveInputType(focus.getInputType()) &&
             !isSensitiveFieldLabel(focus);
+    }
+
+    /** Find the actual second row («Місце висадки») of Bolt's «Маршрут».
+     * The field can be a non-editable placeholder; clicking it opens an
+     * editable destination search. Never click the first/pickup row. */
+    private Rect findBoltDropoffTarget(AccessibilityNodeInfo root) {
+        if (root == null || !root.isVisibleToUser()) return null;
+        android.graphics.Point displaySize = new android.graphics.Point();
+        android.view.Display display = getDisplay();
+        if (display == null) {
+            WindowManager window = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+            if (window != null) display = window.getDefaultDisplay();
+        }
+        if (display == null) return null;
+        display.getRealSize(displaySize);
+        int width=displaySize.x,height=displaySize.y;
+        if (height<width*1.65f) return null;
+
+        ArrayDeque<AccessibilityNodeInfo> scan = new ArrayDeque<>();
+        scan.add(root);
+        Rect destination=null;
+        boolean routeTitle=false;
+        boolean pickupLine=false;
+        int found=0;
+        while (!scan.isEmpty() && ++found<=MAX_SCAN) {
+            AccessibilityNodeInfo n=scan.removeFirst();
+            if (!n.isVisibleToUser() || !n.isEnabled() || n.isPassword()) continue;
+            String label=boltNodeLabel(n);
+            String text=asString(n.getText());
+            String description=asString(n.getContentDescription());
+            Rect bounds=new Rect();
+            n.getBoundsInScreen(bounds);
+            if (BoltUiLabels.routeTitle(text) || BoltUiLabels.routeTitle(description))
+                routeTitle=true;
+            if (!text.trim().isEmpty() && text.trim().length()>=5 &&
+                !BoltUiLabels.routeTitle(text) &&
+                !BoltUiLabels.destination(text) &&
+                bounds.centerX()>width*.13f && bounds.centerX()<width*.87f &&
+                bounds.centerY()>height*.125f && bounds.centerY()<height*.197f)
+                pickupLine=true;
+
+            if (BoltUiLabels.destination(label) && !BoltUiLabels.pickup(label) &&
+                bounds.width()>18 && bounds.height()>10 &&
+                bounds.height()<height*.12f &&
+                BoltUiLabels.dropoffRegion(bounds.centerX(),bounds.centerY(),
+                    width,height)) {
+                // A text label itself is the most reliable tap target.
+                // Multiple different targets are ambiguous and are rejected.
+                if (destination!=null && !destination.equals(bounds)) {
+                    // Nested accessibility labels can overlap. Prefer their
+                    // smaller, more precise visible text bounds.
+                    if (bounds.contains(destination)) {
+                        // Preserve the smaller prior match.
+                    } else if (destination.contains(bounds)) {
+                        destination=bounds;
+                    } else return null;
+                } else destination=bounds;
+            }
+            for(int i=0;i<n.getChildCount();i++) {
+                AccessibilityNodeInfo child=n.getChild(i);
+                if(child!=null)scan.addLast(child);
+            }
+        }
+        if(found>MAX_SCAN || !routeTitle)return null;
+        if(destination!=null)return destination;
+
+        // Some Bolt versions draw the placeholder without an accessible
+        // node. Use the user's screenshot coordinate ONLY with route header,
+        // visible pickup line, matching portrait geometry and no other page.
+        if(!pickupLine)return null;
+        int[] point=BoltUiLabels.screenshotDropoffPoint(width,height);
+        return point==null ? null : new Rect(point[0]-12,point[1]-12,
+            point[0]+12,point[1]+12);
+    }
+
+    /** A full-page «Маршрут» is not an editable field. Tap its second row,
+     * then WAIT for Bolt to focus the actual destination input. */
+    private BoltStep focusBoltDropoff() {
+        AccessibilityNodeInfo root=currentBoltRoot();
+        if(root==null)return BoltStep.WAIT;
+        if(isBoltDestinationFocused())return BoltStep.READY;
+        Rect target=findBoltDropoffTarget(root);
+        if(target==null)return BoltStep.WAIT;
+        return gestureTapBolt(root,target.exactCenterX(),target.exactCenterY(),
+            "Місце висадки");
     }
 
     /** Select the rides tile only after Android exposes the actual home
@@ -260,13 +362,16 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     private BoltStep tapBoltRides() {
         AccessibilityNodeInfo root = currentBoltRoot();
         if (root == null) return BoltStep.WAIT;
-        if (isBoltDestinationFocused()) return BoltStep.READY;
+        if (isBoltDestinationFocused() || findBoltDropoffTarget(root)!=null)
+            return BoltStep.READY;
         Rect target = findBoltRidesTarget(root);
         return target == null ? BoltStep.WAIT :
-            gestureTapBolt(root,target.exactCenterX(),target.exactCenterY());
+            gestureTapBolt(root,target.exactCenterX(),target.exactCenterY(),
+                "Поїздки");
     }
 
-    private BoltStep gestureTapBolt(AccessibilityNodeInfo root,float x,float y) {
+    private BoltStep gestureTapBolt(AccessibilityNodeInfo root,float x,float y,
+                                     String targetName) {
         if (!sessionActive || currentBoltRoot() == null) return BoltStep.BLOCKED;
         Rect frame = new Rect();
         root.getBoundsInScreen(frame);
@@ -280,11 +385,12 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         // and verifies that Bolt remains the foreground package.
         return dispatchTrackedGesture(tap, (ok, detail) -> {
             if (!ok && sessionActive)
-                toast("Не вдалося натиснути «Поїздки»: " + detail);
+                toast("Не вдалося натиснути «" + targetName + "»: " + detail);
         }) ? BoltStep.CLICKED : BoltStep.BLOCKED;
     }
 
-    /** Address field is already active after the rides tab; never click it again. */
+    /** Type ONLY after the destination editor has been deliberately focused.
+     * Never type into the route screen, pickup field or a different app. */
     private BoltStep fillBoltDestination(String address) {
         if (address == null || address.trim().isEmpty() || address.length() > 250)
             return BoltStep.BLOCKED;
