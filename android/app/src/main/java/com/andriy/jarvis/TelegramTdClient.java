@@ -34,6 +34,7 @@ public final class TelegramTdClient {
     private StatusListener statusListener;
     private boolean loading;
     private boolean busy;
+    private boolean sendDispatched;
     private int revision;
     private Draft draft;
     private String startupError="";
@@ -216,7 +217,12 @@ public final class TelegramTdClient {
             cb.done(true,status());return;
         }
         if(command.kind==TelegramReplyCommands.Kind.CANCEL){
-            revision++;
+            if(sendDispatched){
+                cb.done(false,"Повідомлення вже передано Telegram. "+
+                    "Не можу скасувати його надсилання. Перевір чат.");
+                return;
+            }
+            revision++; // invalidate any in-progress recipient lookup
             draft=null;
             busy=false;
             cb.done(true,"Скасував чернетку Telegram. Нічого не надсилав.");
@@ -313,7 +319,9 @@ public final class TelegramTdClient {
             cb.done(false,"Чернетка Telegram застаріла. Продиктуй повідомлення ще раз.");return;
         }
         busy=true;
+        final int op=revision;
         client.send(new TdApi.GetChat(d.chatId),result -> MAIN.post(() ->{
+            if(op!=revision)return; // cancelled before dispatch: never send
             if(!(result instanceof TdApi.Chat) ||
                 !(((TdApi.Chat)result).type instanceof TdApi.ChatTypePrivate) ||
                 !TelegramReplyCommands.exactContact(d.recipient,
@@ -325,8 +333,11 @@ public final class TelegramTdClient {
             TdApi.FormattedText formatted=
                 new TdApi.FormattedText(d.text,new TdApi.TextEntity[0]);
             TdApi.InputMessageText message=new TdApi.InputMessageText(formatted,null,false);
+            // After this point cancellation cannot guarantee unsending.
+            sendDispatched=true;
             client.send(new TdApi.SendMessage(d.chatId,null,null,null,null,message),
                 response -> MAIN.post(() ->{
+                    sendDispatched=false;
                     busy=false;
                     if(response instanceof TdApi.Message)
                         cb.done(true,"Telegram прийняв повідомлення для «"+
