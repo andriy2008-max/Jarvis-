@@ -17,6 +17,10 @@ public final class SpotifyMusicCommandsTest {
         is("Включи українське",SpotifyMusicCommands.Kind.UKRAINIAN);
         is("Джарвіс, увімкни українську музику",SpotifyMusicCommands.Kind.UKRAINIAN);
         is("включи укр муз",SpotifyMusicCommands.Kind.UKRAINIAN);
+        is("включи плейлист Рок",SpotifyMusicCommands.Kind.PLAYLIST);
+        is("включи плейлист Рок без перемішування",SpotifyMusicCommands.Kind.PLAYLIST);
+        is("виключи плейлист Рок",null);
+        is("виключи музику",null);
         is("Джарвіс, увімкни плейлист Рок",SpotifyMusicCommands.Kind.PLAYLIST);
         is("увімкни плейліст Укр муз",SpotifyMusicCommands.Kind.PLAYLIST);
         is("Запусти playlist Workout 2026",SpotifyMusicCommands.Kind.PLAYLIST);

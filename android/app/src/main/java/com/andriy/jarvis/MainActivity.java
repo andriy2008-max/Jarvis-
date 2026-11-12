@@ -3511,7 +3511,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             setStatus(result);
             if (voiceEnabled) speakReply(result);
         })) return;
-        String command = CommandPatterns.normalize(raw);
+        String command = CommandPatterns.normalizeControlVerb(raw);
         if (command.isEmpty()) return;
         if (shakeLocalOnly &&
             (command.startsWith("обчисли через python") ||

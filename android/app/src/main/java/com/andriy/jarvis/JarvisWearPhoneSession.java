@@ -107,7 +107,7 @@ public final class JarvisWearPhoneSession {
             automaticSpotifyBusy = true;
             automaticSpotifyNode = sourceNode;
             if (spotify == null) spotify = new SpotifyPlaybackController(context);
-            spotify.start(music,new SpotifyPlaybackController.Listener() {
+            spotify.start(music,command,new SpotifyPlaybackController.Listener() {
                 @Override public void onProgress(String progress) { }
                 @Override public void onFinished(boolean ok, String detail) {
                     automaticSpotifyBusy = false;
@@ -210,7 +210,7 @@ public final class JarvisWearPhoneSession {
         SpotifyMusicCommands.Kind music = SpotifyMusicCommands.parse(command);
         if (music != null) {
             if (spotify == null) spotify = new SpotifyPlaybackController(context);
-            spotify.start(music,new SpotifyPlaybackController.Listener() {
+            spotify.start(music,command,new SpotifyPlaybackController.Listener() {
                 @Override public void onProgress(String detail) { }
                 @Override public void onFinished(boolean success,String detail) {
                     out.reply(success,detail,session,false);
@@ -218,7 +218,7 @@ public final class JarvisWearPhoneSession {
             });
             return;
         }
-        String normalized = CommandPatterns.normalize(command);
+        String normalized = CommandPatterns.normalizeControlVerb(command);
         DeviceCommands.Action device = DeviceCommands.parse(normalized);
         if (device != null) {
             if (devices == null) devices = new DeviceActions(context);
@@ -233,7 +233,8 @@ public final class JarvisWearPhoneSession {
                 : "Не вдалося запустити таймер на телефоні. Перевір дозвіл точних будильників.",session,false);
             return;
         }
-        if (normalized.equals("скасуй таймер") || normalized.equals("зупини таймер")) {
+        if (normalized.equals("скасуй таймер") || normalized.equals("зупини таймер") ||
+            normalized.equals("вимкни таймер")) {
             boolean ok = TimerScheduler.cancel(context);
             out.reply(ok,ok ? "Таймер телефона скасовано." : "На телефоні немає таймера.",session,false);
             return;

@@ -117,12 +117,13 @@ public final class JarvisMacros {
     }
 
     public static boolean handleVoice(Context context, String words, Listener listener) {
-        String normalized = CommandPatterns.normalize(words).replaceAll("\\s+", " ").trim();
+        String normalized = CommandPatterns.normalizeControlVerb(words)
+            .replaceAll("\\s+", " ").trim();
         if (normalized.isEmpty()) return false;
         for (JSONObject m : all(context)) {
             if (!m.optBoolean("enabled", true) ||
                 !"voice".equals(m.optString("trigger", "voice"))) continue;
-            String phrase = CommandPatterns.normalize(m.optString("triggerValue"))
+            String phrase = CommandPatterns.normalizeControlVerb(m.optString("triggerValue"))
                 .replaceAll("\\s+", " ").trim();
             if (!phrase.isEmpty() && phrase.equals(normalized)) {
                 long now = SystemClock.elapsedRealtime();

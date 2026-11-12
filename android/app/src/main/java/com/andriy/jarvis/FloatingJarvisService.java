@@ -1093,7 +1093,7 @@ public final class FloatingJarvisService extends Service {
             });
             return;
         }
-        String normalized = CommandPatterns.normalize(raw);
+        String normalized = CommandPatterns.normalizeControlVerb(raw);
         String speech = CommandPatterns.spokenText(raw);
         if (speech != null) {
             reply(speech.isEmpty() ? "Назви слово або речення після команди «Скажи»." : speech);
@@ -1168,7 +1168,8 @@ public final class FloatingJarvisService extends Service {
             stopSelf();
             return;
         }
-        if (normalized.equals("скасуй таймер") || normalized.equals("зупини таймер")) {
+        if (normalized.equals("скасуй таймер") || normalized.equals("зупини таймер") ||
+            normalized.equals("вимкни таймер")) {
             reply(TimerScheduler.cancel(this) ? "Таймер скасовано." : "Активного таймера немає.");
             return;
         }

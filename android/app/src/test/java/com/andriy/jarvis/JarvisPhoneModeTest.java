@@ -17,6 +17,8 @@ public final class JarvisPhoneModeTest {
         eq(JarvisPhoneMode.Transition.NONE,JarvisPhoneMode.transition(null));
         eq(JarvisPhoneMode.Transition.ENTER,JarvisPhoneMode.transition("увімкни керування екраном"));
         eq(JarvisPhoneMode.Transition.EXIT,JarvisPhoneMode.transition("вимкни керування екраном"));
+        eq(JarvisPhoneMode.Transition.ENTER,JarvisPhoneMode.transition("включи керування екраном"));
+        eq(JarvisPhoneMode.Transition.EXIT,JarvisPhoneMode.transition("виключи керування екраном"));
         eq(true,JarvisPhoneMode.requiresPhone("натисни пошук"));
         eq(true,JarvisPhoneMode.requiresPhone("зажми повідомлення"));
         eq(true,JarvisPhoneMode.requiresPhone("відкрий ютуб"));
