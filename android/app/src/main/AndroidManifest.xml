@@ -119,6 +119,8 @@
             android:exported="false" android:screenOrientation="unspecified" />
         <activity android:name=".JarvisTaxiPlacesActivity"
             android:exported="false" android:screenOrientation="unspecified" />
+        <activity android:name=".SpotifyDirectSettingsActivity"
+            android:exported="false" android:screenOrientation="unspecified" />
         <receiver android:name=".TimerRestoreReceiver" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

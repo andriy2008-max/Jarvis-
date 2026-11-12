@@ -37,6 +37,8 @@ public final class SpotifyPlaybackController {
     private int scrolled;
     private boolean active;
     private JarvisPhoneModeManager.Lease temporaryControl;
+    private SpotifyAppRemoteBridge directBridge;
+    private boolean bypassDirectOnce;
 
     public SpotifyPlaybackController(Context context) {
         this.context = context;
@@ -66,6 +68,40 @@ public final class SpotifyPlaybackController {
         if (launch == null) {
             if (callback != null) callback.onFinished(false,
                 "Не знайшов Spotify на телефоні. Спочатку встанови його та увійди в акаунт.");
+            return;
+        }
+        // Direct App Remote is tried before requesting Accessibility.
+        // An explicit user-saved URI is required; never guess IDs from names.
+        boolean allowDirect=!bypassDirectOnce;
+        bypassDirectOnce=false;
+        String directUri=allowDirect ? SpotifyDirectSettings.resolve(context,kind,
+            named==null?null:named.name) : null;
+        if(directUri!=null) {
+            active=true;
+            listener=callback;
+            requested=kind;
+            namedPlaylist=named==null?null:named.name;
+            final SpotifyMusicCommands.Kind fallbackKind=kind;
+            final String fallbackVoice=voice;
+            directBridge=new SpotifyAppRemoteBridge(context,
+                SpotifyDirectSettings.clientId(context),directUri,(ok,detail)->{
+                    if(!active)return;
+                    directBridge=null;
+                    if(ok) {
+                        finish(true,"Spotify прийняв команду прямого відтворення без натискання Play.");
+                    } else {
+                        active=false;
+                        listener=null;
+                        requested=null;
+                        namedPlaylist=null;
+                        if(callback!=null)callback.onProgress(
+                            detail+" Пробую через інтерфейс Spotify...");
+                        // Do not reconnect indefinitely after an App Remote error.
+                        bypassDirectOnce=true;
+                        start(fallbackKind,fallbackVoice,callback);
+                    }
+                });
+            directBridge.connect();
             return;
         }
         JarvisPhoneModeManager.Lease lease = null;
@@ -237,6 +273,10 @@ public final class SpotifyPlaybackController {
 
     private void finish(boolean success, String summary) {
         handler.removeCallbacks(poll);
+        if(directBridge!=null) {
+            directBridge.cancel();
+            directBridge=null;
+        }
         active = false;
         Listener cb = listener;
         listener = null;

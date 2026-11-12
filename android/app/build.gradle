@@ -55,8 +55,43 @@ android {
     }
 }
 
+// Spotify App Remote 0.8.0 is distributed as an official GitHub release AAR,
+// not on Maven Central. Download it only during an Android build.
+// It is not committed into the user's GitHub source repository.
+def spotifyRemoteAar = file("$projectDir/libs/spotify-app-remote-release-0.8.0.aar")
+tasks.register('downloadSpotifyAppRemote') {
+    outputs.file spotifyRemoteAar
+    doLast {
+        if (spotifyRemoteAar.isFile() && spotifyRemoteAar.length() == 132749L) return
+        spotifyRemoteAar.parentFile.mkdirs()
+        def tmp = file(spotifyRemoteAar.path + '.download')
+        def official = new URL('https://github.com/spotify/android-sdk/releases/download/v0.8.0-appremote_v2.1.0-auth/spotify-app-remote-release-0.8.0.aar')
+        try {
+            def connection = official.openConnection()
+            connection.setConnectTimeout(20000)
+            connection.setReadTimeout(30000)
+            connection.setRequestProperty('User-Agent', 'JARVIS-Android-Build')
+            connection.getInputStream().withCloseable { input ->
+                tmp.withOutputStream { output -> output << input }
+            }
+            if (tmp.length() != 132749L)
+                throw new GradleException('Spotify official AAR has an unexpected size')
+            if (!tmp.renameTo(spotifyRemoteAar))
+                throw new GradleException('Could not install Spotify SDK AAR')
+        } finally {
+            tmp.delete()
+        }
+    }
+}
+tasks.matching { it.name == 'compileDebugJavaWithJavac' ||
+                 it.name == 'compileReleaseJavaWithJavac' }.configureEach {
+    dependsOn tasks.named('downloadSpotifyAppRemote')
+}
+
 // CPU ONNX runtime is included in the small APK; actual voice models download once.
 dependencies {
+    implementation files(spotifyRemoteAar)
+    implementation 'com.google.code.gson:gson:2.10.1'
     implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.20.0'
     implementation 'com.google.android.gms:play-services-wearable:20.0.1'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'

@@ -637,6 +637,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
         Button taxiPlacesTab = secondaryButton("📍 Адреси",
             () -> startActivity(new Intent(this, JarvisTaxiPlacesActivity.class)));
         macroTabs.addView(taxiPlacesTab, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        Button spotifyDirectTab = secondaryButton("🎵 Spotify · прямий запуск",
+            () -> startActivity(new Intent(this, SpotifyDirectSettingsActivity.class)));
+        LinearLayout.LayoutParams spotifyDirectParams =
+            new LinearLayout.LayoutParams(-1,dp(46));
+        spotifyDirectParams.topMargin=dp(7);
+        content.addView(spotifyDirectTab,spotifyDirectParams);
 
         LinearLayout hero = new LinearLayout(this);
         hero.setOrientation(LinearLayout.VERTICAL);
