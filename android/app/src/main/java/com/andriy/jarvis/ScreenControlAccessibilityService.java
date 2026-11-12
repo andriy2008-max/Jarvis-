@@ -104,6 +104,19 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         return root.getPackageName().toString();
     }
 
+    /** On-demand, read-only foreground check for an explicitly saved macro.
+     * No need to activate screen-control mode just to evaluate a condition.
+     * Returns null for Jarvis itself, system UI, unavailable accessibility,
+     * or when no ordinary foreground app is visible. No screen text is read. */
+    public static String foregroundPackageForMacro() {
+        ScreenControlAccessibilityService service = connected.get();
+        if (service == null) return null;
+        AccessibilityNodeInfo root = service.currentExternalRoot();
+        if (root == null || !root.isVisibleToUser() || root.getPackageName() == null)
+            return null;
+        return root.getPackageName().toString();
+    }
+
     public static boolean focusedEditableIn(String packageName) {
         ScreenControlAccessibilityService service = connected.get();
         if (service == null || !service.sessionActive || packageName == null)
