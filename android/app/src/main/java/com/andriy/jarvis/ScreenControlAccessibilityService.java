@@ -121,7 +121,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     }
 
     /** Only the user-requested Bolt passenger app may be controlled by these methods. */
-    public enum BoltStep { WAIT, CLICKED, READY, ENTERED, BLOCKED }
+    public enum BoltStep { WAIT, CLICKED, READY, ENTERED, SUBMITTED, BLOCKED }
 
     public static boolean boltVisible() {
         ScreenControlAccessibilityService service = connected.get();
@@ -164,6 +164,14 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         ScreenControlAccessibilityService service = connected.get();
         return service == null || !service.sessionActive ? BoltStep.BLOCKED :
             service.fillBoltDestination(address);
+    }
+
+    /** Activate keyboard Search/Enter only after confirming the exact text
+     * in Bolt's focused destination editor. Never confirms a ride. */
+    public static BoltStep boltPressDestinationEnter(String address) {
+        ScreenControlAccessibilityService service = connected.get();
+        return service == null || !service.sessionActive ? BoltStep.BLOCKED :
+            service.submitBoltDestination(address);
     }
 
     private AccessibilityNodeInfo currentBoltRoot() {
@@ -448,6 +456,77 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             return focused.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
                 ? BoltStep.ENTERED : BoltStep.WAIT;
         } catch (SecurityException blocked) {
+            return BoltStep.BLOCKED;
+        }
+    }
+
+    /** Android's ACTION_IME_ENTER invokes the current keyboard action
+     * (Search/Enter) for a focused editable field. It is NOT the Bolt
+     * confirmation button or any other button on the page.
+     *
+     * No screen coordinates or root shell key injection: those could hit a
+     * suggestion, payment button or another app if the screen has changed.
+     */
+    private BoltStep submitBoltDestination(String address) {
+        if (address == null || address.trim().isEmpty() || address.length()>250)
+            return BoltStep.BLOCKED;
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R)
+            return BoltStep.BLOCKED; // ACTION_IME_ENTER requires Android 11.
+        AccessibilityNodeInfo root=currentBoltRoot();
+        if (root==null) return BoltStep.WAIT;
+        AccessibilityNodeInfo focused=root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+        if (focused==null || !focused.isEditable() || !focused.isFocused() ||
+            !focused.isVisibleToUser() || !focused.isEnabled())
+            return BoltStep.WAIT;
+        String label=boltNodeLabel(focused);
+        if (focused.isPassword() || BoltUiLabels.pickup(label) ||
+            isSensitiveInputType(focused.getInputType()) ||
+            isSensitiveFieldLabel(focused) || focused.getPackageName()==null ||
+            !"ee.mtakso.client".contentEquals(focused.getPackageName()))
+            return BoltStep.BLOCKED;
+
+        // An unlabeled editor must be the only safe editable field; a
+        // destination-labelled field can coexist with Bolt's pickup editor.
+        if (!BoltUiLabels.destination(label)) {
+            int eligible=0,scanned=0;
+            ArrayDeque<AccessibilityNodeInfo> q=new ArrayDeque<>();
+            q.add(root);
+            while (!q.isEmpty() && ++scanned<=MAX_SCAN) {
+                AccessibilityNodeInfo item=q.removeFirst();
+                if (!item.isVisibleToUser() || item.isPassword())continue;
+                if (item.isEditable() && item.isEnabled() &&
+                    !BoltUiLabels.pickup(boltNodeLabel(item)) &&
+                    !isSensitiveFieldLabel(item) &&
+                    !isSensitiveInputType(item.getInputType()))
+                    eligible++;
+                for(int i=0;i<item.getChildCount();i++) {
+                    AccessibilityNodeInfo child=item.getChild(i);
+                    if(child!=null)q.addLast(child);
+                }
+            }
+            if (scanned>MAX_SCAN || eligible!=1) return BoltStep.WAIT;
+        }
+        if (!BoltUiLabels.typedDestinationMatches(address,focused.getText()))
+            return BoltStep.WAIT;
+
+        int enterId=AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.getId();
+        boolean supported=false;
+        for (AccessibilityNodeInfo.AccessibilityAction action:focused.getActionList()) {
+            if (action.getId()==enterId) { supported=true; break; }
+        }
+        if (!supported) return BoltStep.BLOCKED;
+        AccessibilityNodeInfo current=currentBoltRoot();
+        if (current==null || !sessionActive) return BoltStep.WAIT;
+        AccessibilityNodeInfo stillFocused=current.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+        if (stillFocused==null || !stillFocused.isFocused() ||
+            !stillFocused.isEditable() ||
+            !"ee.mtakso.client".contentEquals(stillFocused.getPackageName()) ||
+            !BoltUiLabels.typedDestinationMatches(address,stillFocused.getText()))
+            return BoltStep.WAIT;
+        try {
+            return stillFocused.performAction(enterId)
+                ? BoltStep.SUBMITTED : BoltStep.WAIT;
+        } catch (SecurityException | IllegalStateException error) {
             return BoltStep.BLOCKED;
         }
     }
