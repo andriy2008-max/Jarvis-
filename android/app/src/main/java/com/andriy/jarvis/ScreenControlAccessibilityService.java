@@ -519,7 +519,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if (current==null || !sessionActive) return BoltStep.WAIT;
         AccessibilityNodeInfo stillFocused=current.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
         if (stillFocused==null || !stillFocused.isFocused() ||
-            !stillFocused.isEditable() ||
+            !stillFocused.isEditable() || stillFocused.getPackageName()==null ||
             !"ee.mtakso.client".contentEquals(stillFocused.getPackageName()) ||
             !BoltUiLabels.typedDestinationMatches(address,stillFocused.getText()))
             return BoltStep.WAIT;
