@@ -207,6 +207,12 @@ public final class JarvisWearPhoneSession {
                 (ok,status) -> out.reply(ok,status,token,false));
             return;
         }
+        TelegramReplyCommands.Request telegram=TelegramReplyCommands.parse(command);
+        if(telegram!=null) {
+            String message=TelegramReplyController.perform(context,telegram);
+            out.reply(true,message,session,false);
+            return;
+        }
         if(FinanceManagerController.isRunning()) {
             if(FinanceVoiceCommands.cancel(command)) {
                 FinanceManagerController.cancel();

@@ -8,7 +8,9 @@ on:
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisTaxi*.java'
       - 'android/app/src/main/java/com/andriy/jarvis/Bolt*.java'
       - 'android/app/src/main/java/com/andriy/jarvis/Finance*.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/Telegram*.java'
       - 'android/app/src/test/java/com/andriy/jarvis/Finance*.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/Telegram*.java'
       - 'android/app/src/test/java/com/andriy/jarvis/JarvisTaxiCommandsTest.java'
       - 'android/app/src/test/java/com/andriy/jarvis/BoltUiLabelsTest.java'
       - 'android/app/src/test/java/com/andriy/jarvis/SongRecognitionCommandsTest.java'
@@ -140,10 +142,12 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/BoltUiLabels.java \
             android/app/src/main/java/com/andriy/jarvis/FinanceVoiceCommands.java \
             android/app/src/main/java/com/andriy/jarvis/FinanceManagerUiLabels.java \
+            android/app/src/main/java/com/andriy/jarvis/TelegramReplyCommands.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisTaxiCommandsTest.java \
             android/app/src/test/java/com/andriy/jarvis/BoltUiLabelsTest.java \
             android/app/src/test/java/com/andriy/jarvis/FinanceVoiceCommandsTest.java \
             android/app/src/test/java/com/andriy/jarvis/FinanceManagerUiLabelsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/TelegramReplyCommandsTest.java \
             android/app/src/main/java/com/andriy/jarvis/SpotifyMusicCommands.java \
             android/app/src/main/java/com/andriy/jarvis/SpotifyUiLabels.java \
             android/app/src/main/java/com/andriy/jarvis/SpotifyUriRules.java \
@@ -206,6 +210,7 @@ jobs:
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.BoltUiLabelsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.FinanceVoiceCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.FinanceManagerUiLabelsTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.TelegramReplyCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.CommandPatternsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyMusicCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyUiLabelsTest

@@ -1073,6 +1073,13 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                             else toast("Зачекай завершення Spotify або скажи «Скасуй Spotify».");
                             return;
                         }
+                        TelegramReplyCommands.Request telegram=
+                            TelegramReplyCommands.parse(raw);
+                        if(telegram!=null) {
+                            toast(TelegramReplyController.perform(
+                                ScreenControlAccessibilityService.this,telegram));
+                            return;
+                        }
                         if (FinanceManagerController.isRunning()) {
                             if(FinanceVoiceCommands.cancel(raw))FinanceManagerController.cancel();
                             else toast("Фінансовий запис триває. Скажи «Скасуй витрату».");

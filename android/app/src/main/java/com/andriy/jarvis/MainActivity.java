@@ -643,6 +643,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
             new LinearLayout.LayoutParams(-1,dp(46));
         spotifyDirectParams.topMargin=dp(7);
         content.addView(spotifyDirectTab,spotifyDirectParams);
+        Button telegramTab = secondaryButton("💬 Telegram · відповіді від мене",
+            () -> startActivity(new Intent(this, TelegramReplySettingsActivity.class)));
+        LinearLayout.LayoutParams telegramParams=
+            new LinearLayout.LayoutParams(-1,dp(46));
+        telegramParams.topMargin=dp(7);
+        content.addView(telegramTab,telegramParams);
 
         LinearLayout hero = new LinearLayout(this);
         hero.setOrientation(LinearLayout.VERTICAL);
@@ -3532,6 +3538,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
              command.equals("проаналізуй документ") ||
              command.equals("прочитай документ"))) {
             setStatus("Для ШІ після струшування двічі скажи «Джарвіс».");
+            return;
+        }
+        TelegramReplyCommands.Request telegram=TelegramReplyCommands.parse(raw);
+        if (!isWatchDevice && telegram!=null) {
+            String result=TelegramReplyController.perform(this,telegram);
+            appendDialogue("Джарвіс",result);
+            setStatus(result);
+            if(voiceEnabled)speakReply(result);
             return;
         }
         if (!isWatchDevice && FinanceManagerController.isRunning()) {

@@ -34,6 +34,8 @@
         <package android:name="ee.mtakso.client" />
         <!-- Explicit local voice entry into Money Manager's UI only. -->
         <package android:name="com.freeman.moneymanager" />
+        <!-- Personal Telegram: notification-based reply to incoming chats. -->
+        <package android:name="org.telegram.messenger" />
         <package android:name="com.arlosoft.macrodroid" />
         <!-- Spotify: user-requested app launch and verified accessibility controls. -->
         <package android:name="com.spotify.music" />
@@ -101,6 +103,19 @@
             android:theme="@style/JarvisBubbleLaunchTheme"
             android:excludeFromRecents="true"
             android:exported="false" />
+        <!-- Opt-in read-only notifications until an explicit voice reply.
+             Android grants this only through system Settings. -->
+        <service
+            android:name=".TelegramNotificationReplyService"
+            android:exported="true"
+            android:label="Джарвіс — відповіді Telegram"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+        <activity android:name=".TelegramReplySettingsActivity"
+            android:exported="false" android:screenOrientation="unspecified" />
         <service
             android:name=".FloatingJarvisService"
             android:enabled="true"
