@@ -243,7 +243,7 @@ public final class TelegramTdClient {
         draft=null;
         busy=true;
         final int op=++revision;
-        client.send(new TdApi.SearchChats(command.recipient,50),
+        client.send(new TdApi.SearchChats(command.recipient,null,50),
             result -> MAIN.post(() -> inspectChats(op,command,result,true,cb)));
     }
     private void inspectChats(int op,TelegramReplyCommands.Request command,
@@ -251,7 +251,7 @@ public final class TelegramTdClient {
         if(op!=revision)return;
         if(!(object instanceof TdApi.Chats)){
             if(first){
-                client.send(new TdApi.SearchChatsOnServer(command.recipient,50),
+                client.send(new TdApi.SearchChatsOnServer(command.recipient,null,50),
                     result -> MAIN.post(() -> inspectChats(op,command,result,false,cb)));
             }else {
                 busy=false;
@@ -262,7 +262,7 @@ public final class TelegramTdClient {
         long[] ids=((TdApi.Chats)object).chatIds;
         if(ids==null||ids.length==0){
             if(first){
-                client.send(new TdApi.SearchChatsOnServer(command.recipient,50),
+                client.send(new TdApi.SearchChatsOnServer(command.recipient,null,50),
                     result -> MAIN.post(() -> inspectChats(op,command,result,false,cb)));
             }else {
                 busy=false;
@@ -284,7 +284,7 @@ public final class TelegramTdClient {
                 }
                 if(--remaining[0]!=0)return;
                 if(matches.isEmpty()&&first){
-                    client.send(new TdApi.SearchChatsOnServer(command.recipient,50),
+                    client.send(new TdApi.SearchChatsOnServer(command.recipient,null,50),
                         found -> MAIN.post(()->inspectChats(op,command,found,false,cb)));
                     return;
                 }
