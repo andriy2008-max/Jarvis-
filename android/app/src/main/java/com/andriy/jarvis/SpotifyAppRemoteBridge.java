@@ -18,6 +18,7 @@ public final class SpotifyAppRemoteBridge {
     private final Context context;
     private final String clientId;
     private final String uri;
+    private final boolean resume;
     private final Listener listener;
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final Runnable timeout=()->finish(false,
@@ -28,9 +29,14 @@ public final class SpotifyAppRemoteBridge {
     /** uri==null means only authorize/test connection, not play audio. */
     public SpotifyAppRemoteBridge(Context context,String clientId,
                                   String uri,Listener listener) {
+        this(context,clientId,uri,false,listener);
+    }
+    public SpotifyAppRemoteBridge(Context context,String clientId,
+                                  String uri,boolean resume,Listener listener) {
         this.context=context;
         this.clientId=clientId;
         this.uri=uri;
+        this.resume=resume;
         this.listener=listener;
     }
     public void connect() {
@@ -53,12 +59,13 @@ public final class SpotifyAppRemoteBridge {
                             return;
                         }
                         remote=connected;
-                        if(uri==null) {
+                        if(uri==null && !resume) {
                             finish(true,"Spotify підключено. Дозвіл App Remote отримано.");
                             return;
                         }
                         try {
-                            connected.getPlayerApi().play(uri)
+                            (resume ? connected.getPlayerApi().resume() :
+                                connected.getPlayerApi().play(uri))
                                 .setResultCallback(empty -> handler.post(()->
                                     finish(true,"Spotify прийняв команду прямого відтворення.")))
                                 .setErrorCallback(error -> handler.post(()->

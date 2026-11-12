@@ -85,7 +85,7 @@ public final class SpotifyDirectSettings {
         switch(kind) {
             case RAP: alias="реп";break;
             case UKRAINIAN: alias="укр муз";break;
-            case PLAYLIST: alias=name;break;
+            case PLAYLIST: case TRACK: alias=name;break;
             default: return null;
         }
         String wanted=SpotifyUriRules.normalizedAlias(alias);
@@ -96,8 +96,13 @@ public final class SpotifyDirectSettings {
                 JSONObject item=list.optJSONObject(i);
                 if(item==null)continue;
                 if(wanted.equals(SpotifyUriRules.normalizedAlias(
-                    item.optString("name",""))))
-                    return SpotifyUriRules.canonical(item.optString("uri",""));
+                    item.optString("name","")))) {
+                    String uri=SpotifyUriRules.canonical(item.optString("uri",""));
+                    if(uri==null)return null;
+                    if(kind==SpotifyMusicCommands.Kind.TRACK)
+                        return uri.startsWith("spotify:track:")?uri:null;
+                    return uri.startsWith("spotify:playlist:")?uri:null;
+                }
             }
         }catch(Exception ignored){}
         return null;

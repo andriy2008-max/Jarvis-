@@ -54,6 +54,13 @@ public final class SpotifyPlaybackController {
         if (kind == null) return;
         SpotifyMusicCommands.NamedPlaylist named = kind == SpotifyMusicCommands.Kind.PLAYLIST
             ? SpotifyMusicCommands.namedPlaylist(voice) : null;
+        String namedTrack=kind==SpotifyMusicCommands.Kind.TRACK
+            ? SpotifyMusicCommands.namedTrack(voice) : null;
+        if(kind==SpotifyMusicCommands.Kind.TRACK && namedTrack==null) {
+            if(callback!=null)callback.onFinished(false,
+                "Назви пісню після команди «Увімкни пісню».");
+            return;
+        }
         if (kind == SpotifyMusicCommands.Kind.PLAYLIST && named == null) {
             if (callback!=null) callback.onFinished(false,"Назви плейлист після команди «Увімкни плейлист».");
             return;
@@ -74,21 +81,34 @@ public final class SpotifyPlaybackController {
         // An explicit user-saved URI is required; never guess IDs from names.
         boolean allowDirect=!bypassDirectOnce;
         bypassDirectOnce=false;
+        String alias=kind==SpotifyMusicCommands.Kind.TRACK
+            ? namedTrack : named==null?null:named.name;
         String directUri=allowDirect ? SpotifyDirectSettings.resolve(context,kind,
-            named==null?null:named.name) : null;
-        if(directUri!=null) {
+            alias) : null;
+        boolean resumeDirect=allowDirect &&
+            kind==SpotifyMusicCommands.Kind.OPEN &&
+            !SpotifyDirectSettings.clientId(context).isEmpty();
+        if(kind==SpotifyMusicCommands.Kind.TRACK && directUri==null) {
+            if(callback!=null)callback.onFinished(false,
+                "Пісню «"+namedTrack+"» ще не прив'язано до Spotify-посилання. " +
+                "Відкрий 🎵 Spotify · прямий запуск у Джарвісі.");
+            return;
+        }
+        if(directUri!=null || resumeDirect) {
             active=true;
             listener=callback;
             requested=kind;
-            namedPlaylist=named==null?null:named.name;
+            namedPlaylist=alias;
             final SpotifyMusicCommands.Kind fallbackKind=kind;
             final String fallbackVoice=voice;
             directBridge=new SpotifyAppRemoteBridge(context,
-                SpotifyDirectSettings.clientId(context),directUri,(ok,detail)->{
+                SpotifyDirectSettings.clientId(context),directUri,resumeDirect,(ok,detail)->{
                     if(!active)return;
                     directBridge=null;
                     if(ok) {
                         finish(true,"Spotify прийняв команду прямого відтворення без натискання Play.");
+                    } else if(fallbackKind==SpotifyMusicCommands.Kind.TRACK) {
+                        finish(false,detail+" Пісню не запускав, інші кнопки не натискав.");
                     } else {
                         active=false;
                         listener=null;

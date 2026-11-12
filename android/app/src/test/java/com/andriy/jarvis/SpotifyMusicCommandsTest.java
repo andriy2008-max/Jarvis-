@@ -18,6 +18,13 @@ public final class SpotifyMusicCommandsTest {
         is("Джарвіс, увімкни українську музику",SpotifyMusicCommands.Kind.UKRAINIAN);
         is("включи укр муз",SpotifyMusicCommands.Kind.UKRAINIAN);
         is("включи плейлист Рок",SpotifyMusicCommands.Kind.PLAYLIST);
+        is("увімкни пісню Океан",SpotifyMusicCommands.Kind.TRACK);
+        is("Джарвіс, включи трек Мій трек",SpotifyMusicCommands.Kind.TRACK);
+        is("запусти song Skyfall",SpotifyMusicCommands.Kind.TRACK);
+        is("увімкни пісню",null);
+        is("виключи пісню Океан",null);
+        if(!"океан".equals(SpotifyMusicCommands.namedTrack("увімкни пісню Океан")))
+            throw new AssertionError("saved song alias parser");
         is("включи плейлист Рок без перемішування",SpotifyMusicCommands.Kind.PLAYLIST);
         is("виключи плейлист Рок",null);
         is("виключи музику",null);

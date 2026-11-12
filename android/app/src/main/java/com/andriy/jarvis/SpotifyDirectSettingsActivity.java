@@ -55,7 +55,7 @@ public final class SpotifyDirectSettingsActivity extends Activity {
         body.addView(clientField);
 
         addText(body,"3. Додай плейлисти для голосових команд. Один на рядок: Назва | Посилання Spotify",16,WHITE);
-        addText(body,"Наприклад:\nУкр муз | https://open.spotify.com/playlist/...\nРеп | https://open.spotify.com/playlist/...\nWorkout | https://open.spotify.com/playlist/...\n\nДля «Увімкни реп» потрібен окремий плейлист «Реп»: жанровий фільтр уподобаних пісень не має окремого Spotify URI.",13,MUTED);
+        addText(body,"Наприклад:\nУкр муз | https://open.spotify.com/playlist/...\nРеп | https://open.spotify.com/playlist/...\nWorkout | https://open.spotify.com/playlist/...\nМоя пісня | https://open.spotify.com/track/...\n\nКоманди «Увімкни музику» відновлює попереднє відтворення, «Увімкни пісню Моя пісня» запускає збережений трек. Для «Увімкни реп» потрібен окремий плейлист «Реп».",13,MUTED);
         aliasesField=edit(SpotifyDirectSettings.entries(this),7);
         aliasesField.setGravity(Gravity.TOP | Gravity.START);
         body.addView(aliasesField);
