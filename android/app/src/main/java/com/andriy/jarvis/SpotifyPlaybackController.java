@@ -24,14 +24,13 @@ public final class SpotifyPlaybackController {
     private static final int MAX_NAMED_SCROLLS = 16;
     private static final long NAMED_FIND_TIMEOUT_MS = 52000L;
 
-    private enum Stage { WAIT_APP, OPEN_LIBRARY, OPEN_COLLECTION, CHOOSE_RAP, SHUFFLE, SHUFFLE_OFF, PLAY }
+    private enum Stage { WAIT_APP, OPEN_LIBRARY, OPEN_COLLECTION, CHOOSE_RAP, PLAY }
 
     private final Context context;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable poll = this::tick;
     private SpotifyMusicCommands.Kind requested;
     private String namedPlaylist;
-    private boolean shuffleRequested = true;
     private Listener listener;
     private Stage stage;
     private long stageStart;
@@ -100,7 +99,6 @@ public final class SpotifyPlaybackController {
         temporaryControl = lease;
         requested = kind;
         namedPlaylist = named == null ? null : named.name;
-        shuffleRequested = named == null || named.shuffle;
         scrolled = 0;
         listener = callback;
         active = true;
@@ -148,13 +146,8 @@ public final class SpotifyPlaybackController {
                     reason = "Не знайшов жанрову кнопку «Реп» у вподобаних піснях. " +
                         "Spotify може не показувати цей фільтр у твоєму акаунті.";
                     break;
-                case SHUFFLE:
-                case SHUFFLE_OFF:
-                    reason = "Не знайшов кнопку перемішування на сторінці добірки. " +
-                        "Значок може не мати доступного опису у Spotify.";
-                    break;
                 default:
-                    reason = "Не знайшов велику зелену кнопку відтворення поряд із перемішуванням.";
+                    reason = "Не знайшов велику зелену кнопку Play на сторінці плейлиста.";
             }
             finish(false, reason + " Нічого навмання не натискав.");
             return;
@@ -186,11 +179,11 @@ public final class SpotifyPlaybackController {
                     found = ScreenControlAccessibilityService.spotifyControl(item,null);
                 }
                 if (successful(found)) {
-                    move(requested == SpotifyMusicCommands.Kind.RAP ? Stage.CHOOSE_RAP :
-                        !shuffleRequested ? Stage.SHUFFLE_OFF : Stage.SHUFFLE,
+                    move(requested == SpotifyMusicCommands.Kind.RAP ?
+                        Stage.CHOOSE_RAP : Stage.PLAY,
                         requested == SpotifyMusicCommands.Kind.RAP
                             ? "Чекаю кнопку жанру «Реп»..."
-                            : "Плейлист відкрито. Перевіряю перемішування...");
+                            : "Плейлист відкрито. Натискаю велику зелену Play...");
                 } else {
                     boolean canScroll = requested == SpotifyMusicCommands.Kind.UKRAINIAN ||
                         requested == SpotifyMusicCommands.Kind.PLAYLIST;
@@ -211,28 +204,13 @@ public final class SpotifyPlaybackController {
                 if (successful(ScreenControlAccessibilityService.spotifyControl(
                     SpotifyUiLabels.Target.RAP_FILTER,
                     SpotifyUiLabels.Target.LIKED_SONGS)))
-                    move(Stage.SHUFFLE, "Знайшов «Реп». Чекаю кнопку перемішування...");
+                    move(Stage.PLAY, "Знайшов «Реп». Натискаю Play без перемішування...");
                 break;
-            case SHUFFLE:
-            case SHUFFLE_OFF: {
-                boolean enable = stage == Stage.SHUFFLE;
-                ScreenControlAccessibilityService.SpotifyStep step =
-                    requested == SpotifyMusicCommands.Kind.PLAYLIST
-                        ? ScreenControlAccessibilityService.spotifyNamedPlaylistControl(
-                            SpotifyUiLabels.Target.SHUFFLE,namedPlaylist,enable)
-                        : ScreenControlAccessibilityService.spotifyControl(
-                            SpotifyUiLabels.Target.SHUFFLE,pageTarget());
-                if (successful(step))
-                    move(Stage.PLAY,enable
-                        ? "Перемішування ввімкнено. Чекаю Play..."
-                        : "Перемішування вимкнено. Чекаю Play...");
-                break;
-            }
             case PLAY: {
                 ScreenControlAccessibilityService.SpotifyStep result =
                     requested == SpotifyMusicCommands.Kind.PLAYLIST
                         ? ScreenControlAccessibilityService.spotifyNamedPlaylistControl(
-                            SpotifyUiLabels.Target.PLAY,namedPlaylist,shuffleRequested)
+                            SpotifyUiLabels.Target.PLAY,namedPlaylist,false)
                         : ScreenControlAccessibilityService.spotifyControl(
                             SpotifyUiLabels.Target.PLAY,pageTarget());
                 if (successful(result))
