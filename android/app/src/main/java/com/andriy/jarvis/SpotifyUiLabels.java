@@ -59,6 +59,17 @@ public final class SpotifyUiLabels {
         }
     }
 
+    /** Exact playlist title, never substring matching another playlist or song.
+     * Spotify may add a playlist-type prefix/suffix to accessibility labels. */
+    public static boolean namedPlaylist(String wanted,String visible) {
+        String title=normalize(wanted),label=normalize(visible);
+        if(title.isEmpty() || title.length()>75) return false;
+        return label.equals(title) || label.equals("плейлист "+title) ||
+            label.equals(title+" плейлист") ||
+            label.equals("плейліст "+title) || label.equals(title+" плейліст") ||
+            label.equals("playlist "+title) || label.equals(title+" playlist");
+    }
+
     /** Bare plural arrows mean this control only within Spotify, never in other apps. */
     public static boolean shuffleRequest(String phrase) {
         String s = normalize(phrase);
