@@ -19,6 +19,13 @@ public final class SpotifyUiLabelsTest {
         accepts(SpotifyUiLabels.Target.RAP_FILTER,"Rap");
         accepts(SpotifyUiLabels.Target.UKR_MUSIC,"Укр муз");
         accepts(SpotifyUiLabels.Target.UKR_MUSIC,"Укр. муз");
+        if (!SpotifyUiLabels.namedPlaylist("Рок","рок") ||
+            !SpotifyUiLabels.namedPlaylist("Мої хіти","Плейлист: Мої хіти") ||
+            !SpotifyUiLabels.namedPlaylist("Workout 2026","Workout 2026 • Playlist") ||
+            SpotifyUiLabels.namedPlaylist("Рок","Рок-н-рол") ||
+            SpotifyUiLabels.namedPlaylist("Рок","Мій плейлист Рок") ||
+            SpotifyUiLabels.namedPlaylist("Рок","Рок 2026"))
+            throw new AssertionError("Exact playlist selection");
         accepts(SpotifyUiLabels.Target.SHUFFLE,"Shuffle off");
         accepts(SpotifyUiLabels.Target.SHUFFLE,"Перемішати");
         accepts(SpotifyUiLabels.Target.PLAY,"Play");
