@@ -49,11 +49,12 @@ public final class JarvisMacroActivity extends Activity {
         "Команда керування Джарвіса", "Пауза (мілісекунди)",
         "Сповіщення", "Вібрація (мілісекунди)", "Root shell (su -c)",
         "Відкрити застосунок", "Чекати відкриття застосунку",
+        "Дочекатися кнопки за назвою", "Натиснути кнопку за назвою",
         "Натиснути на точку X,Y (%)", "Написати текст в активне поле"
     };
     private static final String[] ACTION_KEYS = {
         "command", "wait", "notification", "vibrate", "root",
-        "open_app", "wait_app", "tap_point", "type_text"
+        "open_app", "wait_app", "wait_label", "tap_label", "tap_point", "type_text"
     };
 
     private LinearLayout root;
@@ -250,13 +251,16 @@ public final class JarvisMacroActivity extends Activity {
         String type=ACTION_KEYS[row.type.getSelectedItemPosition()];
         boolean root="root".equals(type);
         boolean app="open_app".equals(type) || "wait_app".equals(type);
-        boolean screen="tap_point".equals(type) || "type_text".equals(type);
+        boolean screen="tap_point".equals(type) || "type_text".equals(type) ||
+            "wait_label".equals(type) || "tap_label".equals(type);
         row.approved.setVisibility(root?View.VISIBLE:View.GONE);
         row.packagePanel.setVisibility(screen?View.VISIBLE:View.GONE);
         row.appPicker.setVisibility(app||screen?View.VISIBLE:View.GONE);
         row.pointPicker.setVisibility("tap_point".equals(type)?View.VISIBLE:View.GONE);
         if(app)row.value.setHint("Пакет програми, наприклад com.spotify.music");
         else if("tap_point".equals(type))row.value.setHint("Координати: 50,35 (X%,Y%)");
+        else if("tap_label".equals(type))row.value.setHint("Назва кнопки, наприклад Пошук");
+        else if("wait_label".equals(type))row.value.setHint("Чекати появи: Пошук");
         else if("type_text".equals(type))row.value.setHint("Точний текст для активного поля");
         else if("wait".equals(type))row.value.setHint("Час паузи: 1500 мс");
         else row.value.setHint("Команда / параметри дії");
@@ -339,8 +343,9 @@ public final class JarvisMacroActivity extends Activity {
         root.addView(actionsSection);
         actionsSection.addView(label("ДІЇ · виконуються по черзі",18,true));
         actionsSection.addView(label("Кроки виконуються строго по черзі. "
-            +"Відкрий програму → Дочекайся програми → Натисни X,Y (%) → "
-            +"Напиши текст у сфокусоване поле → Пауза. "
+            +"Відкрий програму → Дочекайся програми → Дочекайся кнопки "
+            +"«Пошук» → Натисни «Пошук» → Напиши текст → Пауза. "
+            +"Натискання за назвою надійніше; X,Y (%) — запасний варіант. "
             +"Для екранних дій увімкни спеціальні можливості Джарвіса. "
             +"Кнопка 🎯 дає вибрати точку на справжньому екрані.",
             13,false));
@@ -567,10 +572,16 @@ public final class JarvisMacroActivity extends Activity {
                 }
                 if("tap_point".equals(action))
                     JarvisMacroScreenRules.parsePoint(actionValue);
+                if(("wait_label".equals(action) || "tap_label".equals(action)) &&
+                    (actionValue.length()>100 ||
+                     "tap_label".equals(action) &&
+                     JarvisMacroScreenRules.riskyLabel(actionValue)))
+                    throw new IllegalArgumentException("Завелика або небезпечна назва кнопки.");
                 if("type_text".equals(action) &&
                    !JarvisMacroScreenRules.validText(actionValue))
                     throw new IllegalArgumentException("Текст макросу: від 1 до 1000 символів.");
-                if(("tap_point".equals(action) || "type_text".equals(action)) &&
+                if(("tap_point".equals(action) || "type_text".equals(action) ||
+                    "wait_label".equals(action) || "tap_label".equals(action)) &&
                    !JarvisForegroundApp.validPackage(value(row.packageName)))
                     throw new IllegalArgumentException("Вибери програму для екранного кроку.");
                 if("wait".equals(action) || "vibrate".equals(action)) {
@@ -582,7 +593,8 @@ public final class JarvisMacroActivity extends Activity {
                 JSONObject step = new JSONObject();
                 step.put("type",action);
                 step.put("value",actionValue);
-                if ("tap_point".equals(action) || "type_text".equals(action))
+                if ("tap_point".equals(action) || "type_text".equals(action) ||
+                    "wait_label".equals(action) || "tap_label".equals(action))
                     step.put("package",value(row.packageName));
                 step.put("rootApproved",
                     "root".equals(action) && row.approved.isChecked());
