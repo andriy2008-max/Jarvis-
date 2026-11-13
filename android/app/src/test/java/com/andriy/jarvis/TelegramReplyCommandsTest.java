@@ -53,6 +53,40 @@ public final class TelegramReplyCommandsTest {
         yes(TelegramReplyCommands.exactContact("Олена-К.", "олена к"));
         yes(!TelegramReplyCommands.exactContact("Олена","Олена С."));
         yes(!TelegramReplyCommands.exactContact("Олена","Олена з роботи"));
+        for(String word:new String[]{"ок","ОК","окей","Окей!",
+            "Джарвіс, окей"}) {
+            yes(TelegramReplyCommands.dialogAction(word)==
+                TelegramReplyCommands.DialogAction.CONFIRM);
+            yes(TelegramReplyCommands.parse(word)==null);
+        }
+        for(String phrase:new String[]{"не так","Заново",
+            "Джарвіс, не так!"}) {
+            yes(TelegramReplyCommands.dialogAction(phrase)==
+                TelegramReplyCommands.DialogAction.REWRITE_MESSAGE);
+        }
+        yes(TelegramReplyCommands.dialogAction("Не той контакт")==
+            TelegramReplyCommands.DialogAction.CHANGE_CONTACT);
+        yes(TelegramReplyCommands.dialogAction("Джарвіс, не той контакт.")==
+            TelegramReplyCommands.DialogAction.CHANGE_CONTACT);
+        yes(TelegramReplyCommands.dialogAction("Не надсилай")==
+            TelegramReplyCommands.DialogAction.CANCEL);
+        for(String phrase:new String[]{"окей, але не зараз","окей надішли гроші",
+            "Окей, відкрий YouTube","не той контакт Олена",
+            "заново, але завтра","не така","нічого","так"}) {
+            yes(TelegramReplyCommands.dialogAction(phrase)==
+                TelegramReplyCommands.DialogAction.NONE);
+        }
+        TelegramReplyCommands.Request corrected=
+            TelegramReplyCommands.correctedContact("Яна Петрівна","Привіт, як справи?");
+        yes(corrected!=null && corrected.kind==TelegramReplyCommands.Kind.DRAFT &&
+            "Яна Петрівна".equals(corrected.recipient) &&
+            "Привіт, як справи?".equals(corrected.text));
+        yes(TelegramReplyCommands.correctedContact("","Привіт")==null);
+        yes(TelegramReplyCommands.correctedContact("Яна","")==null);
+        yes("Привіт, YouTube!".equals(TelegramReplyCommands.dictatedCorrection(
+            "Джарвіс, Привіт, YouTube!")));
+        yes(TelegramReplyCommands.dictatedCorrection(null)==null);
+        yes(TelegramReplyCommands.dictatedCorrection("  ")==null);
         System.out.println("PASS TelegramReplyCommandsTest");
     }
 }
