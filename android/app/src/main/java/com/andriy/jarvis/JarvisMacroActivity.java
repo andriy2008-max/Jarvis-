@@ -47,10 +47,13 @@ public final class JarvisMacroActivity extends Activity {
     };
     private static final String[] ACTIONS = {
         "Команда керування Джарвіса", "Пауза (мілісекунди)",
-        "Сповіщення", "Вібрація (мілісекунди)", "Root shell (su -c)"
+        "Сповіщення", "Вібрація (мілісекунди)", "Root shell (su -c)",
+        "Відкрити застосунок", "Чекати відкриття застосунку",
+        "Натиснути на точку X,Y (%)", "Написати текст в активне поле"
     };
     private static final String[] ACTION_KEYS = {
-        "command", "wait", "notification", "vibrate", "root"
+        "command", "wait", "notification", "vibrate", "root",
+        "open_app", "wait_app", "tap_point", "type_text"
     };
 
     private LinearLayout root;
@@ -182,6 +185,10 @@ public final class JarvisMacroActivity extends Activity {
         Spinner type;
         EditText value;
         CheckBox approved;
+        EditText packageName;
+        LinearLayout packagePanel;
+        Button pointPicker;
+        Button appPicker;
     }
     private void addAction(JSONObject source) {
         ActionRow row = new ActionRow();
@@ -204,16 +211,33 @@ public final class JarvisMacroActivity extends Activity {
         row.approved.setTextColor(TEXT);
         row.approved.setChecked(source != null && source.optBoolean("rootApproved"));
         row.view.addView(row.approved);
+        row.packagePanel = new LinearLayout(this);
+        row.packagePanel.setOrientation(LinearLayout.VERTICAL);
+        row.packageName=field(row.packagePanel,"Цільова програма (пакет Android)",
+            "Наприклад, com.spotify.music",
+            source==null?"":source.optString("package"));
+        row.view.addView(row.packagePanel);
+        row.appPicker=button("📱 Обрати встановлену програму",
+            ()->selectInstalledApp("Цільова програма макросу",pkg->{
+                String action=ACTION_KEYS[row.type.getSelectedItemPosition()];
+                if("open_app".equals(action)||"wait_app".equals(action))
+                    row.value.setText(pkg);
+                else row.packageName.setText(pkg);
+            }));
+        row.view.addView(row.appPicker);
+        row.pointPicker=button("🎯 Показати точку поверх програми",
+            ()->selectMacroPoint(row));
+        row.view.addView(row.pointPicker);
         row.approved.setVisibility("root".equals(
             ACTION_KEYS[row.type.getSelectedItemPosition()]) ? View.VISIBLE : View.GONE);
         row.type.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(android.widget.AdapterView<?> p, View v,
                                                  int position, long id) {
-                row.approved.setVisibility("root".equals(ACTION_KEYS[position])
-                    ? View.VISIBLE : View.GONE);
+                updateActionRow(row);
             }
             @Override public void onNothingSelected(android.widget.AdapterView<?> p) {}
         });
+        updateActionRow(row);
         row.view.addView(button("↑ Вище", () -> move(row,-1)));
         row.view.addView(button("↓ Нижче", () -> move(row,1)));
         row.view.addView(button("✕ Прибрати дію",()-> {
@@ -221,6 +245,62 @@ public final class JarvisMacroActivity extends Activity {
         }));
         actionRows.add(row);
     }
+    private void updateActionRow(ActionRow row) {
+        if(row.type==null || row.value==null)return;
+        String type=ACTION_KEYS[row.type.getSelectedItemPosition()];
+        boolean root="root".equals(type);
+        boolean app="open_app".equals(type) || "wait_app".equals(type);
+        boolean screen="tap_point".equals(type) || "type_text".equals(type);
+        row.approved.setVisibility(root?View.VISIBLE:View.GONE);
+        row.packagePanel.setVisibility(screen?View.VISIBLE:View.GONE);
+        row.appPicker.setVisibility(app||screen?View.VISIBLE:View.GONE);
+        row.pointPicker.setVisibility("tap_point".equals(type)?View.VISIBLE:View.GONE);
+        if(app)row.value.setHint("Пакет програми, наприклад com.spotify.music");
+        else if("tap_point".equals(type))row.value.setHint("Координати: 50,35 (X%,Y%)");
+        else if("type_text".equals(type))row.value.setHint("Точний текст для активного поля");
+        else if("wait".equals(type))row.value.setHint("Час паузи: 1500 мс");
+        else row.value.setHint("Команда / параметри дії");
+    }
+
+    /** The user selects an app and can navigate normally beneath an accessibility
+     * overlay. Only the explicit "pick point" action captures a coordinate. */
+    private void selectMacroPoint(ActionRow row) {
+        String pkg=value(row.packageName);
+        if (!JarvisForegroundApp.validPackage(pkg)) {
+            Toast.makeText(this,"Спочатку обери програму в цьому кроці.",
+                Toast.LENGTH_LONG).show();
+            return;
+        }
+        Intent open=getPackageManager().getLaunchIntentForPackage(pkg);
+        if(open==null) {
+            Toast.makeText(this,"Програма недоступна для відкриття.",
+                Toast.LENGTH_LONG).show();
+            return;
+        }
+        String error=ScreenControlAccessibilityService.startMacroPointPicker(point->{
+            if(point==null)return;
+            row.value.setText(point);
+            Intent back=new Intent(this,JarvisMacroActivity.class);
+            back.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT |
+                          Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            try{startActivity(back);}
+            catch(Exception ignored) {
+                Toast.makeText(this,"Точка збережена. Повернись у Джарвіс.",
+                    Toast.LENGTH_LONG).show();
+            }
+        });
+        if(!error.isEmpty()) {
+            Toast.makeText(this,error,Toast.LENGTH_LONG).show();
+            return;
+        }
+        try { startActivity(open); }
+        catch(Exception e) {
+            ScreenControlAccessibilityService.stopMacroPointPicker();
+            Toast.makeText(this,"Android не дозволив відкрити програму.",
+                Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void move(ActionRow row, int direction) {
         int idx = actionRows.indexOf(row);
         int target = idx + direction;
@@ -258,8 +338,11 @@ public final class JarvisMacroActivity extends Activity {
         actionsSection.setOrientation(LinearLayout.VERTICAL);
         root.addView(actionsSection);
         actionsSection.addView(label("ДІЇ · виконуються по черзі",18,true));
-        actionsSection.addView(label("Команда Джарвіса: ліхтарик, звук, Wi-Fi, застосунки, "
-            +"екранні команди. Для екранних послідовностей потрібен дозвіл Accessibility.",
+        actionsSection.addView(label("Кроки виконуються строго по черзі. "
+            +"Відкрий програму → Дочекайся програми → Натисни X,Y (%) → "
+            +"Напиши текст у сфокусоване поле → Пауза. "
+            +"Для екранних дій увімкни спеціальні можливості Джарвіса. "
+            +"Кнопка 🎯 дає вибрати точку на справжньому екрані.",
             13,false));
         actionList = new LinearLayout(this);
         actionList.setOrientation(LinearLayout.VERTICAL);
@@ -316,6 +399,9 @@ public final class JarvisMacroActivity extends Activity {
 
     /** Select a launchable installed app rather than asking for a package ID. */
     private void selectForegroundApp() {
+        selectInstalledApp("Якщо відкрита програма",pkg->foregroundApp.setText(pkg));
+    }
+    private void selectInstalledApp(String heading, java.util.function.Consumer<String> selection) {
         Intent launcher = new Intent(Intent.ACTION_MAIN);
         launcher.addCategory(Intent.CATEGORY_LAUNCHER);
         PackageManager pm = getPackageManager();
@@ -338,8 +424,8 @@ public final class JarvisMacroActivity extends Activity {
         String[] titles=options.keySet().toArray(new String[0]);
         String[] packages=options.values().toArray(new String[0]);
         new AlertDialog.Builder(this)
-            .setTitle("Якщо відкрита програма")
-            .setItems(titles,(dialog,which)->foregroundApp.setText(packages[which]))
+            .setTitle(heading)
+            .setItems(titles,(dialog,which)->selection.accept(packages[which]))
             .setNegativeButton("Скасувати",null)
             .show();
     }
@@ -475,6 +561,18 @@ public final class JarvisMacroActivity extends Activity {
                 String actionValue = value(row.value);
                 if(actionValue.isEmpty())
                     throw new IllegalArgumentException("Заповни параметри кожної дії.");
+                if("open_app".equals(action) || "wait_app".equals(action)) {
+                    if(!JarvisForegroundApp.validPackage(actionValue))
+                        throw new IllegalArgumentException("Обери встановлену програму для кроку.");
+                }
+                if("tap_point".equals(action))
+                    JarvisMacroScreenRules.parsePoint(actionValue);
+                if("type_text".equals(action) &&
+                   !JarvisMacroScreenRules.validText(actionValue))
+                    throw new IllegalArgumentException("Текст макросу: від 1 до 1000 символів.");
+                if(("tap_point".equals(action) || "type_text".equals(action)) &&
+                   !JarvisForegroundApp.validPackage(value(row.packageName)))
+                    throw new IllegalArgumentException("Вибери програму для екранного кроку.");
                 if("wait".equals(action) || "vibrate".equals(action)) {
                     int number = Integer.parseInt(actionValue);
                     int max = "wait".equals(action) ? 60000 : 5000;
@@ -484,6 +582,8 @@ public final class JarvisMacroActivity extends Activity {
                 JSONObject step = new JSONObject();
                 step.put("type",action);
                 step.put("value",actionValue);
+                if ("tap_point".equals(action) || "type_text".equals(action))
+                    step.put("package",value(row.packageName));
                 step.put("rootApproved",
                     "root".equals(action) && row.approved.isChecked());
                 actions.put(step);
