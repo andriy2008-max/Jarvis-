@@ -1,6 +1,7 @@
 name: JARVIS 0.1.28 signed stable APK (user-requested)
 
 # Single explicitly requested build; no recurring APK compilation.
+# Triggered by the current explicit user instruction to assemble the APK.
 on:
   push:
     paths:
