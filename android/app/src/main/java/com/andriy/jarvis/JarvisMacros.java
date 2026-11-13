@@ -135,21 +135,37 @@ public final class JarvisMacros {
         String normalized = CommandPatterns.normalizeControlVerb(words)
             .replaceAll("\\s+", " ").trim();
         if (normalized.isEmpty()) return false;
-        for (JSONObject m : all(context)) {
-            if (!m.optBoolean("enabled", true) ||
-                !"voice".equals(m.optString("trigger", "voice"))) continue;
-            String phrase = CommandPatterns.normalizeControlVerb(m.optString("triggerValue"))
-                .replaceAll("\\s+", " ").trim();
-            if (!phrase.isEmpty() && phrase.equals(normalized)) {
-                long now = SystemClock.elapsedRealtime();
-                if (phrase.equals(lastVoice) && now - lastVoiceMs < 2200) return true;
-                lastVoice = phrase;
-                lastVoiceMs = now;
-                execute(context, m, listener);
+        JSONObject selected=null;
+        int matching=0;
+        for (JSONObject macro : all(context)) {
+            if (!macro.optBoolean("enabled", true) ||
+                !"voice".equals(macro.optString("trigger", "voice"))) continue;
+            String phrase=CommandPatterns.normalizeControlVerb(macro.optString("triggerValue"))
+                .replaceAll("\\s+"," ").trim();
+            if(phrase.isEmpty() || !phrase.equals(normalized)) continue;
+            matching++;
+            if(!allowed(context,macro))continue;
+            if(selected!=null) {
+                report(listener,"Є кілька активних макросів із командою «"+
+                    normalized+"». Уточни обмеження, щоб залишився один.");
                 return true;
             }
+            selected=macro;
         }
-        return false;
+        if(matching==0)return false;
+        if(selected==null) {
+            report(listener,"Для команди «"+normalized+"» жоден макрос не "+
+                "відповідає поточним обмеженням.");
+            return true;
+        }
+        // Deduplicate repeated ASR callbacks for the exact selected macro.
+        String token=normalized+"|"+selected.optString("id");
+        long now=SystemClock.elapsedRealtime();
+        if(token.equals(lastVoice) && now-lastVoiceMs<2200)return true;
+        lastVoice=token;
+        lastVoiceMs=now;
+        execute(context,selected,listener);
+        return true;
     }
 
     public static boolean handleEvent(Context context, String trigger, Listener listener) {
