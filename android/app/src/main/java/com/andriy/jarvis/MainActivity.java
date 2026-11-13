@@ -1053,7 +1053,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         attachFaceSwipe();
         face.setBackgroundColor(BG);
         face.setContentDescription(
-            "Джарвіс. Натисни обличчя для голосової команди; свайп вліво скасовує слово.");
+            "Пульт телефона. Натисни, щоб сказати команду телефону.");
         setContentView(face, new ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
@@ -1907,7 +1907,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         startY = event.getY();
                         held = false;
                         cancelHold();
-                        if (JarvisPhoneMode.isActive()) {
+                        if (!isWatchDevice && JarvisPhoneMode.isActive()) {
                             // Long press is the explicit exit; tap starts listening.
                             holdAction = () -> {
                                 if (JarvisPhoneMode.isActive() && foreground) {
@@ -2073,9 +2073,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private void onShakeDetected() {
-        if (isWatchDevice && foreground && shakeEnabled && JarvisPhoneMode.isActive() &&
+        if (isWatchDevice && foreground && shakeEnabled &&
             visibleDialogs == 0) {
-            startPhoneListening();
+            startWatchSpeech();
             return;
         }
         if (!foreground || !shakeEnabled || accelerometer == null ||
@@ -3776,6 +3776,45 @@ public final class MainActivity extends Activity implements RecognitionListener 
         setStatus(result);
     }
 
+    private void forwardWatchCommand(String raw) {
+        if (watchPhoneLink == null) {
+            setStatus("Немає зв'язку з телефоном. Команду не виконано.");
+            return;
+        }
+        JarvisWearPhoneLink.Callback reply = (ok, detail) -> {
+            if (isFinishing() || isDestroyed()) return;
+            appendDialogue("Джарвіс", detail);
+            setStatus(detail);
+            if (voiceEnabled) speakReply(detail);
+        };
+        if (watchPhoneLink.spotifyRunning()) {
+            String command = CommandPatterns.normalize(raw);
+            if (command.equals("скасуй spotify") || command.equals("скасуй спотіфай") ||
+                command.equals("зупини spotify") || command.equals("стоп послідовність"))
+                watchPhoneLink.cancelSpotify(reply);
+            else reply.finished(false, "Spotify ще виконує команду. Скажи «Скасуй Spotify».");
+            return;
+        }
+        if (JarvisPhoneMode.transition(raw) == JarvisPhoneMode.Transition.ENTER) {
+            watchPhoneLink.enter(reply);
+            return;
+        }
+        if (SpotifyMusicCommands.parse(raw) != null) {
+            watchPhoneLink.spotify(raw, reply);
+            return;
+        }
+        if (watchPhoneLink.active()) {
+            watchPhoneLink.command(raw, reply);
+            return;
+        }
+        setStatus("Підключаюся до телефона…");
+        watchPhoneLink.enter((ok, detail) -> {
+            if (isFinishing() || isDestroyed()) return;
+            if (ok) watchPhoneLink.command(raw, reply);
+            else reply.finished(false, detail);
+        });
+    }
+
     private void processCommand(String raw) {
         if (raw == null || raw.trim().isEmpty()) return;
         if (!isWatchDevice) {
@@ -3794,83 +3833,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
         })) return;
         JarvisPhoneMode.Transition modeTransition = JarvisPhoneMode.transition(raw);
         if (isWatchDevice) {
-            // Automated Spotify tasks use a temporary watch/phone face, not
-            // a persistent session. A new voice command cannot interrupt
-            // the verified sequence except an explicit cancellation.
-            if (watchPhoneLink != null && watchPhoneLink.spotifyRunning()) {
-                String request = CommandPatterns.normalize(raw);
-                if (modeTransition == JarvisPhoneMode.Transition.EXIT ||
-                    request.equals("скасуй spotify") ||
-                    request.equals("скасуй спотіфай") ||
-                    request.equals("зупини spotify")) {
-                    watchPhoneLink.cancelSpotify((ok, detail) -> {
-                        if (!isFinishing() && !isDestroyed()) setStatus(detail);
-                    });
-                } else setStatus("Spotify ще виконує команду. Скажи «Скасуй Spotify».");
-                return;
-            }
-            if (modeTransition == JarvisPhoneMode.Transition.ENTER) {
-                if (watchPhoneLink == null) {
-                    setStatus("На годиннику немає з'єднання з телефоном.");
-                    return;
-                }
-                watchPhoneLink.enter((ok, detail) -> {
-                    if (isFinishing() || isDestroyed()) return;
-                    if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-                    appendDialogue("Джарвіс", detail);
-                    setStatus(detail);
-                    if (voiceEnabled) speakReply(detail);
-                });
-                return;
-            }
-            if (modeTransition == JarvisPhoneMode.Transition.EXIT &&
-                JarvisPhoneMode.isActive()) {
-                exitPhoneMode();
-                return;
-            }
-            if (JarvisPhoneMode.isActive()) {
-                if (watchPhoneLink == null) {
-                    JarvisPhoneMode.setActive(false);
-                    setStatus("Зв'язок із телефоном втрачено.");
-                    return;
-                }
-                watchPhoneLink.command(raw,(ok, detail) -> {
-                    if (isFinishing() || isDestroyed()) return;
-                    if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-                    appendDialogue("Джарвіс", detail);
-                    setStatus(detail);
-                    if (voiceEnabled) speakReply(detail);
-                });
-                return;
-            }
-            if (JarvisPhoneMode.requiresPhone(raw) && SpotifyMusicCommands.parse(raw) == null) {
-                if (watchPhoneLink == null) { setStatus("Телефон не підключений."); return; }
-                watchPhoneLink.enter((ok, detail) -> {
-                    if (isFinishing() || isDestroyed()) return;
-                    if (ok) watchPhoneLink.command(raw, (done, response) -> {
-                        if (isFinishing() || isDestroyed()) return;
-                        setStatus(response);
-                        if (voiceEnabled) speakReply(response);
-                    });
-                    else setStatus(detail);
-                });
-                return;
-            }
-            SpotifyMusicCommands.Kind watchMusic = SpotifyMusicCommands.parse(raw);
-            if (watchMusic != null) {
-                if (watchPhoneLink == null) {
-                    setStatus("Не можу передати команду Spotify: телефон не підключений.");
-                    return;
-                }
-                watchPhoneLink.spotify(raw, (ok, detail) -> {
-                    if (isFinishing() || isDestroyed()) return;
-                    JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-                    appendDialogue("Джарвіс", detail);
-                    setStatus(detail);
-                    if (voiceEnabled) speakReply(detail);
-                });
-                return;
-            }
+            // Годинник — пульт телефона. Жодна команда не переходить
+            // до локального виконавця навіть при втраті з'єднання.
+            forwardWatchCommand(raw);
+            return;
         }
         if (modeTransition == JarvisPhoneMode.Transition.ENTER) {
             String result = JarvisPhoneModeManager.enter(this,
@@ -4424,7 +4390,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             JarvisControlFeedback.Phase feedback = JarvisControlFeedback.phase(now);
             boolean hearing = !"speaking".equals(expression) &&
                 (transcribing || "listening".equals(expression));
-            if (JarvisPhoneMode.isActive() || feedback != JarvisControlFeedback.Phase.IDLE) {
+            if (isWatchDevice || JarvisPhoneMode.isActive() || feedback != JarvisControlFeedback.Phase.IDLE) {
                 boolean hasWords = transcriptVisible() && !recognizedText.isEmpty() &&
                     !"speaking".equals(expression);
                 JarvisPixelPhone.draw(canvas, paint, cx,
