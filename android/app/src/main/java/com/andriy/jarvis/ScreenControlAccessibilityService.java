@@ -131,6 +131,10 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     }
 
     private void tapMacroPoint(String packageName, String rawPoint, MacroActionCallback cb) {
+        if(macroPointPicker!=null) {
+            cb.onComplete(false,"Заверши вибір точки перед виконанням макросу.");
+            return;
+        }
         if (!JarvisForegroundApp.validPackage(packageName)) {
             cb.onComplete(false, "У кроці не вибрано програму."); return;
         }
@@ -289,7 +293,11 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                     if(child!=null)queue.addLast(child);
                 }
             }
-            if(visited>MAX_SCAN || selected==null || service.currentExternalRoot()==null) {
+            AccessibilityNodeInfo verified=service.currentExternalRoot();
+            if(visited>MAX_SCAN || selected==null || verified==null ||
+                verified.getPackageName()==null ||
+                !packageName.equals(verified.getPackageName().toString()) ||
+                !selected.isEnabled() || !selected.isVisibleToUser()) {
                 cb.onComplete(false,"Кнопку не знайдено або екран змінився.");return;
             }
             if(selected.performAction(AccessibilityNodeInfo.ACTION_CLICK))
