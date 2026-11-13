@@ -357,7 +357,10 @@ public final class JarvisMacros {
                 String type = step.optString("type");
                 String value = step.optString("value").trim();
                 if(listener!=null)listener.onProgress(index,steps.length(),
-                    type+" · "+(value.length()>65?value.substring(0,65)+"…":value));
+                    type + ("type_text".equals(type) || "root".equals(type)
+                        ? " · прихований вміст"
+                        : value.isEmpty() ? "" :
+                            " · "+(value.length()>65?value.substring(0,65)+"…":value)));
                 try {
                     switch (type) {
                         case "open_app": {
