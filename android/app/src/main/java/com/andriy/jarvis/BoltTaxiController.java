@@ -11,9 +11,9 @@ public final class BoltTaxiController {
     private static final String BOLT="ee.mtakso.client";
     private static final Handler HANDLER=new Handler(Looper.getMainLooper());
     private static final long POLL_MS=350L;
-    // Bolt can start with a splash/home skeleton before the actual rides tile
-    // is rendered. Never treat package visibility as button readiness.
-    private static final long RIDES_STABLE_MS=900L;
+    // User-requested fixed delay from launching Bolt: do not wait for the
+    // «Поїздки» accessibility label before making the first tap.
+    private static final long RIDES_TAP_DELAY_MS=4000L;
     private static final long RETAP_AFTER_MS=2300L;
     private static final long TIMEOUT_MS=30000L;
     private static final long TOTAL_TIMEOUT_MS=45000L;
@@ -22,7 +22,7 @@ public final class BoltTaxiController {
         void onProgress(String status);
         void onFinished(boolean ok,String status);
     }
-    private enum Stage { OPEN_APP, RIDES, VERIFY_RIDES, DELAY, FOCUS_DROPOFF, WAIT_DROPOFF, TYPE, ENTER }
+    private enum Stage { OPEN_APP, VERIFY_RIDES, DELAY, FOCUS_DROPOFF, WAIT_DROPOFF, TYPE, ENTER }
     private final Listener listener;
     private final String address;
     private final JarvisPhoneModeManager.Lease lease;
@@ -30,7 +30,6 @@ public final class BoltTaxiController {
     private Stage stage=Stage.OPEN_APP;
     private long started=SystemClock.elapsedRealtime();
     private final long flowStarted=started;
-    private long ridesVisibleSince=-1L;
     private boolean finished;
     private int ridesRetries;
     private int dropoffRetries;
@@ -75,8 +74,8 @@ public final class BoltTaxiController {
         }
         BoltTaxiController job=new BoltTaxiController(listener,address,lease);
         synchronized(BoltTaxiController.class){active=job;}
-        listener.onProgress("Відкриваю Bolt. Шукаю «Поїздки»...");
-        HANDLER.postDelayed(job.tick,POLL_MS);
+        listener.onProgress("Відкриваю Bolt. Через 4 секунди натисну «Поїздки»...");
+        HANDLER.postDelayed(job.tick,RIDES_TAP_DELAY_MS);
     }
     private void move(Stage next,String info){
         stage=next;started=SystemClock.elapsedRealtime();
@@ -93,7 +92,6 @@ public final class BoltTaxiController {
             return;
         }
         if(!ScreenControlAccessibilityService.boltVisible()){
-            ridesVisibleSince=-1L;
             if(age>=TIMEOUT_MS)finish(false,"Bolt не відкрився або екран заблоковано.");
             else HANDLER.postDelayed(tick,POLL_MS);
             return;
@@ -103,48 +101,45 @@ public final class BoltTaxiController {
             return;
         }
         switch(stage){
-            case OPEN_APP:
-                if(ScreenControlAccessibilityService.boltRidesReady()) {
-                    move(Stage.DELAY,"Екран «Маршрут» відкрито. Перевіряю місце висадки...");
-                } else if(ScreenControlAccessibilityService.boltRidesAvailable()) {
-                    long now=SystemClock.elapsedRealtime();
-                    if(ridesVisibleSince<0L) ridesVisibleSince=now;
-                    if(now-ridesVisibleSince>=RIDES_STABLE_MS)
-                        move(Stage.RIDES,"Кнопка «Поїздки» з'явилася. Натискаю...");
-                } else {
-                    ridesVisibleSince=-1L;
-                }
-                break;
-            case RIDES:{
+            case OPEN_APP: {
+                // Wait is measured from the successful startActivity(), not
+                // from locating any text/tile inside Bolt.
+                if(SystemClock.elapsedRealtime()-flowStarted<RIDES_TAP_DELAY_MS)
+                    break;
                 ScreenControlAccessibilityService.BoltStep result=
-                    ScreenControlAccessibilityService.boltRides();
-                if(result==ScreenControlAccessibilityService.BoltStep.CLICKED)
-                    move(Stage.VERIFY_RIDES,"Натиснув плитку «Поїздки». Перевіряю, чи відкрився пошук...");
-                else if(result==ScreenControlAccessibilityService.BoltStep.READY)
-                    move(Stage.DELAY,"Маршрут Bolt відкрито. Перевіряю поле висадки...");
-                else if(result==ScreenControlAccessibilityService.BoltStep.BLOCKED){
-                    finish(false,"Не вдалося відкрити «Поїздки».");return;
+                    ScreenControlAccessibilityService.boltRidesAtFourSeconds();
+                if(result==ScreenControlAccessibilityService.BoltStep.READY) {
+                    move(Stage.DELAY,"Екран «Маршрут» уже відкритий. Шукаю місце висадки...");
+                } else if(result==ScreenControlAccessibilityService.BoltStep.CLICKED) {
+                    move(Stage.VERIFY_RIDES,
+                        "Через 4 секунди натиснув «Поїздки». Перевіряю маршрут...");
+                } else if(result==ScreenControlAccessibilityService.BoltStep.BLOCKED) {
+                    finish(false,"Bolt відкрито, але екран не підходить для безпечного натискання «Поїздки».");
+                    return;
                 }
                 break;
             }
             case VERIFY_RIDES:
                 if(ScreenControlAccessibilityService.boltRidesReady()) {
                     move(Stage.DELAY,"«Поїздки» відкрито. Шукаю «Місце висадки»...");
-                } else if(age>=RETAP_AFTER_MS &&
-                    ScreenControlAccessibilityService.boltRidesAvailable()) {
-                    if(ridesRetries>=2) {
-                        finish(false,"Bolt показує «Поїздки», але не відкриває поле адреси. Спробуй натиснути плитку вручну.");
+                } else if(age>=RETAP_AFTER_MS) {
+                    if(ridesRetries>=1) {
+                        finish(false,"Після натискання «Поїздки» не відкрився маршрут. Натисни «Поїздки» вручну.");
                         return;
                     }
-                    // A gesture can be accepted by Android before Bolt handles
-                    // it. Retap only while the verified tile is still present.
+                    // One limited retry after verifying Bolt is still foreground.
+                    // Never tap a payment, booking or route-confirmation screen.
                     ridesRetries++;
                     ScreenControlAccessibilityService.BoltStep again=
-                        ScreenControlAccessibilityService.boltRides();
-                    if(again==ScreenControlAccessibilityService.BoltStep.BLOCKED) {
-                        finish(false,"Android не дозволив натиснути «Поїздки».");return;
+                        ScreenControlAccessibilityService.boltRidesAtFourSeconds();
+                    if(again==ScreenControlAccessibilityService.BoltStep.READY) {
+                        move(Stage.DELAY,"Маршрут Bolt уже відкрито. Шукаю місце висадки...");
+                    } else if(again==ScreenControlAccessibilityService.BoltStep.CLICKED) {
+                        move(Stage.VERIFY_RIDES,"Повторив натискання «Поїздки». Перевіряю маршрут...");
+                    } else {
+                        finish(false,"Bolt не дозволив повторно натиснути «Поїздки» на цьому екрані.");
+                        return;
                     }
-                    move(Stage.VERIFY_RIDES,"Bolt ще показує «Поїздки». Перевіряю повторне натискання...");
                 }
                 break;
             case DELAY:
