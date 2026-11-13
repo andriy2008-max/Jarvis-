@@ -72,6 +72,8 @@ import java.util.Locale;
 import java.util.List;
 
 public final class MainActivity extends Activity implements RecognitionListener {
+    private static final int REQUEST_PHONE_COMPANION = 110;
+    private static final int REQUEST_COMPANION_NOTIFICATIONS = 111;
     private static final int REQUEST_WATCH_SPEECH = 109;
     private boolean watchSpeechPending;
     private String watchSpeechResult;
@@ -467,6 +469,27 @@ public final class MainActivity extends Activity implements RecognitionListener 
         resumePendingTimerIfAllowed();
         scheduleLauncherMicrophone();
         deliverWatchSpeech();
+        ensurePhoneCompanion();
+    }
+
+    private void ensurePhoneCompanion() {
+        if (isWatchDevice || !foreground) return;
+        if (!JarvisPhoneCompanionService.permitted(this)) {
+            if (!getPreferences(MODE_PRIVATE).getBoolean("companion_permission_asked", false)) {
+                getPreferences(MODE_PRIVATE).edit().putBoolean("companion_permission_asked", true).apply();
+                requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT}, REQUEST_PHONE_COMPANION);
+            } else setStatus("Для фонового приймача годинника дозволь «Пристрої поблизу» в налаштуваннях Джарвіса.");
+            return;
+        }
+        JarvisPhoneCompanionService.enable(this);
+        if (!JarvisPhoneCompanionService.start(this))
+            setStatus("Не вдалося запустити фоновий приймач годинника.");
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
+            !getPreferences(MODE_PRIVATE).getBoolean("companion_notice_asked", false)) {
+            getPreferences(MODE_PRIVATE).edit().putBoolean("companion_notice_asked", true).apply();
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQUEST_COMPANION_NOTIFICATIONS);
+        }
     }
 
     @Override
@@ -2758,7 +2781,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
     @Override
     public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(code, permissions, results);
-        if (code == REQUEST_TIMER_NOTIFICATIONS) {
+        if (code == REQUEST_PHONE_COMPANION) {
+            if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED)
+                ensurePhoneCompanion();
+            else setStatus("Без дозволу «Пристрої поблизу» постійний приймач годинника не запуститься.");
+        } else if (code == REQUEST_COMPANION_NOTIFICATIONS) {
+            if (results.length == 0 || results[0] != PackageManager.PERMISSION_GRANTED)
+                setStatus("Приймач працює, але його сповіщення приховане налаштуваннями Android.");
+        } else if (code == REQUEST_TIMER_NOTIFICATIONS) {
             if (results.length == 0 || results[0] != PackageManager.PERMISSION_GRANTED) {
                 setStatus("Сповіщення таймера заборонені. Вібрація та сигнал можуть працювати, але повідомлення не з'явиться.");
             }
