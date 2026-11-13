@@ -1689,6 +1689,7 @@ public final class FloatingJarvisService extends Service {
                 != TextToSpeech.SUCCESS) {
                 currentTtsId = null;
                 setFace("idle");
+                restartTelegramDictation();
             }
         } else {
             setFace("idle");
