@@ -45,7 +45,7 @@ public final class JarvisListeningAudioFocus {
                         .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                         .build();
                     request=new AudioFocusRequest.Builder(
-                        AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                        AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
                         .setAudioAttributes(attributes)
                         .setWillPauseWhenDucked(true)
                         .setOnAudioFocusChangeListener(listener)
@@ -55,7 +55,7 @@ public final class JarvisListeningAudioFocus {
             } else {
                 result=audio.requestAudioFocus(listener,
                     AudioManager.STREAM_MUSIC,
-                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT);
+                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE);
             }
             acquired=result==AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
             if(!acquired) Log.w(TAG,"Audio focus not granted");
