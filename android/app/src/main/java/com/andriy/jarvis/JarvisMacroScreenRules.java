@@ -35,6 +35,14 @@ public final class JarvisMacroScreenRules {
         return text != null && !text.isEmpty() && text.length() <= 1000 &&
             text.indexOf('\u0000') < 0;
     }
+    public static boolean matchesLabel(String requested,String visible) {
+        if(requested==null || visible==null)return false;
+        String a=requested.replaceAll("\\s+"," ").trim();
+        String b=visible.replaceAll("\\s+"," ").trim();
+        return !a.isEmpty() && a.length()<=100 &&
+            a.equalsIgnoreCase(b);
+    }
+
     /** Never let a replay script blindly tap submit/pay/delete actions. */
     public static boolean riskyLabel(String text) {
         if (text == null) return false;
