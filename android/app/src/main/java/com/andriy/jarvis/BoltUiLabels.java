@@ -38,12 +38,14 @@ public final class BoltUiLabels {
         return cues>=3 || (heading && cues>=2);
     }
 
-    /** Center of the top-left rides tile on the user's 684x1536 portrait
-     * Bolt home screenshot; scale using the real display size, not root bounds. */
+    /** Center of «Поїздки» in the user's 684x1536 Bolt screenshot.
+     * The tile spans roughly x=26..336, y=218..423; the former y=482
+     * erroneously pointed into the Bolt Food row on this layout.
+     * Scale using the actual display size, not the accessibility root. */
     public static int[] screenshotRidesPoint(int width,int height) {
         if(width<360 || height<width*2.05f || height>width*2.50f)return null;
         return new int[]{Math.round(width*(184f/684f)),
-                         Math.round(height*(482f/1536f))};
+                         Math.round(height*(321f/1536f))};
     }
 
     /** Stops a four-second screenshot tap on route/checkout/payment screens.
