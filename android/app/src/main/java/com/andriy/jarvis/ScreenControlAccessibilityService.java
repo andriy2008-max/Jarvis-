@@ -269,6 +269,22 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         });
     }
 
+    /** Pollable check without changing focus or reading the input contents. */
+    public static boolean macroFocusedEditable(String packageName) {
+        ScreenControlAccessibilityService service=connected.get();
+        if(service==null || !JarvisForegroundApp.validPackage(packageName))return false;
+        AccessibilityNodeInfo root=service.currentExternalRoot();
+        if(root==null || root.getPackageName()==null ||
+            !packageName.equals(root.getPackageName().toString()))return false;
+        AccessibilityNodeInfo focus=root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+        return focus!=null && focus.getPackageName()!=null &&
+            packageName.equals(focus.getPackageName().toString()) &&
+            focus.isEditable() && focus.isFocused() && focus.isEnabled() &&
+            focus.isVisibleToUser() && !focus.isPassword() &&
+            !isSensitiveInputType(focus.getInputType()) &&
+            !isSensitiveFieldLabel(focus);
+    }
+
     public static void macroType(String packageName, String text, MacroActionCallback cb) {
         ScreenControlAccessibilityService service=connected.get();
         if(service==null){ cb.onComplete(false, "Увімкни службу спеціальних можливостей.");return;}
