@@ -217,6 +217,7 @@ public final class FloatingJarvisService extends Service {
     @Override public void onCreate() {
         super.onCreate();
         headsetRoute = new JarvisHeadsetAudioRouter(this);
+        headsetRoute.setOnRouteLost(this::onMicrophoneRouteLost);
         JarvisPhoneMode.subscribe(phoneModeListener);
         packs = new OfflineVoicePackManager(this);
         offline = new OfflineSpeechClient(this, packs);
@@ -534,6 +535,24 @@ public final class FloatingJarvisService extends Service {
         ui.post(phoneListenAgain);
     }
 
+    /** Stop without dispatching a partial command when the required mic vanishes. */
+    private void onMicrophoneRouteLost() {
+        if(closing)return;
+        String why=headsetRoute==null?"Вибрана гарнітура недоступна.":headsetRoute.problem();
+        abortPhoneSpeech();
+        cancelCorrectionRestart();
+        if(recognitionRestart!=null)ui.removeCallbacks(recognitionRestart);
+        recognitionRestart=null;
+        recording=false;
+        listening=false;
+        recognizerSessionActive=false;
+        if(recognizer!=null) {
+            try { recognizer.cancel(); }catch(RuntimeException ignored){}
+        }
+        setFace("idle");
+        message(why.isEmpty()?"Вибраний мікрофон відключено.":why);
+    }
+
     private void abortPhoneSpeech() {
         phoneListening = false;
         ui.removeCallbacks(phoneListenAgain);
@@ -799,6 +818,16 @@ public final class FloatingJarvisService extends Service {
             message("Дозволь Джарвісу користуватися мікрофоном.");
             return;
         }
+        if (headsetRoute != null && !headsetRoute.begin()) {
+            phoneListening=false;
+            recording=false;
+            listening=false;
+            recognizerSessionActive=false;
+            cancelSpeechTiming();
+            setFace("idle");
+            message(headsetRoute.problem());
+            return;
+        }
         try {
             if (recognizer == null) {
                 if (SpeechRecognizer.isRecognitionAvailable(this))
@@ -987,7 +1016,6 @@ public final class FloatingJarvisService extends Service {
             listening = true;
             recognizerSessionActive = true;
             setFace("listening");
-            if (headsetRoute != null) headsetRoute.begin();
             recognizer.startListening(i);
             android.util.Log.i("JARVIS_FLOATING_QA", "mic_tap_started=true");
         } catch (Exception exception) {
