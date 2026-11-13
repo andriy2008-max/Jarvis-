@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "tools": [
+    {"name":"volume_set","description":"Встановити медіагучність телефона у відсотках.","confirmation":false,"parameters":{"percent":{"type":"integer","minimum":0,"maximum":100}}},
+    {"name":"volume_adjust","description":"Змінити поточну медіагучність на задану кількість відсоткових пунктів; гучніше +10, тихіше -10, якщо величину не задано.","confirmation":false,"parameters":{"delta":{"type":"integer","minimum":-20,"maximum":20}}},
+    {"name":"torch_set","description":"Увімкнути або вимкнути ліхтарик телефона.","confirmation":false,"parameters":{"enabled":{"type":"boolean"}}},
+    {"name":"music_control","description":"Надіслати команду активному медіапрогравачу: play, pause, next, previous. Не обирає пісню, жанр чи плейлист.","confirmation":false,"parameters":{"action":{"type":"string","enum":["play","pause","next","previous"]}}},
+    {"name":"timer_start","description":"Поставити таймер від 1 секунди до 3 годин. На телефоні лише один таймер; заміна потребує підтвердження.","confirmation":false,"parameters":{"seconds":{"type":"integer","minimum":1,"maximum":10800}}},
+    {"name":"timer_cancel","description":"Скасувати поточний таймер після підтвердження користувача.","confirmation":true,"parameters":{}},
+    {"name":"clarify","description":"Уточнити неоднозначний намір або відсутній параметр, нічого не виконувати.","confirmation":false,"parameters":{"question":{"type":"string","minLength":1,"maxLength":300}}},
+    {"name":"unsupported","description":"Повідомити, якої можливості бракує. Не підміняти її найближчою дією і не генерувати виконуваний код.","confirmation":false,"parameters":{"capability":{"type":"string","minLength":1,"maxLength":200}}}
+  ]
+}

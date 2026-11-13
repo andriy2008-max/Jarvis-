@@ -72,6 +72,9 @@ import java.util.Locale;
 import java.util.List;
 
 public final class MainActivity extends Activity implements RecognitionListener {
+    private static final int REQUEST_WATCH_SPEECH = 109;
+    private boolean watchSpeechPending;
+    private String watchSpeechResult;
     private static final int REQUEST_MICROPHONE = 101;
     private static final int REQUEST_TIMER_NOTIFICATIONS = 103;
     private static final int REQUEST_AI_ATTACHMENT = 106;
@@ -202,6 +205,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void startPhoneListening() {
         if (!foreground || !JarvisPhoneMode.isActive()) return;
+        if (isWatchDevice) { startWatchSpeech(); return; }
         if (!isWatchDevice && android.provider.Settings.canDrawOverlays(this) &&
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             Intent listen = new Intent(this, FloatingJarvisService.class);
@@ -268,6 +272,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
         getWindow().setNavigationBarColor(BG);
         if (state != null) pendingTimerSeconds = state.getInt("pending_timer_seconds", 0);
         isWatchDevice = getPackageManager().hasSystemFeature(PackageManager.FEATURE_WATCH);
+        if (state != null) {
+            watchSpeechPending = state.getBoolean("watch_speech_pending", false);
+            watchSpeechResult = state.getString("watch_speech_result");
+        }
         pendingLauncherMicrophone = state == null && isPhoneLauncherIntent(getIntent());
         if (isWatchDevice) watchPhoneLink = new JarvisWearPhoneLink(this);
         isCompact = getResources().getConfiguration().smallestScreenWidthDp < 360;
@@ -323,7 +331,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         finishSystemTts(id);
                     }
                     @Override public void onError(String id) {
-                        finishSystemTts(id);
+                        runOnUiThread(() -> {
+                            if (id != null && id.equals(activeTtsId)) {
+                                endSpeaking();
+                                setStatus("Не вдалося озвучити відповідь. Перевір український голос TTS на пристрої.");
+                            }
+                        });
                     }
                     @Override public void onStop(String id, boolean interrupted) {
                         finishSystemTts(id);
@@ -454,11 +467,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
         resumePendingTimerIfAllowed();
         scheduleLauncherMicrophone();
+        deliverWatchSpeech();
     }
 
     @Override
     protected void onSaveInstanceState(Bundle out) {
         out.putInt("pending_timer_seconds", pendingTimerSeconds);
+        out.putBoolean("watch_speech_pending", watchSpeechPending);
+        out.putString("watch_speech_result", watchSpeechResult);
         super.onSaveInstanceState(out);
     }
 
@@ -1193,7 +1209,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
         prepareSpeech();
         activeTtsId = "jarvis-system-" + SystemClock.uptimeMillis();
         int statusCode = tts.speak(text, TextToSpeech.QUEUE_FLUSH, new Bundle(), activeTtsId);
-        if (statusCode != TextToSpeech.SUCCESS) endSpeaking();
+        if (statusCode != TextToSpeech.SUCCESS) {
+            endSpeaking();
+            setStatus("Синтезатор не прийняв відповідь. Перевір український голос TTS.");
+        }
     }
 
     /** Prefer fully-local two-speaker ONNX, then private TTS server, then Android TTS. */
@@ -1822,14 +1841,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void setStatus(String message) {
         if (status != null) status.setText(message);
-        // Full-screen watch has no text controls. Show short status/error
-        // directly on the face, without replacing words while listening.
-        if (isWatchDevice && face != null && !JarvisPhoneMode.isActive() &&
-            !manualCapture && !listening && !processing && message != null &&
-            (message.startsWith("Не ") || message.startsWith("Немає ") ||
-             message.startsWith("Спочатку ") || message.startsWith("Зв'язок ") ||
-             message.startsWith("На пристрої "))) {
-            face.showTranscript(message, false, SystemClock.uptimeMillis() + 3200L);
+        // На годиннику status не доданий на екран. Показуємо результат на лиці,
+        // включно з порожнім записом і тайм-аутом телефона. Під час запису
+        // залишаємо місце для розпізнаних слів.
+        if (isWatchDevice && face != null && !manualCapture && !listening &&
+            message != null && !message.trim().isEmpty()) {
+            face.showTranscript(message, false, SystemClock.uptimeMillis() + 8000L);
         }
     }
 
@@ -2465,7 +2482,54 @@ public final class MainActivity extends Activity implements RecognitionListener 
         startManualListening();
     }
 
+    // Wear OS повертає готовий текст через системне вікно голосового вводу.
+    // Результат зберігаємо до onResume: вікно розпізнавання призупиняє Activity.
+    private void startWatchSpeech() {
+        if (!foreground || watchSpeechPending) return;
+        if (aiBusy || (watchPhoneLink != null && watchPhoneLink.busy())) {
+            setStatus("Чекаю завершення попереднього запиту.");
+            return;
+        }
+        stopSpeaking();
+        stopPhoneListening();
+        cancelManualRestart();
+        cancelSilenceCheck();
+        cancelAutoWakeSchedule();
+        retireDisconnectedRecognizer();
+        manualCapture = false;
+        listening = false;
+        processing = false;
+        Intent speech = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        speech.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        speech.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "uk-UA");
+        speech.putExtra(RecognizerIntent.EXTRA_PROMPT, "Скажи команду Джарвісу");
+        speech.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+        watchSpeechPending = true;
+        try {
+            startActivityForResult(speech, REQUEST_WATCH_SPEECH);
+        } catch (android.content.ActivityNotFoundException error) {
+            watchSpeechPending = false;
+            setStatus("На годиннику немає голосового вводу. Увімкни або онови службу розпізнавання.");
+        } catch (RuntimeException error) {
+            watchSpeechPending = false;
+            setStatus("Не вдалося відкрити голосовий ввід годинника.");
+        }
+    }
+
+    private void deliverWatchSpeech() {
+        if (!foreground || watchSpeechResult == null) return;
+        final String text = watchSpeechResult;
+        watchSpeechResult = null; // Один результат виконуємо лише один раз.
+        wakeHandler.post(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            if (!foreground) { watchSpeechResult = text; return; }
+            JarvisLiveTranscript.update(TRANSCRIPT_OWNER, text, true, SystemClock.uptimeMillis());
+            processCommand(text);
+        });
+    }
+
     private void startManualListening() {
+        if (isWatchDevice) { startWatchSpeech(); return; }
         if (pendingWakeCommand != null) {
             String ready = pendingWakeCommand;
             cancelPendingWakeCommand();
@@ -3431,6 +3495,20 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == REQUEST_WATCH_SPEECH) {
+            watchSpeechPending = false;
+            ArrayList<String> words = data == null ? null :
+                data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
+            if (result == RESULT_OK && words != null && !words.isEmpty() &&
+                words.get(0) != null && !words.get(0).trim().isEmpty()) {
+                watchSpeechResult = words.get(0).trim();
+                deliverWatchSpeech();
+            } else {
+                setStatus(result == RESULT_CANCELED ? "Голосовий ввід скасовано. Натисни обличчя, щоб повторити."
+                    : "Голосовий ввід не повернув слів. Перевір мову та інтернет на годиннику.");
+            }
+            return;
+        }
         if (request == REQUEST_ASSISTANT_ROLE) {
             boolean selected = false;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -3542,6 +3620,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
             processing = false;
             if (isFinishing() || isDestroyed()) return;
             String text = error == null && response != null ? response.reply : error;
+            if (error == null && response != null && "assist".equals(mode)) {
+                text = JarvisToolRuntime.accept(this, response.requestId, response.decision, response.reply);
+                JarvisToolRuntime.rememberDialogue(question, text);
+            }
             if (text == null || text.trim().isEmpty())
                 text = "ШІ не повернув відповіді.";
             appendDialogue("Джарвіс", text);
@@ -3558,9 +3640,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
         });
     }
 
-    /** Unrecognized conversation goes to AI; local phone commands never give AI device control. */
+    /** Незнайомі фрази на телефоні проходять через спільний контрольований реєстр. */
     private void askAi(String question) {
-        askAiDetailed(question, "chat", null);
+        askAiDetailed(question, isWatchDevice ? "chat" : "assist", null);
     }
 
     private void clearAiConversation() {
@@ -3758,6 +3840,16 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void processCommand(String raw) {
         if (raw == null || raw.trim().isEmpty()) return;
+        if (!isWatchDevice) {
+            String toolReply = JarvisToolRuntime.onUserInput(this, raw);
+            if (toolReply != null) {
+                appendDialogue("Ти", raw);
+                appendDialogue("Джарвіс", toolReply);
+                setStatus(toolReply);
+                if (voiceEnabled) speakReply(toolReply);
+                return;
+            }
+        }
         if (!isWatchDevice && JarvisMacros.cancelIfRequested(raw, result -> {
             appendDialogue("Джарвіс", result);
             setStatus(result);
@@ -3789,7 +3881,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                     appendDialogue("Джарвіс", detail);
                     setStatus(detail);
-                    if (!ok && voiceEnabled) speakReply(detail);
+                    if (voiceEnabled) speakReply(detail);
                 });
                 return;
             }
@@ -3809,7 +3901,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                     appendDialogue("Джарвіс", detail);
                     setStatus(detail);
-                    if (!ok && voiceEnabled) speakReply(detail);
+                    if (voiceEnabled) speakReply(detail);
                 });
                 return;
             }
@@ -3817,7 +3909,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 if (watchPhoneLink == null) { setStatus("Телефон не підключений."); return; }
                 watchPhoneLink.enter((ok, detail) -> {
                     if (isFinishing() || isDestroyed()) return;
-                    if (ok) watchPhoneLink.command(raw, (done, response) -> setStatus(response));
+                    if (ok) watchPhoneLink.command(raw, (done, response) -> {
+                        if (isFinishing() || isDestroyed()) return;
+                        setStatus(response);
+                        if (voiceEnabled) speakReply(response);
+                    });
                     else setStatus(detail);
                 });
                 return;
@@ -3833,7 +3929,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                     appendDialogue("Джарвіс", detail);
                     setStatus(detail);
-                    if (!ok && voiceEnabled) speakReply(detail);
+                    if (voiceEnabled) speakReply(detail);
                 });
                 return;
             }
