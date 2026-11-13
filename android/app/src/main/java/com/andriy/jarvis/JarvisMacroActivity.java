@@ -143,6 +143,7 @@ public final class JarvisMacroActivity extends Activity {
                 step.put("type",ACTION_KEYS[row.type.getSelectedItemPosition()]);
                 step.put("value",row.value.getText().toString());
                 step.put("package",value(row.packageName));
+                step.put("timeoutSeconds",value(row.timeout));
                 step.put("rootApproved",row.approved.isChecked());
                 steps.put(step);
             }
@@ -301,6 +302,8 @@ public final class JarvisMacroActivity extends Activity {
         CheckBox approved;
         EditText packageName;
         LinearLayout packagePanel;
+        LinearLayout timeoutPanel;
+        EditText timeout;
         Button pointPicker;
         Button appPicker;
     }
@@ -331,6 +334,12 @@ public final class JarvisMacroActivity extends Activity {
             "Наприклад, com.spotify.music",
             source==null?"":source.optString("package"));
         row.view.addView(row.packagePanel);
+        row.timeoutPanel=new LinearLayout(this);
+        row.timeoutPanel.setOrientation(LinearLayout.VERTICAL);
+        row.timeout=field(row.timeoutPanel,"Максимальне очікування (секунди)",
+            "1–60, зазвичай 20",
+            source==null?"20":source.optString("timeoutSeconds","20"));
+        row.view.addView(row.timeoutPanel);
         row.appPicker=button("📱 Обрати встановлену програму",
             ()->selectInstalledApp("Цільова програма макросу",pkg->{
                 String action=ACTION_KEYS[row.type.getSelectedItemPosition()];
@@ -370,6 +379,9 @@ public final class JarvisMacroActivity extends Activity {
         row.approved.setVisibility(root?View.VISIBLE:View.GONE);
         row.value.setVisibility("wait_field".equals(type)?View.GONE:View.VISIBLE);
         row.packagePanel.setVisibility(screen?View.VISIBLE:View.GONE);
+        boolean waiting="wait_app".equals(type) || "wait_label".equals(type) ||
+            "wait_field".equals(type);
+        row.timeoutPanel.setVisibility(waiting?View.VISIBLE:View.GONE);
         row.appPicker.setVisibility(app||screen?View.VISIBLE:View.GONE);
         row.pointPicker.setVisibility("tap_point".equals(type)?View.VISIBLE:View.GONE);
         if(app)row.value.setHint("Пакет програми, наприклад com.spotify.music");
@@ -717,6 +729,9 @@ public final class JarvisMacroActivity extends Activity {
                 String actionValue = "wait_field".equals(action) ? "focused" : value(row.value);
                 if(actionValue.isEmpty())
                     throw new IllegalArgumentException("Заповни параметри кожної дії.");
+                if("wait_app".equals(action) || "wait_label".equals(action) ||
+                   "wait_field".equals(action))
+                    JarvisMacroScreenRules.waitTimeoutMillis(value(row.timeout));
                 if("open_app".equals(action) || "wait_app".equals(action)) {
                     if(!JarvisForegroundApp.validPackage(actionValue))
                         throw new IllegalArgumentException("Обери встановлену програму для кроку.");
@@ -747,6 +762,9 @@ public final class JarvisMacroActivity extends Activity {
                 JSONObject step = new JSONObject();
                 step.put("type",action);
                 step.put("value",actionValue);
+                if ("wait_app".equals(action) || "wait_label".equals(action) ||
+                    "wait_field".equals(action))
+                    step.put("timeoutSeconds",value(row.timeout));
                 if ("tap_point".equals(action) || "type_text".equals(action) ||
                     "wait_label".equals(action) || "tap_label".equals(action) ||
                     "wait_field".equals(action))
