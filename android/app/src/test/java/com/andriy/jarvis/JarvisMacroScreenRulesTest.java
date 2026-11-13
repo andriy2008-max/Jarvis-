@@ -22,6 +22,17 @@ public final class JarvisMacroScreenRulesTest {
             "98,20","50,99","100,50","50,100","NaN,10",
             "50,Infinity","50;50","1e2,50","-4,50","4,50; rm -rf /"})
             reject(invalid);
+        yes(JarvisMacroScreenRules.secondsToMillis("2")==2000);
+        yes(JarvisMacroScreenRules.secondsToMillis("1,5")==1500);
+        yes(JarvisMacroScreenRules.secondsToMillis("0.1")==100);
+        yes(JarvisMacroScreenRules.secondsToMillis("60")==60000);
+        for (String invalid : new String[]{"0","-1","60.001","61","NaN",
+            "1e3","2;rm","1,5,7","","100"}) {
+            try {
+                JarvisMacroScreenRules.secondsToMillis(invalid);
+                throw new AssertionError("Accepted invalid pause: "+invalid);
+            } catch (IllegalArgumentException expected) { assertions++; }
+        }
         yes(JarvisMacroScreenRules.validText("Напиши Spotify"));
         yes(!JarvisMacroScreenRules.validText(""));
         yes(!JarvisMacroScreenRules.validText(null));
