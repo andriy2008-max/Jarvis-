@@ -975,13 +975,24 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         ArrayDeque<AccessibilityNodeInfo> scan=new ArrayDeque<>();
         scan.add(root);
         int scanned=0;
+        boolean heading=false, plan=false, food=false, send=false, search=false;
         while(!scan.isEmpty() && ++scanned<=MAX_SCAN) {
             AccessibilityNodeInfo item=scan.removeFirst();
             if(!item.isVisibleToUser())continue;
-            if(BoltUiLabels.unsafeForTimedRidesTap(asString(item.getText())) ||
-               BoltUiLabels.unsafeForTimedRidesTap(
-                   asString(item.getContentDescription())))
+            String title=asString(item.getText());
+            String description=asString(item.getContentDescription());
+            if(BoltUiLabels.unsafeForTimedRidesTap(title) ||
+               BoltUiLabels.unsafeForTimedRidesTap(description))
                 return BoltStep.BLOCKED;
+            if(BoltUiLabels.ridesHomeHeading(title) ||
+               BoltUiLabels.ridesHomeHeading(description))heading=true;
+            String combined=(title+" "+description).toLowerCase(Locale.ROOT);
+            if(combined.contains("запланувати") || combined.contains("schedule"))
+                plan=true;
+            if(combined.contains("bolt food"))food=true;
+            if(combined.contains("bolt send"))send=true;
+            if(BoltUiLabels.destination(title) ||
+               BoltUiLabels.destination(description))search=true;
             for(int i=0;i<item.getChildCount();i++){
                 AccessibilityNodeInfo child=item.getChild(i);
                 if(child!=null)scan.addLast(child);
@@ -989,9 +1000,14 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         }
         if(scanned>MAX_SCAN)return BoltStep.BLOCKED;
 
-        // Prefer a visible tile's center, but NEVER wait for its label. If
-        // Bolt draws tiles as an inaccessible canvas, use the verified
-        // screenshot coordinate at the four-second mark instead.
+        // At the four-second mark we don't WAIT for the rides label, but a
+        // pixel tap is still allowed only on Bolt's recognized home screen.
+        // A loading screen, dialog or an unexpected page must never be tapped.
+        if(!BoltUiLabels.ridesHomeFallback(heading,plan,food,send,search))
+            return BoltStep.WAIT;
+
+        // Prefer an accessible tile when available; otherwise use the
+        // screenshot-verified top-left tile center, not the Bolt Food row.
         Rect tile=findBoltRidesTarget(root);
         float x=tile==null?point[0]:tile.exactCenterX();
         float y=tile==null?point[1]:tile.exactCenterY();
