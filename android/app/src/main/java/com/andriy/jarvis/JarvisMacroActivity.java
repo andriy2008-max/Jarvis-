@@ -281,7 +281,7 @@ public final class JarvisMacroActivity extends Activity {
                 Toast.LENGTH_LONG).show();
             return;
         }
-        String error=ScreenControlAccessibilityService.startMacroPointPicker(point->{
+        String error=ScreenControlAccessibilityService.startMacroPointPicker(pkg,point->{
             if(point==null)return;
             row.value.setText(point);
             Intent back=new Intent(this,JarvisMacroActivity.class);
