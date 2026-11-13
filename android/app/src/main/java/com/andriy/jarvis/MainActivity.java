@@ -559,7 +559,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
         btn.setTextSize(TypedValue.COMPLEX_UNIT_SP, isCompact ? 14 : 15);
         btn.setBackground(roundedFill(Color.rgb(19, 46, 73), Color.rgb(49, 76, 111), 12));
         btn.setBackgroundTintList(null);
-        btn.setPadding(dp(14), dp(12), dp(14), dp(12));
+        // Let Android font scaling grow multi-line labels instead of cropping them.
+        btn.setMinHeight(dp(48));
+        btn.setMinimumHeight(dp(48));
+        btn.setSingleLine(false);
+        btn.setGravity(Gravity.CENTER);
+        btn.setPadding(dp(12), dp(10), dp(12), dp(10));
         btn.setOnClickListener(v -> callback.run());
         return btn;
     }
@@ -782,13 +787,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
         });
         chatHeader.addView(voiceToggle);
         Button voiceSettings = secondaryButton("🔊 Вибрати голос Джарвіса", this::showVoiceSettings);
-        LinearLayout.LayoutParams voiceSettingsParams = new LinearLayout.LayoutParams(-1, dp(43));
+        LinearLayout.LayoutParams voiceSettingsParams = new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT);
         voiceSettingsParams.topMargin = dp(7);
         chatPanel.addView(voiceSettings, voiceSettingsParams);
         if (!isWatchDevice) {
             microphoneSourceButton = secondaryButton("", this::showMicrophoneSourceSettings);
             refreshMicrophoneSourceButton();
-            LinearLayout.LayoutParams micSourceParams = new LinearLayout.LayoutParams(-1,dp(43));
+            LinearLayout.LayoutParams micSourceParams = new LinearLayout.LayoutParams(-1,LinearLayout.LayoutParams.WRAP_CONTENT);
             micSourceParams.topMargin=dp(7);
             chatPanel.addView(microphoneSourceButton,micSourceParams);
             TextView micNote=makeText(
@@ -798,14 +803,42 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
         speechPauseButton = secondaryButton("", this::showSpeechPauseSettings);
         refreshSpeechPauseLabel();
-        LinearLayout.LayoutParams silenceParams = new LinearLayout.LayoutParams(-1, dp(43));
+        LinearLayout.LayoutParams silenceParams = new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT);
         silenceParams.topMargin = dp(7);
         chatPanel.addView(speechPauseButton, silenceParams);
 
         feedScroll = new ScrollView(this);
         feedScroll.setFillViewport(true);
-        feedScroll.setVerticalScrollBarEnabled(false);
-        LinearLayout.LayoutParams feedParams = new LinearLayout.LayoutParams(-1, dp(isWatchDevice ? 154 : 220));
+        feedScroll.setVerticalScrollBarEnabled(true);
+        feedScroll.setSmoothScrollingEnabled(true);
+        feedScroll.setNestedScrollingEnabled(true);
+        // The transcript has its own scroll area inside the page ScrollView.
+        // Give vertical drags to the transcript while it can scroll; allow the
+        // page to continue scrolling once its top or bottom is reached.
+        feedScroll.setOnTouchListener(new View.OnTouchListener() {
+            float lastY;
+            @Override public boolean onTouch(View v, android.view.MotionEvent event) {
+                if(event.getActionMasked()==android.view.MotionEvent.ACTION_DOWN) {
+                    lastY=event.getY();
+                    v.getParent().requestDisallowInterceptTouchEvent(true);
+                } else if(event.getActionMasked()==android.view.MotionEvent.ACTION_MOVE) {
+                    float dy=event.getY()-lastY;
+                    if(Math.abs(dy)>1f) {
+                        boolean feedCanMove=feedScroll.canScrollVertically(dy>0 ? -1 : 1);
+                        v.getParent().requestDisallowInterceptTouchEvent(feedCanMove);
+                    }
+                    lastY=event.getY();
+                } else if(event.getActionMasked()==android.view.MotionEvent.ACTION_UP ||
+                          event.getActionMasked()==android.view.MotionEvent.ACTION_CANCEL) {
+                    v.getParent().requestDisallowInterceptTouchEvent(false);
+                }
+                return false;
+            }
+        });
+        int screenHeightDp=getResources().getConfiguration().screenHeightDp;
+        int transcriptHeightDp=isWatchDevice ? 154 :
+            Math.max(340,Math.min(600,Math.round(screenHeightDp*0.58f)));
+        LinearLayout.LayoutParams feedParams = new LinearLayout.LayoutParams(-1, dp(transcriptHeightDp));
         feedParams.topMargin = dp(13);
         chatPanel.addView(feedScroll, feedParams);
         feedMessages = new LinearLayout(this);
@@ -874,13 +907,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
         for (int n = 0; n < names.length; n++) {
             Button button = secondaryButton(names[n], actions[n]);
             button.setTextSize(TypedValue.COMPLEX_UNIT_SP, isCompact ? 10 : 11);
-            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(43));
+            LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT);
             if (n > 0) p.topMargin = dp(5);
             aiTools.addView(button, p);
         }
         Button pythonButton = secondaryButton("🧮 Перевірити розрахунок / код у Python",
             () -> askAiFromInput("analysis"));
-        LinearLayout.LayoutParams pythonParams = new LinearLayout.LayoutParams(-1, dp(43));
+        LinearLayout.LayoutParams pythonParams = new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT);
         pythonParams.topMargin = dp(6);
         chatPanel.addView(pythonButton, pythonParams);
 
