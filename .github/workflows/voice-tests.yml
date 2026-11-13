@@ -72,6 +72,9 @@ on:
       - 'android/app/src/test/java/com/andriy/jarvis/JarvisMicrophoneChoiceTest.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisMacros.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisMacroActivity.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisMacroScreenRules.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisMacroPointPicker.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/JarvisMacroScreenRulesTest.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisForegroundApp.java'
       - 'android/app/src/test/java/com/andriy/jarvis/JarvisForegroundAppTest.java'
       - 'android/app/src/main/java/com/andriy/jarvis/SpotifyMusicCommands.java'
@@ -164,6 +167,8 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/JarvisMicrophoneChoice.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisMicrophoneChoiceTest.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisForegroundApp.java \
+            android/app/src/main/java/com/andriy/jarvis/JarvisMacroScreenRules.java \
+            android/app/src/test/java/com/andriy/jarvis/JarvisMacroScreenRulesTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisForegroundAppTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisTaxiCommandsTest.java \
             android/app/src/test/java/com/andriy/jarvis/BoltUiLabelsTest.java \
@@ -237,6 +242,7 @@ jobs:
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.TelegramReplyCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisMicrophoneChoiceTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisForegroundAppTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisMacroScreenRulesTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.CommandPatternsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisInstantCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyMusicCommandsTest
