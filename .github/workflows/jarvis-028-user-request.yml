@@ -76,7 +76,7 @@ jobs:
             java -cp android/build/parser-tests "com.andriy.jarvis.$test"
           done
       - name: Restore stable signing keystore (stable only)
-        if: 'stable' == 'stable'
+        if: true
         shell: bash
         env:
           JARVIS_SIGNING_KEYSTORE_BASE64: ${{ secrets.JARVIS_SIGNING_KEYSTORE_BASE64 }}
@@ -173,7 +173,7 @@ jobs:
             android/dist/JARVIS-${{ env.JARVIS_VERSION_NAME }}-stable.sha256
           if-no-files-found: error
       - name: Publish stable signed APK to direct GitHub release
-        if: 'stable' == 'stable'
+        if: true
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
