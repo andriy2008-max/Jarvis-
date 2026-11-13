@@ -82,7 +82,7 @@ public final class Supertonic3PackManager {
                     complete(callback, true, "Supertonic 3 уже встановлено.");
                     return;
                 }
-                if (root.getUsableSpace() < 530_000_000L)
+                if (root.getParentFile() == null || root.getParentFile().getUsableSpace() < 530_000_000L)
                     throw new Exception("Для Supertonic 3 звільни щонайменше 530 МБ пам'яті.");
                 if (!root.isDirectory() && !root.mkdirs())
                     throw new Exception("Не вдалося створити папку моделі.");
