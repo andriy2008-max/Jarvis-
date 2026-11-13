@@ -451,6 +451,116 @@ public final class JarvisMacroActivity extends Activity {
         }
     }
 
+    /** A complete, editable recipe. It does not run anything or overwrite
+     * saved macros until the user confirms and presses Save. */
+    private void showSearchTemplate() {
+        selectInstalledApp("Застосунок для сценарію пошуку", pkg -> {
+            new AlertDialog.Builder(this)
+                .setTitle("Створити шаблон пошуку?")
+                .setMessage("Поточні незбережені дії у редакторі буде замінено: "+
+                    "відкрити програму → дочекатися → знайти «Пошук» → "+
+                    "натиснути → дочекатися поля → ввести текст. "+
+                    "Інші налаштування та тригер залишаться.")
+                .setNegativeButton("Скасувати",null)
+                .setPositiveButton("Створити", (dialog,which) -> {
+                    try {
+                        JSONArray plan=new JSONArray();
+                        plan.put(templateAction("open_app",pkg,null));
+                        plan.put(templateAction("wait_app",pkg,null));
+                        plan.put(templateAction("wait_label","Пошук",pkg));
+                        plan.put(templateAction("tap_label","Пошук",pkg));
+                        plan.put(templateAction("wait_field","focused",pkg));
+                        plan.put(templateAction("type_text","Введи свій пошуковий запит",pkg));
+                        actionRows.clear();
+                        actionList.removeAllViews();
+                        for(int i=0;i<plan.length();i++)
+                            addAction(plan.getJSONObject(i));
+                        Toast.makeText(this,
+                            "Шаблон додано. Заміни текст і перевір назву кнопки.",
+                            Toast.LENGTH_LONG).show();
+                    } catch(Exception error) {
+                        Toast.makeText(this,"Не вдалося створити шаблон.",
+                            Toast.LENGTH_LONG).show();
+                    }
+                }).show();
+        });
+    }
+
+    private JSONObject templateAction(String type,String value,String pkg) throws Exception {
+        JSONObject step=new JSONObject();
+        step.put("type",type);
+        step.put("value",value);
+        if(pkg!=null)step.put("package",pkg);
+        step.put("timeoutSeconds","20");
+        return step;
+    }
+
+    private String displayAppName(String pkg) {
+        if(!JarvisForegroundApp.validPackage(pkg))return "⚠ не вибрано програму";
+        try {
+            return String.valueOf(getPackageManager().getApplicationLabel(
+                getPackageManager().getApplicationInfo(pkg,0)));
+        } catch(Exception ignored) {return pkg;}
+    }
+
+    /** Preview never sends screen content or executes a step. */
+    private void previewMacroDraft() {
+        if(name==null)return;
+        StringBuilder plan=new StringBuilder();
+        plan.append("Тригер: ").append(TRIGGERS[trigger.getSelectedItemPosition()])
+            .append(" — ").append(value(triggerValue)).append("\n\n");
+        if(useMacroDroid.isChecked()) {
+            plan.append("Запуск буде передано в MacroDroid. Дії налаштовуються там.");
+        } else {
+            int number=0;
+            for(ActionRow row:actionRows) {
+                if(number>=30) {
+                    plan.append("… Решта кроків не показані.");
+                    break;
+                }
+                number++;
+                String type=ACTION_KEYS[row.type.getSelectedItemPosition()];
+                String val=value(row.value);
+                String app=displayAppName(value(row.packageName));
+                String timeout=value(row.timeout);
+                if(timeout.isEmpty())timeout="20";
+                plan.append(number).append(". ");
+                switch(type) {
+                    case "open_app": plan.append("Відкрити ").append(displayAppName(val));break;
+                    case "wait_app": plan.append("Чекати ").append(displayAppName(val))
+                        .append(" до ").append(timeout).append(" с");break;
+                    case "wait_label": plan.append("Чекати «").append(val)
+                        .append("» у ").append(app).append(" до ")
+                        .append(timeout).append(" с");break;
+                    case "tap_label": plan.append("Натиснути «").append(val)
+                        .append("» у ").append(app);break;
+                    case "tap_point": plan.append("Натиснути X,Y = ")
+                        .append(val).append("% у ").append(app);break;
+                    case "wait_field": plan.append("Чекати текстового поля у ")
+                        .append(app).append(" до ").append(timeout).append(" с");break;
+                    case "type_text": plan.append("Ввести «")
+                        .append(val.length()>100?val.substring(0,100)+"…":val)
+                        .append("» у ").append(app);break;
+                    case "wait": plan.append("Пауза ").append(val).append(" мс");break;
+                    case "wait_seconds": plan.append("Пауза ").append(val)
+                        .append(" с");break;
+                    case "command": plan.append("Команда: ").append(val);break;
+                    case "notification": plan.append("Сповіщення: ").append(val);break;
+                    case "vibrate": plan.append("Вібрація ").append(val).append(" мс");break;
+                    case "root": plan.append("Root shell: вміст приховано");break;
+                    default: plan.append("Невідома дія");
+                }
+                plan.append("\n");
+            }
+        }
+        plan.append("\nЦе лише перегляд. Дії не запускалися, макрос не зберігався.");
+        new AlertDialog.Builder(this)
+            .setTitle("👁 Сценарій макросу")
+            .setMessage(plan.toString())
+            .setPositiveButton("Зрозуміло",null)
+            .show();
+    }
+
     private void move(ActionRow row, int direction) {
         int idx = actionRows.indexOf(row);
         int target = idx + direction;
@@ -511,6 +621,10 @@ public final class JarvisMacroActivity extends Activity {
             radius.setText(previous.optString("_radiusRaw"));
         }
         actionsSection.addView(button("＋ Додати дію",()->addAction(null)));
+        actionsSection.addView(button("✨ Шаблон: пошук у програмі",
+            this::showSearchTemplate));
+        actionsSection.addView(button("👁 Переглянути кроки без виконання",
+            this::previewMacroDraft));
         actionsSection.setVisibility(useMacroDroid.isChecked() ? View.GONE : View.VISIBLE);
         useMacroDroid.setOnCheckedChangeListener((view,checked) ->
             actionsSection.setVisibility(checked ? View.GONE : View.VISIBLE));
