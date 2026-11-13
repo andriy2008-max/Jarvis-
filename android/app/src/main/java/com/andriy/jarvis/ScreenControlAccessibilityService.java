@@ -676,6 +676,15 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             service.tapBoltRides();
     }
 
+    /** User-requested fixed 4s click. Does not wait for the «Поїздки»
+     * accessibility label: if it is absent, uses a calibrated home-tile point.
+     * Still verifies the foreground Bolt package and blocks unsafe screens. */
+    public static BoltStep boltRidesAtFourSeconds() {
+        ScreenControlAccessibilityService service = connected.get();
+        return service == null || !service.sessionActive ? BoltStep.BLOCKED :
+            service.tapBoltRidesTimed();
+    }
+
     /** The app appearing in foreground is NOT evidence that its rides card
      * has loaded. Only expose readiness after locating a visible, enabled tile
      * (or verifying that the destination editor is already focused). */
@@ -933,6 +942,60 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         return target == null ? BoltStep.WAIT :
             gestureTapBolt(root,target.exactCenterX(),target.exactCenterY(),
                 "Поїздки");
+    }
+
+    /** Called only after the controller's launch delay. The exact label is
+     * optional; Bolt must still occupy the foreground, and a payment/route
+     * screen or a dialog must never receive the screenshot-calibrated tap. */
+    private BoltStep tapBoltRidesTimed() {
+        AccessibilityNodeInfo root=currentBoltRoot();
+        if(root==null)return BoltStep.WAIT;
+        if(isBoltDestinationFocused() || findBoltDropoffTarget(root)!=null)
+            return BoltStep.READY;
+
+        android.graphics.Point physical=new android.graphics.Point();
+        android.view.Display display=getDisplay();
+        if(display==null){
+            WindowManager wm=(WindowManager)getSystemService(Context.WINDOW_SERVICE);
+            if(wm!=null)display=wm.getDefaultDisplay();
+        }
+        if(display==null)return BoltStep.BLOCKED;
+        display.getRealSize(physical);
+        int[] point=BoltUiLabels.screenshotRidesPoint(physical.x,physical.y);
+        if(point==null)return BoltStep.BLOCKED;
+
+        Rect rootBounds=new Rect();
+        root.getBoundsInScreen(rootBounds);
+        if(rootBounds.width()<physical.x*.90f ||
+           rootBounds.height()<physical.y*.75f ||
+           !rootBounds.contains(point[0],point[1]))
+            return BoltStep.BLOCKED;
+
+        // No blind tap on a route, payment, confirmation or unexpected dialog.
+        ArrayDeque<AccessibilityNodeInfo> scan=new ArrayDeque<>();
+        scan.add(root);
+        int scanned=0;
+        while(!scan.isEmpty() && ++scanned<=MAX_SCAN) {
+            AccessibilityNodeInfo item=scan.removeFirst();
+            if(!item.isVisibleToUser())continue;
+            if(BoltUiLabels.unsafeForTimedRidesTap(asString(item.getText())) ||
+               BoltUiLabels.unsafeForTimedRidesTap(
+                   asString(item.getContentDescription())))
+                return BoltStep.BLOCKED;
+            for(int i=0;i<item.getChildCount();i++){
+                AccessibilityNodeInfo child=item.getChild(i);
+                if(child!=null)scan.addLast(child);
+            }
+        }
+        if(scanned>MAX_SCAN)return BoltStep.BLOCKED;
+
+        // Prefer a visible tile's center, but NEVER wait for its label. If
+        // Bolt draws tiles as an inaccessible canvas, use the verified
+        // screenshot coordinate at the four-second mark instead.
+        Rect tile=findBoltRidesTarget(root);
+        float x=tile==null?point[0]:tile.exactCenterX();
+        float y=tile==null?point[1]:tile.exactCenterY();
+        return gestureTapBolt(root,x,y,"Поїздки");
     }
 
     private BoltStep gestureTapBolt(AccessibilityNodeInfo root,float x,float y,
