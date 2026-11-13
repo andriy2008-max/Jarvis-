@@ -343,6 +343,72 @@ public final class JarvisMacros {
                 String value = step.optString("value").trim();
                 try {
                     switch (type) {
+                        case "open_app": {
+                            if (!JarvisForegroundApp.validPackage(value)) {
+                                complete(false,"Неправильний пакет програми.");return;
+                            }
+                            Intent launch=context.getPackageManager()
+                                .getLaunchIntentForPackage(value);
+                            if (launch==null) {
+                                complete(false,"Програма не встановлена або не відкривається.");return;
+                            }
+                            try {
+                                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                context.startActivity(launch);
+                                next();
+                            } catch(Exception e) {
+                                complete(false,"Android заборонив запуск програми з фону.");
+                            }
+                            return;
+                        }
+                        case "wait_app": {
+                            if(!JarvisForegroundApp.validPackage(value)) {
+                                complete(false,"Неправильна назва програми.");return;
+                            }
+                            String expected=value;
+                            long start=SystemClock.uptimeMillis();
+                            Runnable[] poll={null};
+                            poll[0]=()->{
+                                if(finished)return;
+                                if(JarvisForegroundApp.matches(expected,
+                                    ScreenControlAccessibilityService.foregroundPackageForMacro())){
+                                    next();
+                                    return;
+                                }
+                                if(SystemClock.uptimeMillis()-start>20000L) {
+                                    complete(false,"Програма «"+expected+"» не відкрилася за 20 секунд.");
+                                    return;
+                                }
+                                MAIN.postDelayed(poll[0],250L);
+                            };
+                            poll[0].run();
+                            return;
+                        }
+                        case "tap_point": {
+                            String expected=step.optString("package").trim();
+                            if(!JarvisForegroundApp.validPackage(expected)) {
+                                complete(false,"Вибери програму для натискання.");return;
+                            }
+                            ScreenControlAccessibilityService.macroTap(
+                                expected,value,(ok,description)->{
+                                    if(finished)return;
+                                    if(ok)next();else complete(false,description);
+                                });
+                            return;
+                        }
+                        case "type_text": {
+                            String expected=step.optString("package").trim();
+                            if(!JarvisForegroundApp.validPackage(expected) ||
+                               !JarvisMacroScreenRules.validText(value)) {
+                                complete(false,"Потрібні програма та текст для введення.");return;
+                            }
+                            ScreenControlAccessibilityService.macroType(
+                                expected,value,(ok,description)->{
+                                    if(finished)return;
+                                    if(ok)next();else complete(false,description);
+                                });
+                            return;
+                        }
                         case "wait": {
                             int ms = Integer.parseInt(value);
                             if (ms < 0 || ms > 60000) { complete(false, "пауза 0–60000 мс"); return; }
