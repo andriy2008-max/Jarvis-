@@ -93,6 +93,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private SpeechRecognizer recognizer;
     private JarvisHeadsetAudioRouter headsetRoute;
+    private JarvisListeningAudioFocus listeningAudioFocus;
+    private Runnable instantCommandCheck;
+    private String instantCommandCandidate = "";
     private boolean recognizerUsesOnDevice;
     private TextToSpeech tts;
     private NeuralSpeechClient neuralSpeech;
@@ -278,6 +281,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             SpeechRecognizer.isOnDeviceRecognitionAvailable(this);
         loadNotes();
         headsetRoute = new JarvisHeadsetAudioRouter(this);
+        listeningAudioFocus = new JarvisListeningAudioFocus(this);
         headsetRoute.setOnRouteLost(this::onMicrophoneRouteLost);
         aiChatClient = new AiChatClient(this);
         worldNewsReader = new WorldNewsReader();
@@ -462,6 +466,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         pendingLauncherMicrophone = false;
         stopPhoneListening();
         if (headsetRoute != null) headsetRoute.end();
+        if (listeningAudioFocus != null) listeningAudioFocus.end();
+        clearInstantCommand();
         unregisterShakeSensor();
         if (shakeProbe != null) shakeProbe.close();
         shakeCommandCapture = false;
@@ -1992,6 +1998,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
             return;
         }
+        if (listeningAudioFocus != null && !listeningAudioFocus.begin())
+            setStatus("Android не дав призупинити звук інших програм.");
         boolean started = shakeProbe.start(new JarvisShakeWakeProbe.Callback() {
             @Override public void onPartial(String words) {
                 if (foreground) JarvisLiveTranscript.update(
@@ -2002,6 +2010,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                 if (!heard) {
                     if (headsetRoute != null) headsetRoute.end();
+                    if (listeningAudioFocus != null) listeningAudioFocus.end();
                     face.setState("idle");
                     setStatus(detail);
                     scheduleAutoWake(550L);
@@ -2020,6 +2029,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         });
         if (!started) {
             if (headsetRoute != null) headsetRoute.end();
+            if (listeningAudioFocus != null) listeningAudioFocus.end();
             face.setState("idle");
             JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
             setStatus("Не вдалося почати прослуховування. Перевір доступ до мікрофона.");
@@ -2202,6 +2212,62 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     /** Independent of the Android recognizer's arbitrary segment timeouts.
      * Nothing starts counting before a recognized word. */
+    /** Cancel a pending short-command dispatch whenever another word arrives. */
+    private void clearInstantCommand() {
+        if (instantCommandCheck != null) wakeHandler.removeCallbacks(instantCommandCheck);
+        instantCommandCheck = null;
+        instantCommandCandidate = "";
+    }
+
+    private void considerInstantCommand(String phrase) {
+        if (!manualCapture || manualStopRequested ||
+            !JarvisInstantCommands.isComplete(phrase)) {
+            clearInstantCommand();
+            return;
+        }
+        final String candidate = CommandPatterns.normalizeControlVerb(phrase)
+            .replaceAll("\\s+"," ").trim();
+        if (candidate.equals(instantCommandCandidate)) return;
+        clearInstantCommand();
+        instantCommandCandidate = candidate;
+        instantCommandCheck = () -> {
+            instantCommandCheck = null;
+            if (!foreground || !manualCapture || manualStopRequested ||
+                !candidate.equals(instantCommandCandidate)) return;
+            String current = JarvisTranscriptCorrection.join(
+                manualTranscript.toString(),manualHypothesis);
+            if (JarvisInstantCommands.isComplete(current) &&
+                candidate.equals(CommandPatterns.normalizeControlVerb(current)
+                    .replaceAll("\\s+"," ").trim()))
+                runInstantCommand(current);
+        };
+        wakeHandler.postDelayed(instantCommandCheck,
+            JarvisInstantCommands.stableDelayMs());
+    }
+
+    private void runInstantCommand(String text) {
+        if (!manualCapture || manualStopRequested ||
+            !JarvisInstantCommands.isComplete(text)) return;
+        clearInstantCommand();
+        manualStopRequested = true;
+        cancelManualRestart();
+        cancelSilenceCheck();
+        // Retire this recognizer before cancel: late callbacks must not
+        // append a duplicate segment or launch the same command again.
+        SpeechRecognizer previous = recognizer;
+        recognizer = null;
+        recognizerSessionActive = false;
+        listening = false;
+        if (previous != null) {
+            try { previous.cancel(); previous.destroy(); }
+            catch (RuntimeException ignored) {}
+        }
+        manualHypothesis = "";
+        manualTranscript.setLength(0);
+        manualTranscript.append(text);
+        finishManualCapture();
+    }
+
     private void cancelSilenceCheck() {
         if (silenceCheck != null) {
             wakeHandler.removeCallbacks(silenceCheck);
@@ -2314,6 +2380,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         manualCapture = true;
         manualStopRequested = false;
         manualCycleFailures = 0;
+        clearInstantCommand();
         manualTranscript.setLength(0);
         manualHypothesis = "";
         wakeHypothesis = "";
@@ -2322,6 +2389,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         cancelAutoWakeSchedule();
         // Reuse an already-started wake session, then restart in manual mode.
         if (autoWakeListening && recognizerSessionActive) {
+            if (listeningAudioFocus != null && !listeningAudioFocus.begin())
+                setStatus("Android не дав призупинити інші звуки. Спробуй говорити ближче.");
             autoWakeListening = false;
             processing = false;
             microphone.setText("■ Завершити та надіслати");
@@ -2356,8 +2425,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private void finishManualCapture() {
+        clearInstantCommand();
         if (phoneListening) retireDisconnectedRecognizer();
         if (headsetRoute != null) headsetRoute.end();
+        if (listeningAudioFocus != null) listeningAudioFocus.end();
         cancelManualRestart();
         cancelSilenceCheck();
         final String transcript = manualTranscript.toString().trim();
@@ -2495,6 +2566,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
             resetListening(headsetRoute.problem());
             return;
         }
+        if (manualCapture && listeningAudioFocus != null &&
+            !listeningAudioFocus.begin()) {
+            setStatus("Android не дав призупинити інші звуки. Мікрофон все одно слухає.");
+        }
         try {
             recognizer.startListening(intent);
         } catch (Exception error) {
@@ -2607,6 +2682,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 else
                     observedManualWords(manualTranscript.toString());
                 manualHypothesis = "";
+            }
+            if (!manualStopRequested &&
+                JarvisInstantCommands.isComplete(manualTranscript.toString())) {
+                runInstantCommand(manualTranscript.toString());
+                return;
             }
             if (manualStopRequested) {
                 if (autoSilenceStop && !speechPause.expired(
@@ -2728,6 +2808,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             }
             if (manualStopRequested) {
                 finishManualCapture();
+            } else if (JarvisInstantCommands.isComplete(manualTranscript.toString())) {
+                runInstantCommand(manualTranscript.toString());
             } else {
                 JarvisLiveTranscript.update(TRANSCRIPT_OWNER,
                     manualTranscript.toString(), false, SystemClock.uptimeMillis());
@@ -2787,6 +2869,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             partial = JarvisTranscriptCorrection.join(
                 manualTranscript.toString(), manualHypothesis);
             observedManualWords(partial);
+            considerInstantCommand(partial);
         } else {
             wakeHypothesis = partial;
         }
