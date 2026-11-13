@@ -289,11 +289,13 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
 
     /** A visual selector that does not read screenshots or intercept real app
      * touches while the user navigates; accessibility grant is required. */
-    public static String startMacroPointPicker(JarvisMacroPointPicker.Callback callback) {
+    public static String startMacroPointPicker(String packageName,JarvisMacroPointPicker.Callback callback) {
         ScreenControlAccessibilityService service=connected.get();
         if(service==null)return "Увімкни «Джарвіс — керування екраном» у Спеціальних можливостях.";
+        if(!JarvisForegroundApp.validPackage(packageName))
+            return "Спочатку вибери програму для точки.";
         if(service.macroPointPicker!=null)return "Вибір точки вже активний.";
-        service.macroPointPicker=new JarvisMacroPointPicker(service,point->{
+        service.macroPointPicker=new JarvisMacroPointPicker(service,packageName,point->{
             service.macroPointPicker=null;
             if(callback!=null)callback.onPick(point);
         });
