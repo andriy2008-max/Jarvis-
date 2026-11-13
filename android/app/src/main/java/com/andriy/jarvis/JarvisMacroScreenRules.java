@@ -41,6 +41,17 @@ public final class JarvisMacroScreenRules {
         return (int)Math.round(seconds*1000);
     }
 
+    /** Maximum wait for an app, button or editable field to appear: 1–60 sec.
+     * Old saved macros without a value use 20 seconds. */
+    public static int waitTimeoutMillis(String raw) {
+        if(raw==null || !raw.matches("\\d{1,2}"))
+            throw new IllegalArgumentException("Очікування: ціле число секунд від 1 до 60.");
+        int seconds=Integer.parseInt(raw);
+        if(seconds<1 || seconds>60)
+            throw new IllegalArgumentException("Очікування: від 1 до 60 секунд.");
+        return seconds*1000;
+    }
+
     public static boolean validText(String text) {
         return text != null && !text.isEmpty() && text.length() <= 1000 &&
             text.indexOf('\u0000') < 0;
