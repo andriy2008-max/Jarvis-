@@ -23,6 +23,10 @@ public final class AssistantIntentsTest {
     }
     public static void main(String[] args) {
         assertTime("постав будильник на 07:30", 7, 30);
+        assertTime(CommandPatterns.normalizeControlVerb(
+            "Джарвіс, постав будильник на 07:30"),7,30);
+        assertTime("постав будильник на 00:00",0,0);
+        assertTime("постав будильник на 23:59",23,59);
         assertTime("будильник о 6:05", 6, 5);
         assertTime("заведи будильник на 23.59", 23, 59);
         assertTime("розбуди мене о 00:00", 0, 0);
