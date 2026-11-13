@@ -1,7 +1,0 @@
-User-requested stable signed Jarvis APK build
-VersionName: 0.1.26
-VersionCode: 36
-Branch: main
-Source head before request: 49868249531bc49766859bdaba81735e16d37d5b
-Requested by user: 2026-11-13
-Output: signed updateable com.andriy.jarvis.stable APK, verify cert SHA-256, release as v0.1.26
