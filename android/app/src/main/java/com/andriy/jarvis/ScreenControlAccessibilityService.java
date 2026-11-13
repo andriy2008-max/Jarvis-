@@ -55,6 +55,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     private final Handler main = new Handler(Looper.getMainLooper());
     private JarvisSequenceExecutor sequences;
     private SpotifyPlaybackController spotifyPlayback;
+    private JarvisMacroPointPicker macroPointPicker;
 
     public static boolean isConnected() { return connected.get() != null; }
     public static boolean isSessionActive() {
@@ -117,6 +118,114 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if (root == null || !root.isVisibleToUser() || root.getPackageName() == null)
             return null;
         return root.getPackageName().toString();
+    }
+
+    public interface MacroActionCallback { void onComplete(boolean success, String detail); }
+
+    /** A deliberate local macro step, never AI-generated or an accessibility-event trigger.
+     * All tap gestures require an exact app package and known screen geometry. */
+    public static void macroTap(String packageName, String rawPoint, MacroActionCallback cb) {
+        ScreenControlAccessibilityService service = connected.get();
+        if (service == null) { cb.onComplete(false, "Увімкни службу спеціальних можливостей Джарвіса."); return; }
+        service.main.post(() -> service.tapMacroPoint(packageName, rawPoint, cb));
+    }
+
+    private void tapMacroPoint(String packageName, String rawPoint, MacroActionCallback cb) {
+        if (!JarvisForegroundApp.validPackage(packageName)) {
+            cb.onComplete(false, "У кроці не вибрано програму."); return;
+        }
+        JarvisMacroScreenRules.Point point;
+        try { point = JarvisMacroScreenRules.parsePoint(rawPoint); }
+        catch (Exception error) { cb.onComplete(false, error.getMessage()); return; }
+        AccessibilityNodeInfo root = currentExternalRoot();
+        if (root == null || root.getPackageName() == null ||
+            !packageName.equals(root.getPackageName().toString()) ||
+            !root.isVisibleToUser()) {
+            cb.onComplete(false, "Активна програма не збігається з програмою макросу.");
+            return;
+        }
+        Rect bounds=new Rect();
+        root.getBoundsInScreen(bounds);
+        if(bounds.width()<120 || bounds.height()<160) {
+            cb.onComplete(false,"Не вдалося визначити область екрана."); return;
+        }
+        int x=bounds.left+(int)Math.round(bounds.width()*point.x/100);
+        int y=bounds.top+(int)Math.round(bounds.height()*point.y/100);
+        // Do not tap password fields or visually labelled destructive/payment buttons.
+        ArrayDeque<AccessibilityNodeInfo> nodes=new ArrayDeque<>();
+        nodes.add(root);
+        int visited=0;
+        while(!nodes.isEmpty() && ++visited<=MAX_SCAN) {
+            AccessibilityNodeInfo node=nodes.removeFirst();
+            if(node.isVisibleToUser()) {
+                Rect box=new Rect(); node.getBoundsInScreen(box);
+                if(box.contains(x,y) &&
+                    (node.isPassword() || isSensitiveInputType(node.getInputType()) ||
+                    isSensitiveFieldLabel(node) ||
+                    JarvisMacroScreenRules.riskyLabel(asString(node.getText())+" "+
+                        asString(node.getContentDescription())))) {
+                    cb.onComplete(false, "Це захищена або ризикована кнопка. Натисни вручну.");
+                    return;
+                }
+                for(int i=0;i<node.getChildCount();i++){
+                    AccessibilityNodeInfo child=node.getChild(i);
+                    if(child!=null)nodes.add(child);
+                }
+            }
+        }
+        if(visited>MAX_SCAN) {
+            cb.onComplete(false,"Екран надто складний для безпечного натискання."); return;
+        }
+        // Accessibility dispatchGesture provides completion, not just a dispatch flag.
+        Path path=new Path();
+        path.moveTo(x,y);
+        GestureDescription gesture=new GestureDescription.Builder()
+            .addStroke(new GestureDescription.StrokeDescription(path,0,90))
+            .build();
+        boolean queued=dispatchGesture(gesture,new GestureResultCallback(){
+            @Override public void onCompleted(GestureDescription description) {
+                cb.onComplete(true,"Натискання виконано.");
+            }
+            @Override public void onCancelled(GestureDescription description) {
+                cb.onComplete(false,"Android скасував натискання.");
+            }
+        },main);
+        if(!queued)cb.onComplete(false,"Android не дозволив натискання.");
+    }
+
+    public static void macroType(String packageName, String text, MacroActionCallback cb) {
+        ScreenControlAccessibilityService service=connected.get();
+        if(service==null){ cb.onComplete(false, "Увімкни службу спеціальних можливостей.");return;}
+        service.main.post(()->{
+            if(!JarvisForegroundApp.validPackage(packageName) ||
+                !JarvisMacroScreenRules.validText(text)) {
+                cb.onComplete(false,"Невірна програма або текст макросу.");return;
+            }
+            AccessibilityNodeInfo root=service.currentExternalRoot();
+            if(root==null || root.getPackageName()==null ||
+                !packageName.equals(root.getPackageName().toString())) {
+                cb.onComplete(false,"Для введення тексту відкрий обрану програму.");return;
+            }
+            String result=service.writeToFocusedField(text, true);
+            cb.onComplete(result.startsWith("Текст введено в активне поле."),result);
+        });
+    }
+
+    /** A visual selector that does not read screenshots or intercept real app
+     * touches while the user navigates; accessibility grant is required. */
+    public static String startMacroPointPicker(JarvisMacroPointPicker.Callback callback) {
+        ScreenControlAccessibilityService service=connected.get();
+        if(service==null)return "Увімкни «Джарвіс — керування екраном» у Спеціальних можливостях.";
+        if(service.macroPointPicker!=null)return "Вибір точки вже активний.";
+        service.macroPointPicker=new JarvisMacroPointPicker(service,point->{
+            service.macroPointPicker=null;
+            if(callback!=null)callback.onPick(point);
+        });
+        try { service.macroPointPicker.show(); return ""; }
+        catch(Exception e) {
+            service.macroPointPicker=null;
+            return "Не вдалося показати вибір координат.";
+        }
     }
 
     public static boolean focusedEditableIn(String packageName) {
@@ -991,6 +1100,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     }
 
     @Override public void onDestroy() {
+        if(macroPointPicker!=null){ macroPointPicker.close(); macroPointPicker=null; }
         stopSession();
         if (recognizer != null) {
             recognizer.destroy();
@@ -1932,6 +2042,10 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
      * passwords, use the clipboard, press "send", or forward field data to AI.
      */
     private String writeToFocusedField(String spoken) {
+        return writeToFocusedField(spoken, false);
+    }
+
+    private String writeToFocusedField(String spoken, boolean macroAuthorized) {
         if (spoken == null || spoken.trim().isEmpty())
             return "Скажи «Напиши», а потім продиктуй слово або речення.";
         if (spoken.length() > ScreenTextInsertion.MAX_DICTATION_LENGTH)
@@ -1974,7 +2088,8 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         }
 
         // Recheck focus immediately before altering another app's editable node.
-        if (!sessionActive || !focused.isFocused() || focused.isPassword())
+        if ((!sessionActive && !macroAuthorized) ||
+            !focused.isFocused() || focused.isPassword())
             return "Фокус текстового поля змінився. Нічого не вводив.";
         Bundle args = new Bundle();
         args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
