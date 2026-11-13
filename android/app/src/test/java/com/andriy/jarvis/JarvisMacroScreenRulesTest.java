@@ -27,6 +27,12 @@ public final class JarvisMacroScreenRulesTest {
         yes(!JarvisMacroScreenRules.validText(null));
         yes(!JarvisMacroScreenRules.validText("\u0000"));
         yes(!JarvisMacroScreenRules.validText("x".repeat(1001)));
+        yes(JarvisMacroScreenRules.matchesLabel("Пошук","Пошук"));
+        yes(JarvisMacroScreenRules.matchesLabel(" пошук  ","ПОШУК"));
+        yes(!JarvisMacroScreenRules.matchesLabel("Пошук","Пошук в інтернеті"));
+        yes(!JarvisMacroScreenRules.matchesLabel("Надіслати","Надіслати заявку"));
+        yes(!JarvisMacroScreenRules.matchesLabel("","Пошук"));
+        yes(!JarvisMacroScreenRules.matchesLabel(null,"Пошук"));
         yes(JarvisMacroScreenRules.riskyLabel("Оплатити покупку"));
         yes(JarvisMacroScreenRules.riskyLabel("Send money"));
         yes(JarvisMacroScreenRules.riskyLabel("Видалити"));
