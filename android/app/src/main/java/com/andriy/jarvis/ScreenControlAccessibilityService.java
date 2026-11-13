@@ -50,6 +50,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     private View buttonOverlay;
     private SpeechRecognizer recognizer;
     private JarvisHeadsetAudioRouter headsetRoute;
+    private JarvisListeningAudioFocus listeningAudioFocus;
     private boolean recording;
     private final Handler main = new Handler(Looper.getMainLooper());
     private JarvisSequenceExecutor sequences;
@@ -1041,6 +1042,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             try { recognizer.cancel(); } catch (Exception ignored) {}
         }
         if(headsetRoute!=null)headsetRoute.end();
+        if(listeningAudioFocus!=null)listeningAudioFocus.end();
     }
 
     private void recordOneCommand() {
@@ -1071,11 +1073,13 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                     @Override public void onError(int error) {
                         recording = false;
                         if(headsetRoute!=null)headsetRoute.end();
+                        if(listeningAudioFocus!=null)listeningAudioFocus.end();
                         if (sessionActive) toast("Не розпізнав команду. Натисни мікрофон ще раз.");
                     }
                     @Override public void onResults(Bundle results) {
                         recording = false;
                         if(headsetRoute!=null)headsetRoute.end();
+                        if(listeningAudioFocus!=null)listeningAudioFocus.end();
                         if (!sessionActive) return;
                         ArrayList<String> phrases =
                             results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
@@ -1225,11 +1229,16 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                 toast(headsetRoute.problem());
                 return;
             }
+            if(listeningAudioFocus==null)
+                listeningAudioFocus=new JarvisListeningAudioFocus(this);
+            if(!listeningAudioFocus.begin())
+                toast("Android не дав призупинити інші звуки. Мікрофон слухає.");
             recording = true;
             recognizer.startListening(speech);
         } catch (Exception error) {
             recording = false;
             if(headsetRoute!=null)headsetRoute.end();
+            if(listeningAudioFocus!=null)listeningAudioFocus.end();
             toast("Не вдалося розпочати розпізнавання. Перевір дозвіл мікрофона.");
         }
     }
