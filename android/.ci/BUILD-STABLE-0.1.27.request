@@ -1,0 +1,9 @@
+User-requested single stable Android APK build
+VersionName: 0.1.27
+VersionCode: 37
+Branch: main
+Source head before request: 4e407a0896e3b4fb8d2de4617772ee7291dea664
+Requested: 2026-11-13
+Build signed stable applicationId com.andriy.jarvis.stable
+Release: v0.1.27
+Features: Bolt taxi 4-second timed tap, Telegram confirmations and corrections, chat layout fixes
