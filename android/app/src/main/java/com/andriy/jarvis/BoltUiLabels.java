@@ -5,6 +5,12 @@ import java.util.Locale;
 /** Allowlist for the passenger rides/destination controls, never checkout. */
 public final class BoltUiLabels {
     private BoltUiLabels() {}
+    /** Fixed launch-to-tap delay agreed with the user, independent of tile text. */
+    public static final long RIDES_TAP_DELAY_MS=4000L;
+    public static boolean ridesTapDue(long elapsedMs) {
+        return elapsedMs>=RIDES_TAP_DELAY_MS;
+    }
+
     private static String normal(String s) {
         return s==null?"":s.toLowerCase(Locale.ROOT)
             .replaceAll("[^\\p{L}\\p{N}]+"," ").replaceAll("\\s+"," ").trim();
@@ -38,6 +44,23 @@ public final class BoltUiLabels {
         if(width<360 || height<width*2.05f || height>width*2.50f)return null;
         return new int[]{Math.round(width*(184f/684f)),
                          Math.round(height*(482f/1536f))};
+    }
+
+    /** Stops a four-second screenshot tap on route/checkout/payment screens.
+     * Never identifies a home tile by itself: these are blocking cues only. */
+    public static boolean unsafeForTimedRidesTap(String label) {
+        String v=normal(label);
+        if(v.isEmpty())return false;
+        if(routeTitle(label))return true;
+        return v.contains("підтвердити") || v.contains("подтвердить") ||
+            v.contains("confirm ride") || v.contains("confirm trip") ||
+            v.contains("замовити поїздку") || v.contains("заказать поездку") ||
+            v.contains("замовити автомобіль") || v.contains("book ride") ||
+            v.contains("оплатити") || v.contains("оплата") ||
+            v.contains("оплатить") || v.contains("платеж") ||
+            v.contains("payment") || v.contains("checkout") ||
+            v.contains("спосіб оплати") || v.contains("способ оплаты") ||
+            v.contains("trip details") || v.contains("деталі поїздки");
     }
 
     public static boolean destination(String s){
