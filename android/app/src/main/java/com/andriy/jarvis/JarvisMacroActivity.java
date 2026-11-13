@@ -536,6 +536,7 @@ public final class JarvisMacroActivity extends Activity {
             if("time".equals(chosen) && !JarvisMacros.validTime(triggerText))
                 throw new IllegalArgumentException("Час тригера має формат HH:mm.");
             if ("voice".equals(chosen)) {
+                String selectedForeground=value(foregroundApp);
                 String phrase = CommandPatterns.normalizeControlVerb(triggerText)
                     .replaceAll("\\s+", " ").trim();
                 for (JSONObject other : JarvisMacros.all(this)) {
@@ -546,7 +547,16 @@ public final class JarvisMacroActivity extends Activity {
                         phrase.equals(CommandPatterns.normalizeControlVerb(
                             other.optString("triggerValue"))
                             .replaceAll("\\s+", " ").trim()))
-                        throw new IllegalArgumentException("Така голосова команда вже використовується.");
+                    {
+                        JSONObject existing=other.optJSONObject("constraints");
+                        String previousForeground=existing==null ? "" :
+                            existing.optString("foregroundApp","");
+                        if(!JarvisMacroTriggerRules.disjointApps(
+                            selectedForeground,previousForeground))
+                            throw new IllegalArgumentException(
+                                "Одна голосова команда вже зайнята. " +
+                                "Для повтору вибери різні активні програми в обмеженнях.");
+                    }
                 }
             }
             JSONObject constraints = new JSONObject();
