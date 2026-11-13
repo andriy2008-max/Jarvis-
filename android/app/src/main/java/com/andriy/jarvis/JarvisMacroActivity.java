@@ -69,12 +69,97 @@ public final class JarvisMacroActivity extends Activity {
     private TextView macroStatus;
     private CheckBox useMacroDroid;
     private final ArrayList<ActionRow> actionRows = new ArrayList<>();
+    private static final String EDITOR_STATE = "jarvis_macro_editor_draft";
+    private static final String PICK_STATE = "jarvis_macro_picker_draft_v1";
+    private static final String PICK_DRAFT = "draft";
+    private static final String PICK_INDEX = "row_index";
+    private static final String PICK_DONE = "finished";
+    private static final String PICK_VALUE = "value";
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
-        showList();
+        String saved = state == null ? null : state.getString(EDITOR_STATE);
+        if (saved == null || saved.isEmpty()) {
+            saved = getSharedPreferences(PICK_STATE,MODE_PRIVATE)
+                .getString(PICK_DRAFT,null);
+        }
+        if(saved == null || saved.isEmpty())showList();
+        else try { edit(new JSONObject(saved)); }
+        catch(Exception invalid) { clearPickerDraft();showList(); }
+    }
+
+    @Override protected void onSaveInstanceState(Bundle out) {
+        if(name != null) {
+            JSONObject draft = snapshotDraft();
+            if(draft != null)out.putString(EDITOR_STATE,draft.toString());
+        }
+        super.onSaveInstanceState(out);
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        android.content.SharedPreferences prefs=getSharedPreferences(PICK_STATE,MODE_PRIVATE);
+        if(!prefs.getBoolean(PICK_DONE,false))return;
+        String point=prefs.getString(PICK_VALUE,null);
+        int index=prefs.getInt(PICK_INDEX,-1);
+        if(name == null) {
+            String pending=prefs.getString(PICK_DRAFT,null);
+            if(pending!=null)try { edit(new JSONObject(pending)); }
+            catch(Exception ignored) { }
+        }
+        if(point!=null && index>=0 && index<actionRows.size() &&
+            "tap_point".equals(ACTION_KEYS[actionRows.get(index).type.getSelectedItemPosition()])) {
+            try {
+                JarvisMacroScreenRules.parsePoint(point);
+                actionRows.get(index).value.setText(point);
+                Toast.makeText(this,"Точка додана до кроку "+(index+1),Toast.LENGTH_SHORT).show();
+            } catch(IllegalArgumentException ignored) { }
+        }
+        clearPickerDraft();
+    }
+
+    private void clearPickerDraft() {
+        getSharedPreferences(PICK_STATE,MODE_PRIVATE).edit().clear().apply();
+    }
+
+    /** Snapshot is only a draft; the regular Save button is still required
+     * before this macro can ever run. Keep all actions and unfinished fields. */
+    private JSONObject snapshotDraft() {
+        if(name == null)return null;
+        try {
+            JSONObject snapshot=new JSONObject();
+            if(editing!=null && !editing.optString("id").isEmpty())
+                snapshot.put("id",editing.optString("id"));
+            snapshot.put("enabled",editing==null || editing.optBoolean("enabled",true));
+            snapshot.put("name",value(name));
+            snapshot.put("trigger",TRIGGER_KEYS[trigger.getSelectedItemPosition()]);
+            snapshot.put("triggerValue",value(triggerValue));
+            snapshot.put("useMacroDroid",useMacroDroid.isChecked());
+            JSONArray steps=new JSONArray();
+            for(ActionRow row:actionRows){
+                JSONObject step=new JSONObject();
+                step.put("type",ACTION_KEYS[row.type.getSelectedItemPosition()]);
+                step.put("value",row.value.getText().toString());
+                step.put("package",value(row.packageName));
+                step.put("rootApproved",row.approved.isChecked());
+                steps.put(step);
+            }
+            snapshot.put("actions",steps);
+            JSONObject c=new JSONObject();
+            c.put("timeFrom",value(timeFrom));c.put("timeTo",value(timeTo));
+            c.put("date",value(date));c.put("days",value(days));
+            c.put("ssid",value(ssid));c.put("foregroundApp",value(foregroundApp));
+            c.put("charging",charging.getSelectedItemPosition()==1?"yes":
+                charging.getSelectedItemPosition()==2?"no":"any");
+            snapshot.put("constraints",c);
+            snapshot.put("_batteryRaw",value(battery));
+            snapshot.put("_latRaw",value(latitude));
+            snapshot.put("_lonRaw",value(longitude));
+            snapshot.put("_radiusRaw",value(radius));
+            return snapshot;
+        }catch(Exception error) {return null;}
     }
 
     private int dp(float number) {
@@ -137,6 +222,7 @@ public final class JarvisMacroActivity extends Activity {
     }
 
     private void showList() {
+        clearPickerDraft();
         editing = null;
         name = null;
         screen("⚙ Макроси");
@@ -311,25 +397,43 @@ public final class JarvisMacroActivity extends Activity {
                 Toast.LENGTH_LONG).show();
             return;
         }
+        JSONObject pending=snapshotDraft();
+        int selectedRow=actionRows.indexOf(row);
+        if(pending==null || selectedRow<0) {
+            Toast.makeText(this,"Не вдалося зберегти чернетку макросу.",
+                Toast.LENGTH_LONG).show();
+            return;
+        }
+        boolean secured=getSharedPreferences(PICK_STATE,MODE_PRIVATE).edit()
+            .putString(PICK_DRAFT,pending.toString())
+            .putInt(PICK_INDEX,selectedRow)
+            .putBoolean(PICK_DONE,false).remove(PICK_VALUE).commit();
+        if(!secured) {
+            Toast.makeText(this,"Не вдалося зберегти крок перед вибором точки.",
+                Toast.LENGTH_LONG).show();
+            return;
+        }
+        final Context app=getApplicationContext();
         String error=ScreenControlAccessibilityService.startMacroPointPicker(pkg,point->{
-            if(point==null)return;
-            row.value.setText(point);
-            Intent back=new Intent(this,JarvisMacroActivity.class);
-            back.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT |
+            app.getSharedPreferences(PICK_STATE,Context.MODE_PRIVATE).edit()
+                .putBoolean(PICK_DONE,true)
+                .putString(PICK_VALUE,point).commit();
+            Intent back=new Intent(app,JarvisMacroActivity.class);
+            back.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
+                          Intent.FLAG_ACTIVITY_REORDER_TO_FRONT |
                           Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            try{startActivity(back);}
-            catch(Exception ignored) {
-                Toast.makeText(this,"Точка збережена. Повернись у Джарвіс.",
-                    Toast.LENGTH_LONG).show();
-            }
+            try{app.startActivity(back);}
+            catch(Exception ignored) { }
         });
         if(!error.isEmpty()) {
+            clearPickerDraft();
             Toast.makeText(this,error,Toast.LENGTH_LONG).show();
             return;
         }
         try { startActivity(open); }
         catch(Exception e) {
             ScreenControlAccessibilityService.stopMacroPointPicker();
+            clearPickerDraft();
             Toast.makeText(this,"Android не дозволив відкрити програму.",
                 Toast.LENGTH_LONG).show();
         }
@@ -345,7 +449,8 @@ public final class JarvisMacroActivity extends Activity {
     }
 
     private void edit(JSONObject previous) {
-        editing = previous;
+        editing = previous != null && !previous.optString("id").isEmpty()
+            ? previous : null;
         actionRows.clear();
         JSONObject c = previous == null ? null : previous.optJSONObject("constraints");
         if(c == null) c = new JSONObject();
@@ -387,6 +492,12 @@ public final class JarvisMacroActivity extends Activity {
             for (int i=0;i<prevSteps.length();i++) addAction(prevSteps.optJSONObject(i));
         }
         if(actionRows.isEmpty()) addAction(null);
+        if(previous!=null && previous.has("_batteryRaw")) {
+            battery.setText(previous.optString("_batteryRaw"));
+            latitude.setText(previous.optString("_latRaw"));
+            longitude.setText(previous.optString("_lonRaw"));
+            radius.setText(previous.optString("_radiusRaw"));
+        }
         actionsSection.addView(button("＋ Додати дію",()->addAction(null)));
         actionsSection.setVisibility(useMacroDroid.isChecked() ? View.GONE : View.VISIBLE);
         useMacroDroid.setOnCheckedChangeListener((view,checked) ->
