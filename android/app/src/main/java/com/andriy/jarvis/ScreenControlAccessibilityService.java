@@ -256,6 +256,9 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         ScreenControlAccessibilityService service=connected.get();
         if(service==null){cb.onComplete(false,"Спеціальні можливості неактивні.");return;}
         service.main.post(()->{
+            if(service.macroPointPicker!=null) {
+                cb.onComplete(false,"Закрий вибір точки перед виконанням макросу.");return;
+            }
             if(!JarvisForegroundApp.validPackage(packageName) ||
                 label==null || label.trim().isEmpty() || label.length()>100 ||
                 JarvisMacroScreenRules.riskyLabel(label)) {
@@ -326,6 +329,9 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         ScreenControlAccessibilityService service=connected.get();
         if(service==null){ cb.onComplete(false, "Увімкни службу спеціальних можливостей.");return;}
         service.main.post(()->{
+            if(service.macroPointPicker!=null) {
+                cb.onComplete(false,"Закрий вибір точки перед введенням тексту.");return;
+            }
             if(!JarvisForegroundApp.validPackage(packageName) ||
                 !JarvisMacroScreenRules.validText(text)) {
                 cb.onComplete(false,"Невірна програма або текст макросу.");return;
