@@ -3507,6 +3507,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
             processing = false;
             if (isFinishing() || isDestroyed()) return;
             String text = error == null && response != null ? response.reply : error;
+            if (error == null && response != null && "assist".equals(mode)) {
+                text = JarvisToolRuntime.accept(this, response.requestId, response.decision, response.reply);
+                JarvisToolRuntime.rememberDialogue(question, text);
+            }
             if (text == null || text.trim().isEmpty())
                 text = "ШІ не повернув відповіді.";
             appendDialogue("Джарвіс", text);
@@ -3523,9 +3527,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
         });
     }
 
-    /** Unrecognized conversation goes to AI; local phone commands never give AI device control. */
+    /** Незнайомі фрази на телефоні проходять через спільний контрольований реєстр. */
     private void askAi(String question) {
-        askAiDetailed(question, "chat", null);
+        askAiDetailed(question, isWatchDevice ? "chat" : "assist", null);
     }
 
     private void clearAiConversation() {
@@ -3696,6 +3700,16 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void processCommand(String raw) {
         if (raw == null || raw.trim().isEmpty()) return;
+        if (!isWatchDevice) {
+            String toolReply = JarvisToolRuntime.onUserInput(this, raw);
+            if (toolReply != null) {
+                appendDialogue("Ти", raw);
+                appendDialogue("Джарвіс", toolReply);
+                setStatus(toolReply);
+                if (voiceEnabled) speakReply(toolReply);
+                return;
+            }
+        }
         if (!isWatchDevice && JarvisMacros.cancelIfRequested(raw, result -> {
             appendDialogue("Джарвіс", result);
             setStatus(result);

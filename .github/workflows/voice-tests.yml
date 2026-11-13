@@ -4,6 +4,10 @@ on:
   push:
     paths:
       - '.github/workflows/voice-tests.yml'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisTool*.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/JarvisTool*.java'
+      - 'android/app/src/main/assets/tool-catalog.json'
+      - 'tools/sync-tool-catalog.mjs'
       - 'android/app/src/main/java/com/andriy/jarvis/SongRecognition*.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisTaxi*.java'
       - 'android/app/src/main/java/com/andriy/jarvis/Bolt*.java'
@@ -128,6 +132,24 @@ permissions:
   contents: read
 
 jobs:
+  tool_policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Shared tool catalog and Android policy contracts
+        run: |
+          node tools/sync-tool-catalog.mjs --check
+          curl --fail --location --retry 2 https://repo.maven.apache.org/maven2/org/json/json/20240303/json-20240303.jar -o /tmp/jarvis-json.jar
+          mkdir -p /tmp/jarvis-tool-tests
+          javac -encoding UTF-8 -cp /tmp/jarvis-json.jar -d /tmp/jarvis-tool-tests android/app/src/main/java/com/andriy/jarvis/JarvisToolRegistry.java android/app/src/main/java/com/andriy/jarvis/JarvisToolSession.java android/app/src/test/java/com/andriy/jarvis/JarvisToolPolicyTest.java
+          java -cp /tmp/jarvis-tool-tests:/tmp/jarvis-json.jar com.andriy.jarvis.JarvisToolPolicyTest server/jarvis-ai-worker/src/tool-catalog.json
   contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 8

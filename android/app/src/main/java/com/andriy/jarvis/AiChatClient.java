@@ -43,8 +43,11 @@ public final class AiChatClient {
         public final String reply;
         public final String sources;
         public final byte[] image;
-        private AiResponse(String reply, String sources, byte[] image) {
+        public final JSONObject decision;
+        public final String requestId;
+        private AiResponse(String reply, String sources, byte[] image, JSONObject decision, String requestId) {
             this.reply = reply; this.sources = sources; this.image = image;
+            this.decision = decision; this.requestId = requestId;
         }
     }
 
@@ -110,6 +113,7 @@ public final class AiChatClient {
 
     public synchronized void clearHistory() {
         history.clear();
+        JarvisToolRuntime.clear();
         generation++;
     }
 
@@ -140,8 +144,8 @@ public final class AiChatClient {
         }
         final String requestMode = mode == null ? "chat" : mode;
         if (!("chat".equals(requestMode) || "web".equals(requestMode) ||
-                "image".equals(requestMode) || "analysis".equals(requestMode)) ||
-            (attachment != null && "web".equals(requestMode))) {
+                "image".equals(requestMode) || "analysis".equals(requestMode) || "assist".equals(requestMode)) ||
+            (attachment != null && ("web".equals(requestMode) || "assist".equals(requestMode)))) {
             ui.post(() -> callback.onComplete(null, "Недоступний режим ШІ."));
             return;
         }
@@ -159,6 +163,9 @@ public final class AiChatClient {
                 remainingBytes -= bytes;
             }
         }
+        final String toolRequestId = "assist".equals(requestMode) ? JarvisToolRuntime.beginRequest() : null;
+        final JSONObject toolContext = JarvisToolRuntime.context();
+        final JSONArray toolHistory = JarvisToolRuntime.history();
         final String url = endpoint();
         executor.execute(() -> {
             AiResponse answer = null;
@@ -171,16 +178,20 @@ public final class AiChatClient {
                 request.put("effort", getReasoningEffort());
                 JSONArray previous = new JSONArray();
                 for (JSONObject turn : context) previous.put(turn);
-                request.put("history", previous);
+                request.put("history", "assist".equals(requestMode) ? toolHistory : previous);
+                if ("assist".equals(requestMode)) {
+                    request.put("tool_version", JarvisToolRegistry.VERSION);
+                    if (toolContext != null) request.put("device_context", toolContext);
+                }
                 if (attachment != null)
                     request.put("attachment", AiAttachmentLoader.read(appContext, attachment));
-                answer = post(url, token, request);
+                answer = post(url, token, request, toolRequestId);
             } catch (Exception ex) {
                 error = ex.getMessage() == null ? "Не вдалося звернутися до ШІ." : ex.getMessage();
             }
             final AiResponse done = answer;
             final String failure = error;
-            if (done != null) {
+            if (done != null && !"assist".equals(requestMode)) {
                 synchronized (this) {
                     if (!closed && currentGeneration == generation) {
                         try {
@@ -210,7 +221,7 @@ public final class AiChatClient {
     }
 
     private static AiResponse post(String endpoint, String clientToken,
-                                   JSONObject request) throws Exception {
+                                   JSONObject request, String toolRequestId) throws Exception {
         HttpURLConnection conn = null;
         try {
             conn = (HttpURLConnection) new URL(endpoint).openConnection();
@@ -235,7 +246,9 @@ public final class AiChatClient {
                 throw new Exception("Ліміт ШІ тимчасово вичерпано. Перевір витрати API.");
             if (status < 200 || status >= 300) {
                 if (status == 400) throw new Exception(
-                    "Сервер не прийняв фото або документ. Перевір, чи оновлено Worker.");
+                    "assist".equals(request.optString("mode"))
+                    ? "Сервер не підтримує ці розумні команди. Онови Cloudflare Worker."
+                    : "Сервер не прийняв фото або документ. Перевір, чи оновлено Worker.");
                 if (status == 413) throw new Exception("Файл завеликий для сервера.");
                 if (status == 502) {
                     String reason = "";
@@ -267,6 +280,14 @@ public final class AiChatClient {
             }
             try (InputStream input = conn.getInputStream()) {
                 JSONObject result = new JSONObject(readLimited(input));
+                if ("assist".equals(request.optString("mode")) &&
+                    (result.optInt("tool_version", -1) != JarvisToolRegistry.VERSION || !result.has("decision")))
+                    throw new Exception("Для розумних команд потрібно оновити Cloudflare Worker. Звичайні локальні команди працюють.");
+                if (!"assist".equals(request.optString("mode")) && result.optJSONObject("decision") != null)
+                    throw new Exception("Неочікувана дія у звичайному режимі ШІ.");
+                if ("assist".equals(request.optString("mode")) && !result.isNull("decision") &&
+                    !(result.opt("decision") instanceof JSONObject))
+                    throw new Exception("Неправильний формат дії ШІ.");
                 String response = result.optString("reply", "").trim();
                 if (response.isEmpty()) throw new Exception("ШІ повернув порожню відповідь.");
                 JSONArray citations = result.optJSONArray("sources");
@@ -293,7 +314,7 @@ public final class AiChatClient {
                 }
                 return new AiResponse(
                     response.length() > 12000 ? response.substring(0, 12000) : response,
-                    links.toString().trim(), image);
+                    links.toString().trim(), image, result.optJSONObject("decision"), toolRequestId);
             }
         } catch (java.net.SocketTimeoutException exception) {
             throw new Exception("ШІ не відповів вчасно. Перевір інтернет або повтори запит.");

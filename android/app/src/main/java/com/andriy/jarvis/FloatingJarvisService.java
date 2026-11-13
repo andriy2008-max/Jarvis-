@@ -1128,6 +1128,8 @@ public final class FloatingJarvisService extends Service {
 
     private void executeCommand(String raw) {
         if (closing) return;
+        String toolReply = JarvisToolRuntime.onUserInput(this, raw);
+        if (toolReply != null) { reply(toolReply); return; }
         if (JarvisMacros.cancelIfRequested(raw, result -> {
             if (!closing) reply(result);
         })) return;
@@ -1358,11 +1360,15 @@ public final class FloatingJarvisService extends Service {
             return;
         }
         if (ai != null && ai.isConfigured()) {
+            if (aiBusy) { reply("ШІ ще опрацьовує попередній запит. Повтори команду після відповіді."); return; }
             aiBusy = true;
-            ai.send(raw, (response, error) -> {
+            ai.sendDetailed(raw, "assist", null, (response, error) -> {
                 aiBusy = false;
                 if (closing) return;
-                reply(error != null ? error : response);
+                String result = error != null ? error : response == null ? "ШІ не повернув відповіді." :
+                    JarvisToolRuntime.accept(this, response.requestId, response.decision, response.reply);
+                JarvisToolRuntime.rememberDialogue(raw, result);
+                reply(result);
             });
         } else {
             reply("Цю команду я поки не виконую в плаваючому вікні. " +
