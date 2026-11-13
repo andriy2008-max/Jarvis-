@@ -347,8 +347,9 @@ public final class JarvisMacros {
         final JSONArray steps;
         final Listener listener;
         int index;
-        boolean finished;
+        volatile boolean finished;
         volatile Process rootProcess;
+        JarvisSequenceExecutor ongoingSequence;
         Execution(Context context, String name, JSONArray steps, Listener listener) {
             this.context = context;
             this.name = name;
@@ -358,6 +359,11 @@ public final class JarvisMacros {
         void complete(boolean ok, String info) {
             if (finished) return;
             finished = true;
+            // The nested command executor owns its own polling loop and phone-mode
+            // lease. Cancelling the outer macro must cancel that executor too.
+            JarvisSequenceExecutor sequence=ongoingSequence;
+            ongoingSequence=null;
+            if (sequence!=null) sequence.cancel();
             if (rootProcess != null) rootProcess.destroyForcibly();
             if (active == this) active = null;
             RUNNING.set(false);
@@ -557,9 +563,16 @@ public final class JarvisMacros {
                                 return;
                             }
                             JarvisSequenceExecutor executor = new JarvisSequenceExecutor(context);
+                            ongoingSequence=executor;
                             executor.start(plan, new JarvisSequenceExecutor.Listener() {
-                                @Override public void onProgress(int n, int total, String info) { }
+                                @Override public void onProgress(int n, int total, String info) {
+                                    if(!finished && listener!=null)
+                                        listener.onProgress(index,steps.length(),
+                                            "Команда · "+info);
+                                }
                                 @Override public void onFinished(boolean ok, String info) {
+                                    if(ongoingSequence==executor)ongoingSequence=null;
+                                    if(finished)return;
                                     if (ok) next(); else complete(false, info);
                                 }
                             });
@@ -573,18 +586,25 @@ public final class JarvisMacros {
                                 complete(false, "порожня або завелика root-команда"); return;
                             }
                             new Thread(() -> {
+                                if(finished)return;
                                 boolean ok = false;
                                 Process process = null;
                                 try {
+                                    if(finished)return;
                                     process = new ProcessBuilder("su", "-c", value)
                                         .redirectErrorStream(true).start();
                                     rootProcess = process;
+                                    if(finished)return;
                                     ok = process.waitFor(8, TimeUnit.SECONDS) &&
                                         process.exitValue() == 0;
                                 } catch (Exception ignored) { }
-                                finally { if (process != null) process.destroyForcibly(); }
+                                finally {
+                                    if(process!=null)process.destroyForcibly();
+                                    if(rootProcess==process)rootProcess=null;
+                                }
                                 boolean success = ok;
                                 MAIN.post(() -> {
+                                    if(finished)return;
                                     if (success) next();
                                     else complete(false, "root-команда не виконана або root не надано");
                                 });
