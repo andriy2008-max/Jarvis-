@@ -10,6 +10,8 @@ import java.util.regex.Pattern;
  */
 public final class TelegramReplyCommands {
     public enum Kind { DRAFT, DRAFT_AUTO, SEND, CANCEL, STATUS, HELP }
+    /** Short replies are recognized ONLY while a Telegram draft dialogue is active. */
+    public enum DialogAction { NONE, CONFIRM, REWRITE_MESSAGE, CHANGE_CONTACT, CANCEL }
     public static final class Request {
         public final Kind kind;
         public final String recipient; // mandatory for MTProto direct messages
@@ -34,6 +36,48 @@ public final class TelegramReplyCommands {
     );
 
     private TelegramReplyCommands(){}
+
+    /** The word "ок" never becomes a global Telegram command. */
+    public static DialogAction dialogAction(String raw) {
+        if (raw == null) return DialogAction.NONE;
+        String phrase=CommandPatterns.normalize(raw).replaceAll("\\s+"," ").trim()
+            .replaceAll("[,:;]+$", "").trim();
+        switch (phrase) {
+            case "ок":
+            case "окей":
+                return DialogAction.CONFIRM;
+            case "не так":
+            case "заново":
+                return DialogAction.REWRITE_MESSAGE;
+            case "не той контакт":
+                return DialogAction.CHANGE_CONTACT;
+            case "скасуй відповідь":
+            case "скасуй повідомлення":
+            case "скасуй телеграм":
+            case "не надсилай":
+                return DialogAction.CANCEL;
+            default: return DialogAction.NONE;
+        }
+    }
+
+    /** Preserve original dictated text. A corrected contact is never inferred by AI. */
+    public static Request correctedContact(String recipient,String unchangedText) {
+        if (recipient==null || unchangedText==null)return null;
+        String name=recipient.trim(),body=unchangedText.trim();
+        if (name.length()<1 || name.length()>75 || body.isEmpty() ||
+            body.length()>1000 || name.contains("\n") || name.contains("\r") ||
+            body.contains("\n") || body.contains("\r")) return null;
+        return new Request(Kind.DRAFT,name,body);
+    }
+
+    public static String dictatedCorrection(String raw) {
+        if (raw==null)return null;
+        String text=raw.trim()
+            .replaceFirst("(?iu)^(?:джарвіс|джарвис|jarvis)[,\\s:—-]*","");
+        if(text.isEmpty() || text.length()>1000 || text.contains("\n") ||
+            text.contains("\r"))return null;
+        return text.trim();
+    }
 
     public static Request parse(String raw) {
         if(raw==null || raw.contains("\n") || raw.contains("\r"))return null;
