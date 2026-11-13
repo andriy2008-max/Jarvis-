@@ -398,6 +398,8 @@ public final class JarvisMacros {
                             return;
                         }
                         case "wait_app": {
+                            int timeout=JarvisMacroScreenRules.waitTimeoutMillis(
+                                step.optString("timeoutSeconds","20"));
                             if(!JarvisForegroundApp.validPackage(value)) {
                                 complete(false,"Неправильна назва програми.");return;
                             }
@@ -411,8 +413,9 @@ public final class JarvisMacros {
                                     next();
                                     return;
                                 }
-                                if(SystemClock.uptimeMillis()-start>20000L) {
-                                    complete(false,"Програма «"+expected+"» не відкрилася за 20 секунд.");
+                                if(SystemClock.uptimeMillis()-start>timeout) {
+                                    complete(false,"Програма «"+expected+"» не відкрилася за "+
+                                        timeout/1000+" секунд.");
                                     return;
                                 }
                                 MAIN.postDelayed(poll[0],250L);
@@ -421,6 +424,8 @@ public final class JarvisMacros {
                             return;
                         }
                         case "wait_label": {
+                            int timeout=JarvisMacroScreenRules.waitTimeoutMillis(
+                                step.optString("timeoutSeconds","20"));
                             String expected=step.optString("package").trim();
                             if(!JarvisForegroundApp.validPackage(expected) ||
                                 value.isEmpty() || value.length()>100){
@@ -433,8 +438,9 @@ public final class JarvisMacros {
                                 if(ScreenControlAccessibilityService.macroLabelVisible(expected,value)) {
                                     next();return;
                                 }
-                                if(SystemClock.uptimeMillis()-start>20000) {
-                                    complete(false,"Елемент «"+value+"» не з'явився за 20 секунд.");
+                                if(SystemClock.uptimeMillis()-start>timeout) {
+                                    complete(false,"Елемент «"+value+"» не з'явився за "+
+                                        timeout/1000+" секунд.");
                                     return;
                                 }
                                 MAIN.postDelayed(poll[0],250L);
@@ -443,6 +449,8 @@ public final class JarvisMacros {
                             return;
                         }
                         case "wait_field": {
+                            int timeout=JarvisMacroScreenRules.waitTimeoutMillis(
+                                step.optString("timeoutSeconds","20"));
                             String expected=step.optString("package").trim();
                             if(!JarvisForegroundApp.validPackage(expected)) {
                                 complete(false,"Вкажи програму з текстовим полем.");return;
@@ -454,8 +462,9 @@ public final class JarvisMacros {
                                 if(ScreenControlAccessibilityService.macroFocusedEditable(expected)) {
                                     next();return;
                                 }
-                                if(SystemClock.uptimeMillis()-start>20000L) {
-                                    complete(false,"Текстове поле не активувалося за 20 секунд.");
+                                if(SystemClock.uptimeMillis()-start>timeout) {
+                                    complete(false,"Текстове поле не активувалося за "+
+                                        timeout/1000+" секунд.");
                                     return;
                                 }
                                 MAIN.postDelayed(poll[0],250);
