@@ -257,6 +257,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             ? "Режим «Телефон»: Натисни, Зажми, Свайпни…"
             : "Звичайний режим Джарвіса");
     });
+    private boolean telegramDictationAfterReply;
     private boolean voiceEnabled = true;
     private boolean ttsReady;
 
@@ -481,6 +482,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         JarvisLiveTranscript.setCorrectionHandler(TRANSCRIPT_OWNER, null);
         JarvisLiveTranscript.unsubscribe(transcriptListener);
         foreground = false;
+        telegramDictationAfterReply=false;
         cancelAutoWakeSchedule();
         cancelManualRestart();
         cancelSilenceCheck();
@@ -3694,6 +3696,33 @@ public final class MainActivity extends Activity implements RecognitionListener 
         setStatus(result);
     }
 
+    /** A spoken Telegram correction starts a fresh manual capture after
+     * Jarvis finishes its response, never while its own TTS is playing. */
+    private void telegramResponse(boolean ok,String result) {
+        if(isFinishing() || isDestroyed())return;
+        appendDialogue("Джарвіс",result);
+        setStatus(result);
+        telegramDictationAfterReply =
+            TelegramReplyController.needsFollowupDictation(this);
+        if(voiceEnabled && !phoneListening)speakReply(result);
+        else if(telegramDictationAfterReply)restartTelegramDictation();
+    }
+
+    private void restartTelegramDictation() {
+        if(!telegramDictationAfterReply)return;
+        telegramDictationAfterReply=false;
+        cancelAutoWakeSchedule();
+        wakeHandler.postDelayed(()->{
+            if(foreground && !isFinishing() && !isDestroyed() &&
+                !manualCapture && !phoneListening && !listening &&
+                !processing && !aiBusy && !speaking &&
+                !JarvisPhoneMode.isActive() &&
+                !FloatingJarvisService.isShowing() &&
+                TelegramReplyController.needsFollowupDictation(this))
+                startManualListening();
+        },450L);
+    }
+
     private void processCommand(String raw) {
         if (raw == null || raw.trim().isEmpty()) return;
         if (!isWatchDevice && JarvisMacros.cancelIfRequested(raw, result -> {
@@ -3814,6 +3843,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             return;
         }
         appendDialogue("Ти", raw.trim());
+        if (!isWatchDevice && TelegramReplyController.handleFollowup(
+            this,raw,this::telegramResponse))return;
         if (!isWatchDevice && JarvisMacros.handleVoice(this, raw, result -> {
             if (isFinishing() || isDestroyed()) return;
             appendDialogue("Джарвіс", result);
@@ -3839,12 +3870,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
         TelegramReplyCommands.Request telegram=TelegramReplyCommands.parse(raw);
         if (!isWatchDevice && telegram!=null) {
-            TelegramReplyController.perform(this,telegram,(success,result)->{
-                if(isFinishing()||isDestroyed())return;
-                appendDialogue("Джарвіс",result);
-                setStatus(result);
-                if(voiceEnabled)speakReply(result);
-            });
+            TelegramReplyController.perform(this,telegram,this::telegramResponse);
             return;
         }
         if (!isWatchDevice && FinanceManagerController.isRunning()) {
@@ -4200,7 +4226,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             JarvisSpeechMouth.stopSystemTts();
             speaking = false;
             if (!listening && !processing) face.setState("idle");
-            resumeAfterReply();
+            if(telegramDictationAfterReply)restartTelegramDictation();
+            else resumeAfterReply();
         });
     }
 
