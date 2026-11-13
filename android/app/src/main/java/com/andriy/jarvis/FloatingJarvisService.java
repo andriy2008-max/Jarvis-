@@ -1244,9 +1244,13 @@ public final class FloatingJarvisService extends Service {
             Intent i = new Intent(AlarmClock.ACTION_SET_ALARM);
             i.putExtra(AlarmClock.EXTRA_HOUR, alarm.hour);
             i.putExtra(AlarmClock.EXTRA_MINUTES, alarm.minute);
-            i.putExtra(AlarmClock.EXTRA_SKIP_UI, false);
+            i.putExtra(AlarmClock.EXTRA_MESSAGE, "Будильник Джарвіса");
+            i.putExtra(AlarmClock.EXTRA_SKIP_UI, true);
             reply(openRequestedActivity(i,
-                "Відкрив системний Годинник. Підтверди будильник там."));
+                "Передав системному Годиннику запит встановити будильник на "+
+                String.format(java.util.Locale.forLanguageTag("uk-UA"),
+                    "%02d:%02d",alarm.hour,alarm.minute)+
+                ". Перевір його у списку будильників."));
             return;
         }
         String phoneApp = AssistantIntents.requestedApp(normalized);
