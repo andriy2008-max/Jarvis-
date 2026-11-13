@@ -20,7 +20,8 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
     <!-- Delegates alarm/reminder requests to the installed system Clock app. -->
-    <uses-permission android:name="android.permission.SET_ALARM" />
+    <!-- Android AlarmClock.ACTION_SET_ALARM requires this exact platform permission. -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
