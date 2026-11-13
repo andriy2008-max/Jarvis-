@@ -931,7 +931,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "☷ Покажи нотатки", "? Що ти вмієш?",
             "🔋 Заряд батареї", "⏱ Таймер на 1 хвилину",
             "⚙ Налаштування", "🗺 Відкрий карти",
-            "⏰ Будильник 07:30", "🔔 Нагадай через 5 хв",
+            "⏰ Поставити будильник", "🔔 Нагадай через 5 хв",
             "📱 Відкрий Telegram", "⏰ Покажи будильники",
             "🔦 Увімкни ліхтарик", "⏸ Пауза музики",
             "🔉 Гучність 50%", "☀ Налаштування екрана",
@@ -946,7 +946,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "Покажи нотатки", "Що ти вмієш",
             "Заряд батареї", "Таймер на 1 хвилину",
             "Відкрий налаштування", "Відкрий карти",
-            "Постав будильник на 07:30", "Нагадай через 5 хвилин випити води",
+            null, "Нагадай через 5 хвилин випити води",
             "Відкрий Телеграм", "Покажи будильники",
             "Увімкни ліхтарик", "Постав музику на паузу",
             "Постав гучність на 50%", "Відкрий налаштування екрана",
@@ -963,7 +963,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             examplesPanel.addView(row, rowParams);
             for (int j = i; j < Math.min(i + 2, examples.length); j++) {
                 final String command = commands[j];
-                Button quick = secondaryButton(examples[j], () -> processCommand(command));
+                Button quick = secondaryButton(examples[j],
+                    () -> { if (command == null) showAlarmPicker(); else processCommand(command); });
                 quick.setTypeface(Typeface.DEFAULT);
                 quick.setTextSize(TypedValue.COMPLEX_UNIT_SP, isCompact ? 10 : 12);
                 quick.setMinHeight(dp(48));
@@ -2816,19 +2817,45 @@ public final class MainActivity extends Activity implements RecognitionListener 
         return launchIntent(new Intent(Intent.ACTION_VIEW, Uri.parse(url)), label);
     }
 
-    /** System Clock owns the alarm; the user sees and confirms the request there. */
+    /** The shortcut chooses time instead of silently using a hardcoded 07:30. */
+    private void showAlarmPicker() {
+        Calendar now = Calendar.getInstance();
+        android.app.TimePickerDialog picker = new android.app.TimePickerDialog(
+            this, (view, hour, minute) -> {
+                String feedback = openAlarmClock(
+                    new AssistantIntents.ClockTime(hour,minute),"Будильник Джарвіса");
+                appendDialogue("Джарвіс",feedback);
+                setStatus(feedback);
+                if (voiceEnabled) speakReply(feedback);
+            },now.get(Calendar.HOUR_OF_DAY),now.get(Calendar.MINUTE),true);
+        picker.setTitle("⏰ На котру годину встановити будильник?");
+        showDialogWithoutWake(picker);
+    }
+
+    /** Hand the alarm to the Android Clock app for persistent system scheduling.
+     * EXTRA_SKIP_UI asks the clock to save it instead of just opening an edit form.
+     * Actual behavior is owned by the installed Clock app and is not verifiable
+     * merely from startActivity succeeding. */
     private String openAlarmClock(AssistantIntents.ClockTime time, String message) {
         Intent intent = new Intent(AlarmClock.ACTION_SET_ALARM);
         intent.putExtra(AlarmClock.EXTRA_HOUR, time.hour);
         intent.putExtra(AlarmClock.EXTRA_MINUTES, time.minute);
         intent.putExtra(AlarmClock.EXTRA_MESSAGE, message);
-        intent.putExtra(AlarmClock.EXTRA_SKIP_UI, false);
+        intent.putExtra(AlarmClock.EXTRA_SKIP_UI, true);
         try {
             startActivity(intent);
-            return "Відкрив Годинник: " + String.format(Locale.forLanguageTag("uk-UA"), "%02d:%02d", time.hour, time.minute)
-                + ". Перевір і підтвердь будильник у системному застосунку.";
+            return "Передав системному Годиннику запит встановити будильник на " +
+                String.format(Locale.forLanguageTag("uk-UA"), "%02d:%02d",time.hour,time.minute) +
+                ". Перевір його у списку будильників.";
         } catch (Exception exception) {
-            return "На цьому пристрої не вдалося відкрити системний Годинник для будильника.";
+            // Report a failure instead of claiming an alarm was saved.
+            try {
+                startActivity(new Intent(AlarmClock.ACTION_SHOW_ALARMS));
+                return "Не вдалося автоматично встановити будильник. " +
+                    "Відкрив список будильників — додай його вручну.";
+            } catch (Exception ignored) {
+                return "Не вдалося встановити будильник: системний Годинник недоступний.";
+            }
         }
     }
 
