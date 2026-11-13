@@ -1231,27 +1231,47 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         return dispatchTrackedGesture(gesture, callback);
     }
 
+    /** Asynchronous callbacks may run after Bolt has replaced its view tree.
+     * Treat stale Accessibility nodes as a failed gesture, never as a process
+     * crash. This also protects the shared Spotify/Shazam gesture path. */
     private boolean dispatchTrackedGesture(GestureDescription gesture, Completion callback) {
         long feedback = JarvisControlFeedback.begin();
-        AccessibilityNodeInfo originalRoot=currentExternalRoot();
-        String expectedPackage=originalRoot==null ? "" : asString(originalRoot.getPackageName());
-        Runnable restore = FloatingJarvisService.hideForGesture();
+        final String expectedPackage;
+        final Runnable restore;
+        try {
+            AccessibilityNodeInfo originalRoot=currentExternalRoot();
+            expectedPackage=originalRoot==null ? "" : asString(originalRoot.getPackageName());
+            restore=FloatingJarvisService.hideForGesture();
+        } catch (RuntimeException error) {
+            android.util.Log.e("JARVIS_SCREEN",
+                "Accessibility gesture setup failed",error);
+            JarvisControlFeedback.finish(feedback,false,
+                android.os.SystemClock.uptimeMillis());
+            if(callback!=null)callback.finished(false,
+                "Екран змінився. Не вдалося підготувати натискання.");
+            return false;
+        }
         main.postDelayed(() -> {
             final java.util.concurrent.atomic.AtomicBoolean finished =
                 new java.util.concurrent.atomic.AtomicBoolean();
             Completion done = (ok,detail) -> {
                 if (!finished.compareAndSet(false,true)) return;
-                restore.run();
-                JarvisControlFeedback.finish(feedback,ok,android.os.SystemClock.uptimeMillis());
+                try { restore.run(); }
+                catch (RuntimeException error) {
+                    android.util.Log.e("JARVIS_SCREEN",
+                        "Could not restore Jarvis overlay after gesture",error);
+                }
+                JarvisControlFeedback.finish(feedback,ok,
+                    android.os.SystemClock.uptimeMillis());
                 if (callback != null) callback.finished(ok,detail);
             };
-            AccessibilityNodeInfo current=currentExternalRoot();
-            if (!sessionActive || connected.get() != this || current==null ||
-                !expectedPackage.equals(asString(current.getPackageName()))) {
-                done.finished(false,"Керування зупинено до початку жесту.");
-                return;
-            }
             try {
+                AccessibilityNodeInfo current=currentExternalRoot();
+                if (!sessionActive || connected.get() != this || current==null ||
+                    !expectedPackage.equals(asString(current.getPackageName()))) {
+                    done.finished(false,"Керування зупинено до початку жесту.");
+                    return;
+                }
                 boolean accepted = dispatchGesture(gesture, new GestureResultCallback() {
                     @Override public void onCompleted(GestureDescription description) {
                         done.finished(true,"Жест виконано.");
@@ -1261,12 +1281,15 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                     }
                 },main);
                 if (!accepted) done.finished(false,"Android відхилив жест.");
-                else main.postDelayed(() -> done.finished(false,"Час очікування жесту вичерпано."),5000L);
+                else main.postDelayed(() ->
+                    done.finished(false,"Час очікування жесту вичерпано."),5000L);
             } catch (RuntimeException error) {
-                done.finished(false,"Android відхилив жест.");
+                android.util.Log.e("JARVIS_SCREEN",
+                    "Accessibility tree changed during gesture",error);
+                done.finished(false,"Екран змінився під час натискання.");
             }
         },80L); // Let WindowManager remove the orb from hit testing first.
-        return true; // queued; completion is reported only by the callback above
+        return true; // Queued; confirmation is in the asynchronous callback.
     }
 
     public static String perform(ScreenControlCommands.Action action) {
