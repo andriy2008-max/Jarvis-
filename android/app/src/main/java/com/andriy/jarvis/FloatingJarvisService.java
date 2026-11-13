@@ -166,6 +166,9 @@ public final class FloatingJarvisService extends Service {
     private int displayHeight;
     private SpeechRecognizer recognizer;
     private JarvisHeadsetAudioRouter headsetRoute;
+    private JarvisListeningAudioFocus listeningAudioFocus;
+    private Runnable instantCommandCheck;
+    private String instantCommandCandidate="";
     private boolean listening;
     private boolean recording;
     private boolean phoneListening;
@@ -217,6 +220,7 @@ public final class FloatingJarvisService extends Service {
     @Override public void onCreate() {
         super.onCreate();
         headsetRoute = new JarvisHeadsetAudioRouter(this);
+        listeningAudioFocus = new JarvisListeningAudioFocus(this);
         headsetRoute.setOnRouteLost(this::onMicrophoneRouteLost);
         JarvisPhoneMode.subscribe(phoneModeListener);
         packs = new OfflineVoicePackManager(this);
@@ -553,10 +557,65 @@ public final class FloatingJarvisService extends Service {
         message(why.isEmpty()?"Вибраний мікрофон відключено.":why);
     }
 
+    private void clearInstantCommand() {
+        if(instantCommandCheck!=null)ui.removeCallbacks(instantCommandCheck);
+        instantCommandCheck=null;
+        instantCommandCandidate="";
+    }
+
+    private void considerInstantCommand(String heard) {
+        if(!recording || stopRequested ||
+            !JarvisInstantCommands.isComplete(heard)) {
+            clearInstantCommand();
+            return;
+        }
+        final String candidate=CommandPatterns.normalizeControlVerb(heard)
+            .replaceAll("\\s+"," ").trim();
+        if(candidate.equals(instantCommandCandidate))return;
+        clearInstantCommand();
+        instantCommandCandidate=candidate;
+        instantCommandCheck=()->{
+            instantCommandCheck=null;
+            if(closing || !recording || stopRequested ||
+                !candidate.equals(instantCommandCandidate))return;
+            String current=JarvisTranscriptCorrection.join(
+                speechDraft.toString(),partialSpeech);
+            if(JarvisInstantCommands.isComplete(current) &&
+                candidate.equals(CommandPatterns.normalizeControlVerb(current)
+                    .replaceAll("\\s+"," ").trim()))
+                executeInstantCommand(current);
+        };
+        ui.postDelayed(instantCommandCheck,JarvisInstantCommands.stableDelayMs());
+    }
+
+    private void executeInstantCommand(String text) {
+        if(closing || !recording || stopRequested ||
+            !JarvisInstantCommands.isComplete(text))return;
+        clearInstantCommand();
+        stopRequested=true;
+        if(recognitionRestart!=null)ui.removeCallbacks(recognitionRestart);
+        recognitionRestart=null;
+        cancelSpeechTiming();
+        SpeechRecognizer previous=recognizer;
+        recognizer=null;
+        recognizerSessionActive=false;
+        listening=false;
+        if(previous!=null){
+            try{previous.cancel();previous.destroy();}
+            catch(RuntimeException ignored){}
+        }
+        speechDraft.setLength(0);
+        speechDraft.append(text);
+        partialSpeech="";
+        sendPendingSpeech();
+    }
+
     private void abortPhoneSpeech() {
         phoneListening = false;
         ui.removeCallbacks(phoneListenAgain);
         if (headsetRoute != null) headsetRoute.end();
+        if (listeningAudioFocus != null) listeningAudioFocus.end();
+        clearInstantCommand();
         recording = false;
         listening = false;
         stopRequested = false;
@@ -697,12 +756,14 @@ public final class FloatingJarvisService extends Service {
     }
 
     private void sendPendingSpeech() {
+        clearInstantCommand();
         if (phoneListening && recognizer != null) {
             SpeechRecognizer previous = recognizer;
             recognizer = null;
             try { previous.destroy(); } catch (RuntimeException ignored) { }
         }
         if (headsetRoute != null) headsetRoute.end();
+        if (listeningAudioFocus != null) listeningAudioFocus.end();
         cancelPendingSend();
         cancelCorrectionRestart();
         cancelSpeechTiming();
@@ -802,6 +863,7 @@ public final class FloatingJarvisService extends Service {
             return;
         }
         cancelCorrectionRestart();
+        clearInstantCommand();
         cancelSpeechTiming();
         stopRequested = false;
         autoSilenceStop = false;
@@ -828,6 +890,8 @@ public final class FloatingJarvisService extends Service {
             message(headsetRoute.problem());
             return;
         }
+        if(listeningAudioFocus!=null && !listeningAudioFocus.begin())
+            message("Android не дав призупинити інші звуки. Мікрофон працюватиме.");
         try {
             if (recognizer == null) {
                 if (SpeechRecognizer.isRecognitionAvailable(this))
@@ -838,6 +902,7 @@ public final class FloatingJarvisService extends Service {
                 else {
                     phoneListening = false;
                     if(headsetRoute!=null)headsetRoute.end();
+                    if(listeningAudioFocus!=null)listeningAudioFocus.end();
                     message("На телефоні немає розпізнавача голосу.");
                     return;
                 }
@@ -881,6 +946,11 @@ public final class FloatingJarvisService extends Service {
                             else observeWords(combined);
                         }
                         partialSpeech = "";
+                        if(!stopRequested &&
+                           JarvisInstantCommands.isComplete(speechDraft.toString())) {
+                            executeInstantCommand(speechDraft.toString());
+                            return;
+                        }
                         if (JarvisSpeechErrorPolicy.rebuildRecognizer(error)) {
                             // The Android recognition binder is dead; the next segment
                             // must use a fresh instance, not retry the same connection.
@@ -907,6 +977,8 @@ public final class FloatingJarvisService extends Service {
                             phoneListening = false;
                             recording = false;
                             cancelSpeechTiming();
+                            if(listeningAudioFocus!=null)listeningAudioFocus.end();
+                            if(headsetRoute!=null)headsetRoute.end();
                             speechPause.reset("");
                             setFace("idle");
                             message("Дозволь доступ до мікрофона в налаштуваннях.");
@@ -923,6 +995,8 @@ public final class FloatingJarvisService extends Service {
                             } else {
                                 recording = false;
                                 cancelSpeechTiming();
+                                if(listeningAudioFocus!=null)listeningAudioFocus.end();
+                                if(headsetRoute!=null)headsetRoute.end();
                                 speechPause.reset("");
                                 setFace("idle");
                                 message(JarvisSpeechErrorPolicy.explanation(error) +
@@ -958,6 +1032,11 @@ public final class FloatingJarvisService extends Service {
                         partialSpeech = "";
                         correctingWord = false;
                         recognizerFailures = 0;
+                        if (!stopRequested &&
+                            JarvisInstantCommands.isComplete(speechDraft.toString())) {
+                            executeInstantCommand(speechDraft.toString());
+                            return;
+                        }
                         if (stopRequested) {
                             if (autoSilenceStop && !speechPause.expired(
                                 SystemClock.uptimeMillis(), speechPauseSeconds())) {
@@ -985,6 +1064,7 @@ public final class FloatingJarvisService extends Service {
                         String combined = JarvisTranscriptCorrection.join(
                             speechDraft.toString(), partialSpeech);
                         observeWords(combined);
+                        considerInstantCommand(combined);
                         JarvisLiveTranscript.update(TRANSCRIPT_OWNER,
                             combined, false, SystemClock.uptimeMillis());
                     }
@@ -1033,6 +1113,7 @@ public final class FloatingJarvisService extends Service {
                 phoneListening = false;
                 recording = false;
                 if(headsetRoute!=null)headsetRoute.end();
+                if(listeningAudioFocus!=null)listeningAudioFocus.end();
                 cancelSpeechTiming();
                 if (!correctingWord) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                 setFace("idle");
@@ -1591,6 +1672,8 @@ public final class FloatingJarvisService extends Service {
         cancelCorrectionRestart();
         cancelSpeechTiming();
         if (headsetRoute != null) headsetRoute.end();
+        if (listeningAudioFocus != null) listeningAudioFocus.end();
+        clearInstantCommand();
         if (sequences != null) sequences.cancel();
         if (spotifyPlayback != null) spotifyPlayback.cancel();
         if (screenModeStartedHere) ScreenControlAccessibilityService.stop();
