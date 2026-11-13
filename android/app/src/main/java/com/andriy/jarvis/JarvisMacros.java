@@ -486,6 +486,11 @@ public final class JarvisMacros {
                                 });
                             return;
                         }
+                        case "wait_seconds": {
+                            int ms=JarvisMacroScreenRules.secondsToMillis(value);
+                            MAIN.postDelayed(this::next,ms);
+                            return;
+                        }
                         case "wait": {
                             int ms = Integer.parseInt(value);
                             if (ms < 0 || ms > 60000) { complete(false, "пауза 0–60000 мс"); return; }
