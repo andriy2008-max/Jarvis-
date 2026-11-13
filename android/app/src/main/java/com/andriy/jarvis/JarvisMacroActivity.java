@@ -50,11 +50,13 @@ public final class JarvisMacroActivity extends Activity {
         "Сповіщення", "Вібрація (мілісекунди)", "Root shell (su -c)",
         "Відкрити застосунок", "Чекати відкриття застосунку",
         "Дочекатися кнопки за назвою", "Натиснути кнопку за назвою",
-        "Натиснути на точку X,Y (%)", "Написати текст в активне поле"
+        "Натиснути на точку X,Y (%)", "Дочекатися текстового поля",
+        "Написати текст в активне поле"
     };
     private static final String[] ACTION_KEYS = {
         "command", "wait", "notification", "vibrate", "root",
-        "open_app", "wait_app", "wait_label", "tap_label", "tap_point", "type_text"
+        "open_app", "wait_app", "wait_label", "tap_label", "tap_point",
+        "wait_field", "type_text"
     };
 
     private LinearLayout root;
@@ -63,6 +65,7 @@ public final class JarvisMacroActivity extends Activity {
         latitude, longitude, radius, foregroundApp;
     private Spinner trigger, charging;
     private LinearLayout actionList, actionsSection;
+    private TextView macroStatus;
     private CheckBox useMacroDroid;
     private final ArrayList<ActionRow> actionRows = new ArrayList<>();
 
@@ -139,6 +142,14 @@ public final class JarvisMacroActivity extends Activity {
         root.addView(button("← Джарвіс", this::finish));
         root.addView(button("＋ Створити макрос", () -> edit(null)));
         root.addView(label("Макроси зберігаються тільки на цьому пристрої.", 13, false));
+        macroStatus=label(JarvisMacros.isRunning()?
+            "Макрос зараз виконується. Натисни «Зупинити», щоб скасувати.":"Готово до перевірки.",13,false);
+        root.addView(macroStatus);
+        root.addView(button("⏹ Зупинити активний макрос", () ->
+            JarvisMacros.cancelActive(result -> {
+                if(macroStatus!=null)macroStatus.setText(result);
+                Toast.makeText(this,result,Toast.LENGTH_SHORT).show();
+            })));
         List<JSONObject> all = JarvisMacros.all(this);
         if (all.isEmpty()) root.addView(label("Поки немає макросів.", 16, false));
         for (JSONObject m : all) {
@@ -167,9 +178,7 @@ public final class JarvisMacroActivity extends Activity {
             });
             item.addView(active);
             item.addView(button("Редагувати", () -> edit(m)));
-            item.addView(button("▶ Перевірити зараз", () ->
-                JarvisMacros.execute(this,m,result ->
-                    Toast.makeText(this,result,Toast.LENGTH_LONG).show())));
+            item.addView(button("▶ Перевірити зараз", () -> testMacro(m)));
             item.addView(button("Видалити", () ->
                 new AlertDialog.Builder(this).setTitle("Видалити макрос?")
                     .setMessage(m.optString("name"))
@@ -179,6 +188,23 @@ public final class JarvisMacroActivity extends Activity {
                         showList();
                     }).show()));
         }
+    }
+
+    private void testMacro(JSONObject macro) {
+        if(macroStatus!=null)
+            macroStatus.setText("▶ Запускаю макрос «"+macro.optString("name")+"»…");
+        JarvisMacros.execute(this,macro,new JarvisMacros.Listener() {
+            @Override public void onProgress(int step,int total,String detail) {
+                if(isFinishing()||isDestroyed())return;
+                if(macroStatus!=null)
+                    macroStatus.setText("Крок "+step+"/"+total+": "+detail);
+            }
+            @Override public void onResult(String result) {
+                if(isFinishing()||isDestroyed())return;
+                if(macroStatus!=null)macroStatus.setText(result);
+                Toast.makeText(JarvisMacroActivity.this,result,Toast.LENGTH_LONG).show();
+            }
+        });
     }
 
     private static final class ActionRow {
@@ -252,8 +278,10 @@ public final class JarvisMacroActivity extends Activity {
         boolean root="root".equals(type);
         boolean app="open_app".equals(type) || "wait_app".equals(type);
         boolean screen="tap_point".equals(type) || "type_text".equals(type) ||
-            "wait_label".equals(type) || "tap_label".equals(type);
+            "wait_label".equals(type) || "tap_label".equals(type) ||
+            "wait_field".equals(type);
         row.approved.setVisibility(root?View.VISIBLE:View.GONE);
+        row.value.setVisibility("wait_field".equals(type)?View.GONE:View.VISIBLE);
         row.packagePanel.setVisibility(screen?View.VISIBLE:View.GONE);
         row.appPicker.setVisibility(app||screen?View.VISIBLE:View.GONE);
         row.pointPicker.setVisibility("tap_point".equals(type)?View.VISIBLE:View.GONE);
@@ -344,7 +372,7 @@ public final class JarvisMacroActivity extends Activity {
         actionsSection.addView(label("ДІЇ · виконуються по черзі",18,true));
         actionsSection.addView(label("Кроки виконуються строго по черзі. "
             +"Відкрий програму → Дочекайся програми → Дочекайся кнопки "
-            +"«Пошук» → Натисни «Пошук» → Напиши текст → Пауза. "
+            +"«Пошук» → Натисни «Пошук» → Дочекайся поля → Напиши текст → Пауза. "
             +"Натискання за назвою надійніше; X,Y (%) — запасний варіант. "
             +"Для екранних дій увімкни спеціальні можливості Джарвіса. "
             +"Кнопка 🎯 дає вибрати точку на справжньому екрані.",
@@ -563,7 +591,7 @@ public final class JarvisMacroActivity extends Activity {
             JSONArray actions = new JSONArray();
             if (!macroDroid) for(ActionRow row:actionRows) {
                 String action = ACTION_KEYS[row.type.getSelectedItemPosition()];
-                String actionValue = value(row.value);
+                String actionValue = "wait_field".equals(action) ? "focused" : value(row.value);
                 if(actionValue.isEmpty())
                     throw new IllegalArgumentException("Заповни параметри кожної дії.");
                 if("open_app".equals(action) || "wait_app".equals(action)) {
@@ -581,7 +609,8 @@ public final class JarvisMacroActivity extends Activity {
                    !JarvisMacroScreenRules.validText(actionValue))
                     throw new IllegalArgumentException("Текст макросу: від 1 до 1000 символів.");
                 if(("tap_point".equals(action) || "type_text".equals(action) ||
-                    "wait_label".equals(action) || "tap_label".equals(action)) &&
+                    "wait_label".equals(action) || "tap_label".equals(action) ||
+                    "wait_field".equals(action)) &&
                    !JarvisForegroundApp.validPackage(value(row.packageName)))
                     throw new IllegalArgumentException("Вибери програму для екранного кроку.");
                 if("wait".equals(action) || "vibrate".equals(action)) {
@@ -594,7 +623,8 @@ public final class JarvisMacroActivity extends Activity {
                 step.put("type",action);
                 step.put("value",actionValue);
                 if ("tap_point".equals(action) || "type_text".equals(action) ||
-                    "wait_label".equals(action) || "tap_label".equals(action))
+                    "wait_label".equals(action) || "tap_label".equals(action) ||
+                    "wait_field".equals(action))
                     step.put("package",value(row.packageName));
                 step.put("rootApproved",
                     "root".equals(action) && row.approved.isChecked());
