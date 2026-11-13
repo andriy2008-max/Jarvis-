@@ -37,6 +37,13 @@ public final class TelegramTdClient {
     private boolean sendDispatched;
     private int revision;
     private Draft draft;
+    /** Only CONFIRM is authorized to send. Correcting text/contact revokes it. */
+    private enum Dialogue { NONE, CONFIRM, WAIT_MESSAGE, WAIT_CONTACT }
+    private Dialogue dialogue=Dialogue.NONE;
+    private long pendingSince;
+    private long correctedChatId;
+    private String correctedRecipient;
+    private String correctedText;
     private String startupError="";
 
     private static final class Draft {
@@ -45,9 +52,158 @@ public final class TelegramTdClient {
         final String text;
         final long createdAt=SystemClock.elapsedRealtime();
         Draft(TdApi.Chat c,String text){
-            chatId=c.id;recipient=c.title;this.text=text;
+            this(c.id,c.title,text);
+        }
+        Draft(long chatId,String recipient,String text) {
+            this.chatId=chatId;this.recipient=recipient;this.text=text;
         }
     }
+    private void clearCorrection() {
+        correctedChatId=0;
+        correctedRecipient=null;
+        correctedText=null;
+        pendingSince=0;
+    }
+    private void resetDialogue() {
+        dialogue=Dialogue.NONE;
+        draft=null;
+        clearCorrection();
+    }
+
+    /** Intercept short confirmations ONLY for an active user-reviewed draft.
+     * Returns false for unrelated speech when only confirmation is pending.
+     * In explicit correction modes, the following utterance is the replacement
+     * text or recipient, not a command to some other app. */
+    public boolean processFollowup(String raw,Callback cb) {
+        if(dialogue==Dialogue.NONE) return false;
+        TelegramReplyCommands.DialogAction action=TelegramReplyCommands.dialogAction(raw);
+        TelegramReplyCommands.Request explicit=TelegramReplyCommands.parse(raw);
+        if(explicit!=null && explicit.kind==TelegramReplyCommands.Kind.CANCEL) {
+            process(explicit,cb); return true;
+        }
+        if(action==TelegramReplyCommands.DialogAction.CANCEL) {
+            cancelDraft(cb); return true;
+        }
+        // Full Telegram commands remain usable to start an entirely new draft.
+        if(explicit!=null && (explicit.kind==TelegramReplyCommands.Kind.DRAFT ||
+            explicit.kind==TelegramReplyCommands.Kind.DRAFT_AUTO)) {
+            resetDialogue();
+            process(explicit,cb);
+            return true;
+        }
+        long now=SystemClock.elapsedRealtime();
+        long created=dialogue==Dialogue.CONFIRM && draft!=null
+            ? draft.createdAt : pendingSince;
+        if(created==0 || now-created>DRAFT_MAX_AGE_MS) {
+            resetDialogue();
+            if(action!=TelegramReplyCommands.DialogAction.NONE ||
+               explicit!=null || dialogue!=Dialogue.CONFIRM) {
+                cb.done(false,"Час підтвердження Telegram минув. Продиктуй нове повідомлення.");
+                return true;
+            }
+            return false;
+        }
+        if(busy) {
+            cb.done(false,"Telegram ще обробляє попередній вибір контакту.");return true;
+        }
+        switch(dialogue) {
+            case CONFIRM:
+                if(action==TelegramReplyCommands.DialogAction.CONFIRM) {
+                    sendDraft(cb);return true;
+                }
+                if(action==TelegramReplyCommands.DialogAction.REWRITE_MESSAGE) {
+                    if(draft==null) { resetDialogue();return false; }
+                    correctedChatId=draft.chatId;
+                    correctedRecipient=draft.recipient;
+                    correctedText=null; // old text is discarded
+                    draft=null;
+                    dialogue=Dialogue.WAIT_MESSAGE;
+                    pendingSince=now;
+                    cb.done(true,"Попередній текст прибрано. Назви нове повідомлення для «"+
+                        correctedRecipient+"». Слухаю.");
+                    return true;
+                }
+                if(action==TelegramReplyCommands.DialogAction.CHANGE_CONTACT) {
+                    if(draft==null) {resetDialogue();return false;}
+                    correctedText=draft.text;
+                    correctedRecipient=null;
+                    correctedChatId=0;
+                    draft=null;
+                    dialogue=Dialogue.WAIT_CONTACT;
+                    pendingSince=now;
+                    cb.done(true,"Попередній контакт прибрано. Назви правильне ім'я контакту "+
+                        "як у Telegram. Текст повідомлення збережено. Слухаю.");
+                    return true;
+                }
+                return false;
+            case WAIT_MESSAGE:
+                if(action==TelegramReplyCommands.DialogAction.CHANGE_CONTACT) {
+                    cb.done(false,"Спочатку продиктуй новий текст для «"+
+                        correctedRecipient+"»."); return true;
+                }
+                if(action==TelegramReplyCommands.DialogAction.CONFIRM ||
+                   action==TelegramReplyCommands.DialogAction.REWRITE_MESSAGE) {
+                    cb.done(false,"Надсилання ще не підтверджено. Назви новий текст повідомлення.");
+                    return true;
+                }
+                String message=TelegramReplyCommands.dictatedCorrection(raw);
+                if(message==null) {
+                    cb.done(false,"Не почув текст. Продиктуй повідомлення ще раз.");return true;
+                }
+                if(correctedChatId<=0 || correctedRecipient==null) {
+                    resetDialogue();
+                    cb.done(false,"Контакт для виправлення втрачено. Почни повідомлення заново.");
+                    return true;
+                }
+                draft=new Draft(correctedChatId,correctedRecipient,message);
+                dialogue=Dialogue.CONFIRM;
+                clearCorrection();
+                cb.done(true,confirmationPrompt());
+                return true;
+            case WAIT_CONTACT:
+                if(action==TelegramReplyCommands.DialogAction.CONFIRM ||
+                   action==TelegramReplyCommands.DialogAction.CHANGE_CONTACT ||
+                   action==TelegramReplyCommands.DialogAction.REWRITE_MESSAGE) {
+                    cb.done(false,"Назви правильний контакт Telegram. Повідомлення ще не надсилалося.");
+                    return true;
+                }
+                String recipient=TelegramReplyCommands.dictatedCorrection(raw);
+                TelegramReplyCommands.Request replacement=
+                    TelegramReplyCommands.correctedContact(recipient,correctedText);
+                if(replacement==null) {
+                    cb.done(false,"Назви ім'я контакту, як воно записане в Telegram.");return true;
+                }
+                createDraft(replacement,cb);
+                return true;
+            default: return false;
+        }
+    }
+
+    /** True only while a correction requires an additional dictated turn. */
+    public boolean needsFollowupDictation() {
+        return dialogue==Dialogue.WAIT_MESSAGE || dialogue==Dialogue.WAIT_CONTACT;
+    }
+
+    private String confirmationPrompt() {
+        if(draft==null)return "Немає повідомлення для підтвердження.";
+        return "Чернетка для «"+draft.recipient+"»: «"+draft.text+"». "+
+            "Скажи «Ок» або «Окей», щоб надіслати. "+
+            "«Не так» чи «Заново» — змінити текст; "+
+            "«Не той контакт» — змінити адресата; «Не надсилай» — скасувати.";
+    }
+
+    private void cancelDraft(Callback cb) {
+        if(sendDispatched) {
+            cb.done(false,"Повідомлення вже передано Telegram. "+
+                "Не можу скасувати його надсилання. Перевір чат.");
+            return;
+        }
+        revision++;
+        resetDialogue();
+        busy=false;
+        cb.done(true,"Скасував чернетку Telegram. Нічого не надсилав.");
+    }
+
     private static final class ResolvedChat {
         final TdApi.Chat chat;
         final String text;
@@ -137,7 +293,7 @@ public final class TelegramTdClient {
                 client.send(new TdApi.LoadChats(null,100),ignored->{});
             }else if(state instanceof TdApi.AuthorizationStateClosed){
                 client=null;
-                draft=null;
+                resetDialogue();
                 busy=false;
             }
         }
@@ -222,16 +378,7 @@ public final class TelegramTdClient {
             cb.done(true,status());return;
         }
         if(command.kind==TelegramReplyCommands.Kind.CANCEL){
-            if(sendDispatched){
-                cb.done(false,"Повідомлення вже передано Telegram. "+
-                    "Не можу скасувати його надсилання. Перевір чат.");
-                return;
-            }
-            revision++; // invalidate any in-progress recipient lookup
-            draft=null;
-            busy=false;
-            cb.done(true,"Скасував чернетку Telegram. Нічого не надсилав.");
-            return;
+            cancelDraft(cb);return;
         }
         if(command.kind==TelegramReplyCommands.Kind.HELP){
             cb.done(false,"Скажи: «Напиши в Telegram Яна Привіт, це тест». "+
@@ -269,6 +416,10 @@ public final class TelegramTdClient {
         }
         if(busy){cb.done(false,"Telegram ще шукає контакт. Повтори після завершення.");return;}
         draft=null;
+        if(dialogue!=Dialogue.WAIT_CONTACT){
+            dialogue=Dialogue.NONE;
+            clearCorrection();
+        }
         busy=true;
         final int op=++revision;
         final String query=lookup;
@@ -333,17 +484,21 @@ public final class TelegramTdClient {
                 }
                 ResolvedChat chosen=matches.get(0);
                 draft=new Draft(chosen.chat,chosen.text);
-                cb.done(true,"Чернетка для «"+draft.recipient+"»: «"+
-                    draft.text+"». Скажи «Надішли в телеграм» для підтвердження.");
+                dialogue=Dialogue.CONFIRM;
+                clearCorrection();
+                cb.done(true,confirmationPrompt());
             }));
         }
     }
     private void sendDraft(Callback cb){
         if(busy){cb.done(false,"Telegram ще виконує попередній запит.");return;}
+        if(dialogue!=Dialogue.CONFIRM || draft==null){
+            cb.done(false,"Спочатку продиктуй повідомлення та отримай нове підтвердження.");
+            return;
+        }
         Draft d=draft;
-        draft=null; // consume BEFORE network request; never retry automatically
+        resetDialogue(); // consume BEFORE network request; never retry automatically
         revision++;
-        if(d==null){cb.done(false,"Спочатку продиктуй текст і отримувача.");return;}
         if(SystemClock.elapsedRealtime()-d.createdAt>DRAFT_MAX_AGE_MS){
             cb.done(false,"Чернетка Telegram застаріла. Продиктуй повідомлення ще раз.");return;
         }
