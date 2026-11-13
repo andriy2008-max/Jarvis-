@@ -837,6 +837,7 @@ public final class FloatingJarvisService extends Service {
                     recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this);
                 else {
                     phoneListening = false;
+                    if(headsetRoute!=null)headsetRoute.end();
                     message("На телефоні немає розпізнавача голосу.");
                     return;
                 }
@@ -1031,6 +1032,7 @@ public final class FloatingJarvisService extends Service {
             } else {
                 phoneListening = false;
                 recording = false;
+                if(headsetRoute!=null)headsetRoute.end();
                 cancelSpeechTiming();
                 if (!correctingWord) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                 setFace("idle");
