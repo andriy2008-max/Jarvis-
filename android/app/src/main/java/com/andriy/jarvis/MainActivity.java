@@ -145,6 +145,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private CheckBox voiceToggle;
     private EditText input;
     private Button microphone;
+    private Button microphoneSourceButton;
     private PixelFace face;
     private static final String TRANSCRIPT_OWNER = "main";
     private final JarvisLiveTranscript.Listener transcriptListener =
@@ -276,6 +277,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             SpeechRecognizer.isOnDeviceRecognitionAvailable(this);
         loadNotes();
         headsetRoute = new JarvisHeadsetAudioRouter(this);
+        headsetRoute.setOnRouteLost(this::onMicrophoneRouteLost);
         aiChatClient = new AiChatClient(this);
         worldNewsReader = new WorldNewsReader();
         generalWebSearch = new GeneralWebSearchClient();
@@ -770,6 +772,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
         LinearLayout.LayoutParams voiceSettingsParams = new LinearLayout.LayoutParams(-1, dp(43));
         voiceSettingsParams.topMargin = dp(7);
         chatPanel.addView(voiceSettings, voiceSettingsParams);
+        if (!isWatchDevice) {
+            microphoneSourceButton = secondaryButton("", this::showMicrophoneSourceSettings);
+            refreshMicrophoneSourceButton();
+            LinearLayout.LayoutParams micSourceParams = new LinearLayout.LayoutParams(-1,dp(43));
+            micSourceParams.topMargin=dp(7);
+            chatPanel.addView(microphoneSourceButton,micSourceParams);
+        }
         speechPauseButton = secondaryButton("", this::showSpeechPauseSettings);
         refreshSpeechPauseLabel();
         LinearLayout.LayoutParams silenceParams = new LinearLayout.LayoutParams(-1, dp(43));
@@ -1263,6 +1272,73 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 setStatus("Пауза між словами: " + selected + " с");
             }).create();
         showDialogWithoutWake(dialog);
+    }
+
+    private void refreshMicrophoneSourceButton() {
+        if(microphoneSourceButton!=null)
+            microphoneSourceButton.setText("🎙 Джерело мікрофона: "+
+                JarvisMicrophoneChoice.label(JarvisHeadsetAudioRouter.selected(this)));
+    }
+
+    /** This preference is shared by the main face, floating face and shake.
+     * Wear OS always listens through its own microphone. */
+    private void showMicrophoneSourceSettings() {
+        if(manualCapture || recognizerSessionActive || phoneListening ||
+            shakeProbe!=null && shakeProbe.active()) {
+            setStatus("Спочатку заверши поточне прослуховування.");
+            return;
+        }
+        JarvisMicrophoneChoice.Mode[] values=JarvisMicrophoneChoice.Mode.values();
+        String[] choices={
+            "Автоматично — гарнітура, якщо є; інакше Android",
+            "Мікрофон телефона",
+            "Мікрофон підключеної гарнітури"
+        };
+        JarvisMicrophoneChoice.Mode current=JarvisHeadsetAudioRouter.selected(this);
+        int selected=current.ordinal();
+        AlertDialog dialog=new AlertDialog.Builder(this)
+            .setTitle("🎙 Через який мікрофон слухати?")
+            .setSingleChoiceItems(choices,selected,(d,which)->{
+                JarvisMicrophoneChoice.Mode chosen=values[which];
+                JarvisHeadsetAudioRouter.save(this,chosen);
+                refreshMicrophoneSourceButton();
+                autoWakePausedForErrors=false;
+                autoWakeErrors=0;
+                setStatus("Мікрофон: "+JarvisMicrophoneChoice.label(chosen)+
+                    ". Налаштування діє для головного та плаваючого Джарвіса.");
+                d.dismiss();
+            })
+            .setMessage("Android може сам вибирати мікрофон для сервісу "+
+                "розпізнавання. Джарвіс запитує вибраний маршрут, але "+
+                "остаточний пристрій залежить від Android.")
+            .setNegativeButton("Скасувати",null).create();
+        showDialogWithoutWake(dialog);
+    }
+
+    private void onMicrophoneRouteLost() {
+        if(headsetRoute==null)return;
+        String why=headsetRoute.problem();
+        headsetRoute.end();
+        cancelManualRestart();
+        cancelSilenceCheck();
+        cancelAutoWakeSchedule();
+        if(shakeProbe!=null && shakeProbe.active())shakeProbe.close();
+        if(recognizer!=null && recognizerSessionActive) {
+            try {recognizer.cancel();}catch(RuntimeException ignored){}
+        }
+        listening=false;
+        recognizerSessionActive=false;
+        autoWakeListening=false;
+        manualCapture=false;
+        manualStopRequested=false;
+        shakeCommandCapture=false;
+        shakeAiPromptNext=false;
+        autoWakePausedForErrors=true;
+        manualTranscript.setLength(0);
+        manualHypothesis="";
+        speechPause.reset("");
+        JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+        resetListening(why.isEmpty()?"Вибраний мікрофон відключено.":why);
     }
 
     private void showVoiceSettings() {
@@ -1907,7 +1983,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
         face.setState("listening");
         JarvisLiveTranscript.begin(TRANSCRIPT_OWNER);
         setStatus("Струшування: 3 секунди чекаю «Джарвіс»...");
-        if (headsetRoute != null) headsetRoute.begin();
+        if (headsetRoute != null && !headsetRoute.begin()) {
+            setStatus(headsetRoute.problem());
+            face.setState("idle");
+            JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+            return;
+        }
         boolean started = shakeProbe.start(new JarvisShakeWakeProbe.Callback() {
             @Override public void onPartial(String words) {
                 if (foreground) JarvisLiveTranscript.update(
@@ -2401,7 +2482,16 @@ public final class MainActivity extends Activity implements RecognitionListener 
             : "Чекаю першого розпізнаного слова...") :
             wakeConversation.isActive(SystemClock.elapsedRealtime()) ? "Продовжуй розмову..." :
                 "Очікую «Джарвіс»");
-        if (headsetRoute != null) headsetRoute.begin();
+        if (headsetRoute != null && !headsetRoute.begin()) {
+            recognizerSessionActive=false;
+            listening=false;
+            autoWakeListening=false;
+            manualCapture=false;
+            autoWakePausedForErrors=true;
+            JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+            resetListening(headsetRoute.problem());
+            return;
+        }
         try {
             recognizer.startListening(intent);
         } catch (Exception error) {
