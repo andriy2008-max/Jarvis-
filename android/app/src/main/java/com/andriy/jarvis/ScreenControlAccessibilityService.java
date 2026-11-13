@@ -176,21 +176,50 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if(visited>MAX_SCAN) {
             cb.onComplete(false,"Екран надто складний для безпечного натискання."); return;
         }
-        // Accessibility dispatchGesture provides completion, not just a dispatch flag.
-        Path path=new Path();
-        path.moveTo(x,y);
-        GestureDescription gesture=new GestureDescription.Builder()
-            .addStroke(new GestureDescription.StrokeDescription(path,0,90))
-            .build();
-        boolean queued=dispatchGesture(gesture,new GestureResultCallback(){
-            @Override public void onCompleted(GestureDescription description) {
-                cb.onComplete(true,"Натискання виконано.");
+        // Hide the floating Jarvis orb before hit testing. Wait until WindowManager
+        // applies NOT_TOUCHABLE, verify app identity once more, then tap exactly once.
+        FloatingJarvisService.avoidControl(new Rect(x-24,y-24,x+24,y+24));
+        final Runnable restore=FloatingJarvisService.hideForGesture();
+        final java.util.concurrent.atomic.AtomicBoolean completed=
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+        final java.util.function.BiConsumer<Boolean,String> finish=(ok,reason)->{
+            if(!completed.compareAndSet(false,true))return;
+            restore.run();
+            cb.onComplete(ok,reason);
+        };
+        main.postDelayed(()->{
+            AccessibilityNodeInfo current=currentExternalRoot();
+            if(connected.get()!=this || current==null ||
+                current.getPackageName()==null ||
+                !packageName.equals(current.getPackageName().toString())) {
+                finish.accept(false,"Програма змінилася до початку натискання.");return;
             }
-            @Override public void onCancelled(GestureDescription description) {
-                cb.onComplete(false,"Android скасував натискання.");
+            Rect frame=new Rect();
+            current.getBoundsInScreen(frame);
+            if(!frame.contains(x,y)) {
+                finish.accept(false,"Координати поза поточним вікном.");return;
             }
-        },main);
-        if(!queued)cb.onComplete(false,"Android не дозволив натискання.");
+            Path path=new Path();
+            path.moveTo(x,y);
+            GestureDescription gesture=new GestureDescription.Builder()
+                .addStroke(new GestureDescription.StrokeDescription(path,0,90))
+                .build();
+            try {
+                boolean queued=dispatchGesture(gesture,new GestureResultCallback(){
+                    @Override public void onCompleted(GestureDescription description) {
+                        finish.accept(true,"Натискання виконано.");
+                    }
+                    @Override public void onCancelled(GestureDescription description) {
+                        finish.accept(false,"Android скасував натискання.");
+                    }
+                },main);
+                if(!queued)finish.accept(false,"Android не дозволив натискання.");
+                else main.postDelayed(()->
+                    finish.accept(false,"Час очікування жесту вичерпано."),5500);
+            } catch(RuntimeException error) {
+                finish.accept(false,"Не вдалося виконати натискання.");
+            }
+        },80);
     }
 
     /** Read-only label wait: no implicit tap and no UI text leaves the device. */
