@@ -10,7 +10,9 @@ import android.os.SystemClock;
 public final class BoltTaxiController {
     private static final String BOLT="ee.mtakso.client";
     private static final Handler HANDLER=new Handler(Looper.getMainLooper());
-    private static final long POLL_MS=350L;
+    // Polling accesses an external Accessibility tree. Leave room for Bolt's
+    // own UI thread so repeated traversals cannot monopolize Jarvis main.
+    private static final long POLL_MS=650L;
     // Four-second delay and guard live in the testable BoltUiLabels contract.
     private static final long RETAP_AFTER_MS=2300L;
     private static final long TIMEOUT_MS=30000L;
@@ -24,7 +26,7 @@ public final class BoltTaxiController {
     private final Listener listener;
     private final String address;
     private final JarvisPhoneModeManager.Lease lease;
-    private final Runnable tick=this::poll;
+    private final Runnable tick=this::pollSafely;
     private Stage stage=Stage.OPEN_APP;
     private long started=SystemClock.elapsedRealtime();
     private final long flowStarted=started;
@@ -79,6 +81,32 @@ public final class BoltTaxiController {
         stage=next;started=SystemClock.elapsedRealtime();
         listener.onProgress(info);
     }
+    /** Recover from unexpected Bolt/Accessibility runtime failures without
+     * letting a stale node exception crash all of Jarvis. Log only the stage,
+     * never the dictated destination or a screenshot. */
+    private void pollSafely() {
+        if(finished)return;
+        try {
+            poll();
+        } catch (RuntimeException error) {
+            android.util.Log.e("JARVIS_TAXI",
+                "Bolt automation error at stage="+stage.name(),error);
+            try {
+                finish(false,"Bolt повернув помилку під час кроку «"+stage.name()+
+                    "». Джарвіс припинив автоматизацію, поїздку не замовляв.");
+            } catch (RuntimeException cleanupError) {
+                android.util.Log.e("JARVIS_TAXI","Taxi cleanup failed",cleanupError);
+                finished=true;
+                HANDLER.removeCallbacks(tick);
+                synchronized(BoltTaxiController.class) {
+                    if(active==this)active=null;
+                }
+                try { JarvisPhoneModeManager.releaseForCommand(lease,false); }
+                catch(RuntimeException ignored) { }
+            }
+        }
+    }
+
     private void poll(){
         if(finished)return;
         if(!ScreenControlAccessibilityService.isSessionActive()){
