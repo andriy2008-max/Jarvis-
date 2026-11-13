@@ -22,6 +22,16 @@ public final class JarvisMacroScreenRulesTest {
             "98,20","50,99","100,50","50,100","NaN,10",
             "50,Infinity","50;50","1e2,50","-4,50","4,50; rm -rf /"})
             reject(invalid);
+        yes(JarvisMacroScreenRules.waitTimeoutMillis("1")==1000);
+        yes(JarvisMacroScreenRules.waitTimeoutMillis("20")==20000);
+        yes(JarvisMacroScreenRules.waitTimeoutMillis("60")==60000);
+        for(String bad:new String[]{null,"","0","61","1,5","2.5","-1",
+            "100","NaN","1;rm","01  "}) {
+            try {
+                JarvisMacroScreenRules.waitTimeoutMillis(bad);
+                throw new AssertionError("Accepted invalid wait deadline: "+bad);
+            } catch (IllegalArgumentException expected) { assertions++; }
+        }
         yes(JarvisMacroScreenRules.secondsToMillis("2")==2000);
         yes(JarvisMacroScreenRules.secondsToMillis("1,5")==1500);
         yes(JarvisMacroScreenRules.secondsToMillis("0.1")==100);
