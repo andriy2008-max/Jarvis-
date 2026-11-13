@@ -384,6 +384,42 @@ public final class JarvisMacros {
                             poll[0].run();
                             return;
                         }
+                        case "wait_label": {
+                            String expected=step.optString("package").trim();
+                            if(!JarvisForegroundApp.validPackage(expected) ||
+                                value.isEmpty() || value.length()>100){
+                                complete(false,"Неправильна програма або назва кнопки.");return;
+                            }
+                            long start=SystemClock.uptimeMillis();
+                            Runnable[] poll={null};
+                            poll[0]=()->{
+                                if(finished)return;
+                                if(ScreenControlAccessibilityService.macroLabelVisible(expected,value)) {
+                                    next();return;
+                                }
+                                if(SystemClock.uptimeMillis()-start>20000) {
+                                    complete(false,"Елемент «"+value+"» не з'явився за 20 секунд.");
+                                    return;
+                                }
+                                MAIN.postDelayed(poll[0],250L);
+                            };
+                            poll[0].run();
+                            return;
+                        }
+                        case "tap_label": {
+                            String expected=step.optString("package").trim();
+                            if(!JarvisForegroundApp.validPackage(expected) ||
+                                value.isEmpty() || value.length()>100 ||
+                                JarvisMacroScreenRules.riskyLabel(value)) {
+                                complete(false,"Невірний або небезпечний елемент.");return;
+                            }
+                            ScreenControlAccessibilityService.macroTapLabel(
+                                expected,value,(ok,description)->{
+                                    if(finished)return;
+                                    if(ok)next();else complete(false,description);
+                                });
+                            return;
+                        }
                         case "tap_point": {
                             String expected=step.optString("package").trim();
                             if(!JarvisForegroundApp.validPackage(expected)) {
