@@ -193,6 +193,82 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if(!queued)cb.onComplete(false,"Android не дозволив натискання.");
     }
 
+    /** Read-only label wait: no implicit tap and no UI text leaves the device. */
+    public static boolean macroLabelVisible(String packageName,String label) {
+        ScreenControlAccessibilityService service=connected.get();
+        if(service==null || !JarvisForegroundApp.validPackage(packageName) ||
+            label==null || label.trim().isEmpty() || label.length()>100)return false;
+        AccessibilityNodeInfo root=service.currentExternalRoot();
+        if(root==null || root.getPackageName()==null ||
+            !packageName.equals(root.getPackageName().toString()))return false;
+        ArrayDeque<AccessibilityNodeInfo> queue=new ArrayDeque<>();
+        queue.add(root);
+        int visited=0;
+        while(!queue.isEmpty() && ++visited<MAX_SCAN) {
+            AccessibilityNodeInfo node=queue.removeFirst();
+            if(!node.isVisibleToUser() || node.isPassword())continue;
+            if(JarvisMacroScreenRules.matchesLabel(label,asString(node.getText())) ||
+               JarvisMacroScreenRules.matchesLabel(label,asString(node.getContentDescription())))
+                return true;
+            for(int i=0;i<node.getChildCount();i++){
+                AccessibilityNodeInfo child=node.getChild(i);
+                if(child!=null)queue.addLast(child);
+            }
+        }
+        return false;
+    }
+
+    /** Prefer a uniquely labelled control over replaying a saved screen coordinate. */
+    public static void macroTapLabel(String packageName,String label,MacroActionCallback cb) {
+        ScreenControlAccessibilityService service=connected.get();
+        if(service==null){cb.onComplete(false,"Спеціальні можливості неактивні.");return;}
+        service.main.post(()->{
+            if(!JarvisForegroundApp.validPackage(packageName) ||
+                label==null || label.trim().isEmpty() || label.length()>100 ||
+                JarvisMacroScreenRules.riskyLabel(label)) {
+                cb.onComplete(false,"Небезпечна або порожня назва кнопки.");return;
+            }
+            AccessibilityNodeInfo root=service.currentExternalRoot();
+            if(root==null || root.getPackageName()==null ||
+                !packageName.equals(root.getPackageName().toString())){
+                cb.onComplete(false,"Відкрита інша програма.");return;
+            }
+            ArrayDeque<AccessibilityNodeInfo> queue=new ArrayDeque<>();
+            queue.add(root);
+            AccessibilityNodeInfo selected=null;
+            Rect selectedBounds=null;
+            int visited=0;
+            while(!queue.isEmpty() && ++visited<=MAX_SCAN) {
+                AccessibilityNodeInfo node=queue.removeFirst();
+                if(!node.isVisibleToUser() || !node.isEnabled() || node.isPassword())continue;
+                if(JarvisMacroScreenRules.matchesLabel(label,asString(node.getText())) ||
+                   JarvisMacroScreenRules.matchesLabel(label,asString(node.getContentDescription()))) {
+                    AccessibilityNodeInfo target=clickable(node);
+                    if(target!=null && !JarvisMacroScreenRules.riskyLabel(
+                        asString(target.getText())+" "+asString(target.getContentDescription()))) {
+                        Rect bounds=new Rect();target.getBoundsInScreen(bounds);
+                        if(bounds.width()>12 && bounds.height()>12) {
+                            if(selectedBounds!=null && !selectedBounds.equals(bounds)) {
+                                cb.onComplete(false,"Є кілька кнопок з такою назвою.");return;
+                            }
+                            selected=target;selectedBounds=bounds;
+                        }
+                    }
+                }
+                for(int i=0;i<node.getChildCount();i++){
+                    AccessibilityNodeInfo child=node.getChild(i);
+                    if(child!=null)queue.addLast(child);
+                }
+            }
+            if(visited>MAX_SCAN || selected==null || service.currentExternalRoot()==null) {
+                cb.onComplete(false,"Кнопку не знайдено або екран змінився.");return;
+            }
+            if(selected.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                cb.onComplete(true,"Натиснув «"+label+"».");
+            else cb.onComplete(false,"Android відхилив натискання кнопки.");
+        });
+    }
+
     public static void macroType(String packageName, String text, MacroActionCallback cb) {
         ScreenControlAccessibilityService service=connected.get();
         if(service==null){ cb.onComplete(false, "Увімкни службу спеціальних можливостей.");return;}
