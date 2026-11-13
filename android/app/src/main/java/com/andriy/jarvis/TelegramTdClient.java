@@ -95,9 +95,11 @@ public final class TelegramTdClient {
         long created=dialogue==Dialogue.CONFIRM && draft!=null
             ? draft.createdAt : pendingSince;
         if(created==0 || now-created>DRAFT_MAX_AGE_MS) {
+            boolean wasDictation=dialogue==Dialogue.WAIT_MESSAGE ||
+                dialogue==Dialogue.WAIT_CONTACT;
             resetDialogue();
             if(action!=TelegramReplyCommands.DialogAction.NONE ||
-               explicit!=null || dialogue!=Dialogue.CONFIRM) {
+               explicit!=null || wasDictation) {
                 cb.done(false,"Час підтвердження Telegram минув. Продиктуй нове повідомлення.");
                 return true;
             }
