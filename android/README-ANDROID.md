@@ -155,3 +155,27 @@
 - Компонент `MediaProjection` та **візуальне розуміння скриншотів мультимодальним ШІ ще не реалізовано**. Це окрема функція, що потребує системної згоди на захоплення екрана, передачі зображень у вибрану модель (якщо хмарна) і додаткових обмежень приватності.
 - **У 0.1.14 є підписаний тестовий APK**, але публічний стабільний випуск ще не схвалено. Оригінальний applicationId і сертифікат перевірені. [QA APK](https://github.com/andriy2008-max/Jarvis-/actions/runs/42799355295).
 
+
+
+### Supertonic 3: Ukrainian + English (optional offline ONNX voice)
+
+The UI now offers **Supertonic 3 male M1** and **female F1** under
+"Вибрати голос Джарвіса". Select a voice, then tap "Завантажити модель"
+to opt into the one-time download (~400 MB from the archived Hugging Face
+snapshot). The ~400 MB weights are **not included in APK builds**.
+Four ONNX files have pinned SHA-256 checksums, plus pinned immutable
+repository revision for JSON voice/config assets. There is no cloud API
+fee after installation. The model files are stored under Android's
+private app files and shared by the main and floating-face sessions.
+
+Supertonic 3 uses the upstream language-agnostic tag \`na\` to handle
+Ukrainian and English in the same sentence. Test mixed proper names
+(Spotify, YouTube, Telegram) on physical Pixel hardware; language support
+does not guarantee perfect pronunciation. Heavy ONNX inference is done
+off the UI thread, with Android system TTS as fallback.
+
+Source: https://github.com/supertone-oss-archive/supertonic
+Model: https://huggingface.co/supertone-oss-archive/supertonic-3
+Model license: OpenRAIL-M; source example license: MIT.
+**The original source archive is read-only since 2026; no upstream
+maintenance/support should be expected.**

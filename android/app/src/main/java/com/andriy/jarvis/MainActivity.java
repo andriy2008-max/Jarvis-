@@ -101,6 +101,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private NeuralSpeechClient neuralSpeech;
     private OfflineVoicePackManager offlinePacks;
     private OfflineSpeechClient offlineSpeech;
+    private Supertonic3PackManager supertonicPack;
+    private Supertonic3SpeechClient supertonicSpeech;
     private volatile String activeTtsId;
     private DeviceActions deviceActions;
     private final WakeConversation wakeConversation = new WakeConversation();
@@ -289,6 +291,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         neuralSpeech = new NeuralSpeechClient(this);
         offlinePacks = new OfflineVoicePackManager(this);
         offlineSpeech = new OfflineSpeechClient(this, offlinePacks);
+        supertonicPack = new Supertonic3PackManager(this);
+        supertonicSpeech = new Supertonic3SpeechClient(this, supertonicPack);
         buildInterface();
         JarvisMacros.scheduleAll(this);
         JarvisPhoneMode.subscribe(phoneModeListener);
@@ -1108,7 +1112,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         boolean clearlyMale = chosen != null && VoiceRanking.labeledMale(chosen.getName());
         tts.setPitch((knownProfile || clearlyMale) ? 1.0f : 0.86f);
         tts.setSpeechRate(0.94f);
-        if (namedVoice == null && (neuralSpeech == null || !neuralSpeech.isConfigured())) {
+        if (namedVoice == null && !getPreferences(MODE_PRIVATE).getBoolean("jarvisSupertonicSelected", false) &&
+            (neuralSpeech == null || !neuralSpeech.isConfigured())) {
             String why = offlinePacks != null && offlinePacks.hasInstalledFiles()
                 ? "Офлайн-файли збережені, але синтез ще тестується."
                 : "Офлайн-пакет ще не підключений.";
@@ -1164,6 +1169,20 @@ public final class MainActivity extends Activity implements RecognitionListener 
             return;
         }
         stopSpeaking();
+        if (getPreferences(MODE_PRIVATE).getBoolean("jarvisSupertonicSelected", false) &&
+            supertonicSpeech != null && supertonicSpeech.isInstalled()) {
+            prepareSpeech();
+            String selected = getPreferences(MODE_PRIVATE).getString("jarvisSupertonicVoice", "M1");
+            if (supertonicSpeech.speak(text, selected, new NeuralSpeechClient.Listener() {
+                @Override public void onStart() { markSpeaking(); }
+                @Override public void onDone() { endSpeaking(); }
+                @Override public void onFailure(String problem) {
+                    if (!voiceEnabled || isFinishing() || isDestroyed()) return;
+                    setStatus("Supertonic 3: " + problem + ". Використовую резервний голос.");
+                    speakRemoteOrSystem(text);
+                }
+            })) return;
+        }
         if (offlineSpeech != null && offlineSpeech.isInstalled()) {
             prepareSpeech();
             if (offlineSpeech.speak(text, selectedVoiceProfile(), new NeuralSpeechClient.Listener() {
@@ -1200,7 +1219,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             setStatus("Спочатку ввімкни голосові відповіді.");
             return;
         }
-        speakReply("Привіт! Я Джарвіс. Готовий допомогти тобі.");
+        speakReply("Привіт! Я Джарвіс. Відкриваю Spotify, YouTube та Telegram.");
     }
 
     private void openSystemVoiceSettings() {
@@ -1238,7 +1257,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void selectVoiceProfile(String requested) {
         String profile = VoiceRanking.profile(requested);
-        getPreferences(MODE_PRIVATE).edit().putString("jarvisVoiceProfile", profile).apply();
+        getPreferences(MODE_PRIVATE).edit().putString("jarvisVoiceProfile", profile)
+            .putBoolean("jarvisSupertonicSelected", false).apply();
         applyPreferredVoice();
         if ((offlineSpeech != null && offlineSpeech.isInstalled()) ||
             (neuralSpeech != null && neuralSpeech.isConfigured()) ||
@@ -1356,15 +1376,35 @@ public final class MainActivity extends Activity implements RecognitionListener 
         boolean hasLada = voiceForProfile(available, VoiceRanking.LADA) != null;
         boolean modelConfigured = neuralSpeech != null && neuralSpeech.isConfigured();
         boolean offlineSaved = offlinePacks != null && offlinePacks.hasInstalledFiles();
+        boolean superSelected = getPreferences(MODE_PRIVATE)
+            .getBoolean("jarvisSupertonicSelected", false);
+        boolean superInstalled = supertonicPack != null && supertonicPack.hasInstalledFiles();
         String[] labels = {
-            "Дмитро — чоловічий · " + (offlineSaved ? "локальна ONNX-модель (експериментально)" : modelConfigured ? "сервер налаштовано" : hasDmytro ? "системний голос" : "ще не підключений"),
-            "Лада — жіночий · " + (offlineSaved ? "локальна ONNX-модель (експериментально)" : modelConfigured ? "сервер налаштовано" : hasLada ? "системний голос" : "ще не підключений")
+            "Дмитро — чоловічий · " + (offlineSaved ? "локальна ONNX-модель" : modelConfigured ? "сервер налаштовано" : hasDmytro ? "системний голос" : "ще не підключений"),
+            "Лада — жіночий · " + (offlineSaved ? "локальна ONNX-модель" : modelConfigured ? "сервер налаштовано" : hasLada ? "системний голос" : "ще не підключений"),
+            "Supertonic 3 · чоловічий M1 · " + (superInstalled ? "встановлено, офлайн" : "завантаження ~400 МБ"),
+            "Supertonic 3 · жіночий F1 · " + (superInstalled ? "встановлено, офлайн" : "завантаження ~400 МБ")
         };
-        int checked = VoiceRanking.LADA.equals(selectedVoiceProfile()) ? 1 : 0;
+        int checked = superSelected
+            ? ("F1".equals(getPreferences(MODE_PRIVATE).getString("jarvisSupertonicVoice", "M1")) ? 3 : 2)
+            : (VoiceRanking.LADA.equals(selectedVoiceProfile()) ? 1 : 0);
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("Українські голоси Джарвіса")
             .setSingleChoiceItems(labels, checked, (d, which) -> {
-                selectVoiceProfile(which == 1 ? VoiceRanking.LADA : VoiceRanking.DMYTRO);
+                if (which <= 1) {
+                    selectVoiceProfile(which == 1 ? VoiceRanking.LADA : VoiceRanking.DMYTRO);
+                } else {
+                    String chosen = which == 3 ? "F1" : "M1";
+                    getPreferences(MODE_PRIVATE).edit()
+                        .putBoolean("jarvisSupertonicSelected", true)
+                        .putString("jarvisSupertonicVoice", chosen).apply();
+                    if (supertonicSpeech != null && supertonicSpeech.isInstalled()) {
+                        setStatus("Supertonic 3 " + chosen + " обрано. Перевіряю українську та англійську.");
+                        previewCurrentVoice();
+                    } else {
+                        showSupertonicSettings();
+                    }
+                }
             })
             .setNegativeButton("Закрити", null)
             .setNeutralButton("Офлайн-пакет", (d, w) -> showOfflineVoiceSettings())
@@ -1439,6 +1479,60 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 };
                 if (automatic) offlinePacks.installOfficial(callback);
                 else offlinePacks.install(url, hash, callback);
+            });
+        });
+        showDialogWithoutWake(dialog);
+    }
+
+
+    /** Dedicated opt-in setup for the free open-weight Supertonic 3 model. */
+    private void showSupertonicSettings() {
+        if (supertonicPack == null) return;
+        LinearLayout container = new LinearLayout(this);
+        container.setPadding(dp(18), dp(12), dp(18), dp(12));
+        container.setOrientation(LinearLayout.VERTICAL);
+        TextView description = makeText(
+            "Supertonic 3 · M1 чоловічий / F1 жіночий. Українська + англійська, без інтернету після встановлення. " +
+            "Потрібно приблизно 400 МБ для файлів моделі і 530 МБ вільного місця під час завантаження. " +
+            "Модель OpenRAIL-M, рушій MIT. Завантаження тільки після натискання.",
+            13, MUTED, Gravity.START, false);
+        container.addView(description);
+        TextView progress = makeText(
+            supertonicPack.hasInstalledFiles()
+                ? "Модель встановлено. Обери Supertonic 3 у списку голосів."
+                : "Модель ще не завантажена.",
+            13, MUTED, Gravity.START, false);
+        container.addView(progress);
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Supertonic 3 · офлайн")
+            .setView(container)
+            .setNegativeButton("Закрити", null)
+            .setNeutralButton("Прослухати", (d, w) -> {
+                if (supertonicSpeech != null && supertonicSpeech.isInstalled())
+                    previewCurrentVoice();
+                else setStatus("Спочатку завантаж Supertonic 3.");
+            })
+            .setPositiveButton("Завантажити модель", null)
+            .create();
+        dialog.setOnShowListener(d -> {
+            Button download = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            download.setOnClickListener(v -> {
+                download.setEnabled(false);
+                progress.setText("Завантажую перевірену модель із Hugging Face. Потрібен Wi-Fi.");
+                supertonicPack.install(new Supertonic3PackManager.Callback() {
+                    @Override public void onProgress(int percentage, String name) {
+                        if (!isFinishing() && !isDestroyed())
+                            progress.setText("Supertonic 3: " + percentage + "% · " + name);
+                    }
+                    @Override public void onComplete(boolean success, String reason) {
+                        if (isFinishing() || isDestroyed()) return;
+                        download.setEnabled(true);
+                        progress.setText(reason);
+                        setStatus(reason);
+                        if (success && getPreferences(MODE_PRIVATE).getBoolean("jarvisSupertonicSelected", false))
+                            previewCurrentVoice();
+                    }
+                });
             });
         });
         showDialogWithoutWake(dialog);
@@ -3164,6 +3258,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         activeTtsId = null;
         JarvisSpeechMouth.stopSystemTts();
         if (offlineSpeech != null) offlineSpeech.stop();
+        if (supertonicSpeech != null) supertonicSpeech.stop();
         if (neuralSpeech != null) neuralSpeech.stop();
         if (tts != null) tts.stop();
         speaking = false;
@@ -4129,6 +4224,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (generalWebSearch != null) generalWebSearch.close();
         if (recognizer != null) recognizer.destroy();
         if (offlineSpeech != null) offlineSpeech.close();
+        if (supertonicSpeech != null) supertonicSpeech.close();
+        if (supertonicPack != null) supertonicPack.close();
         if (offlinePacks != null) offlinePacks.close();
         if (neuralSpeech != null) neuralSpeech.close();
         if (tts != null) {

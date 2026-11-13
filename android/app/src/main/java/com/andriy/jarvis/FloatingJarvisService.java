@@ -206,6 +206,8 @@ public final class FloatingJarvisService extends Service {
     private TextToSpeech tts;
     private OfflineVoicePackManager packs;
     private OfflineSpeechClient offline;
+    private Supertonic3PackManager supertonicPack;
+    private Supertonic3SpeechClient supertonicSpeech;
     private NeuralSpeechClient neural;
     private AiChatClient ai;
     private WorldNewsReader worldNewsReader;
@@ -225,6 +227,8 @@ public final class FloatingJarvisService extends Service {
         JarvisPhoneMode.subscribe(phoneModeListener);
         packs = new OfflineVoicePackManager(this);
         offline = new OfflineSpeechClient(this, packs);
+        supertonicPack = new Supertonic3PackManager(this);
+        supertonicSpeech = new Supertonic3SpeechClient(this, supertonicPack);
         neural = new NeuralSpeechClient(this);
         ai = new AiChatClient(this);
         worldNewsReader = new WorldNewsReader();
@@ -1614,6 +1618,17 @@ public final class FloatingJarvisService extends Service {
         if (!enabled || phoneListening) { setFace(phoneListening ? "listening" : "idle"); return; }
         stopSpeech();
         setFace("thinking");
+        if (getSharedPreferences("MainActivity", MODE_PRIVATE)
+                .getBoolean("jarvisSupertonicSelected", false) &&
+            supertonicSpeech != null && supertonicSpeech.isInstalled()) {
+            String voice = getSharedPreferences("MainActivity", MODE_PRIVATE)
+                .getString("jarvisSupertonicVoice", "M1");
+            if (supertonicSpeech.speak(text, voice, new NeuralSpeechClient.Listener() {
+                @Override public void onStart() { setFace("speaking"); }
+                @Override public void onDone() { setFace("idle"); }
+                @Override public void onFailure(String reason) { remoteOrSystem(text); }
+            })) return;
+        }
         if (offline != null && offline.isInstalled()) {
             if (offline.speak(text, selectedVoice(), new NeuralSpeechClient.Listener() {
                 @Override public void onStart() { setFace("speaking"); }
@@ -1653,6 +1668,7 @@ public final class FloatingJarvisService extends Service {
         currentTtsId = null;
         JarvisSpeechMouth.stopSystemTts();
         if (offline != null) offline.stop();
+        if (supertonicSpeech != null) supertonicSpeech.stop();
         if (neural != null) neural.stop();
         if (tts != null) tts.stop();
     }
@@ -1695,6 +1711,8 @@ public final class FloatingJarvisService extends Service {
         if (worldNewsReader != null) worldNewsReader.close();
         if (generalWebSearch != null) generalWebSearch.close();
         if (offline != null) offline.close();
+        if (supertonicSpeech != null) supertonicSpeech.close();
+        if (supertonicPack != null) supertonicPack.close();
         if (neural != null) neural.close();
         if (packs != null) packs.close();
         if (tts != null) { tts.stop(); tts.shutdown(); }
