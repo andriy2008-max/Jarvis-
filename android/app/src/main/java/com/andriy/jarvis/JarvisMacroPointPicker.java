@@ -1,6 +1,7 @@
 package com.andriy.jarvis;
 
 import android.accessibilityservice.AccessibilityService;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -22,6 +23,7 @@ public final class JarvisMacroPointPicker {
     public interface Callback { void onPick(String percentPoint); }
     private final AccessibilityService context;
     private final Callback callback;
+    private final String expectedPackage;
     private final WindowManager windows;
     private WindowManager.LayoutParams surfaceParams;
     private Surface surface;
@@ -32,8 +34,9 @@ public final class JarvisMacroPointPicker {
     private double x=50, y=50;
     private boolean hasPoint;
 
-    JarvisMacroPointPicker(AccessibilityService context, Callback callback) {
+    JarvisMacroPointPicker(AccessibilityService context,String expectedPackage,Callback callback) {
         this.context=context;
+        this.expectedPackage=expectedPackage;
         this.callback=callback;
         windows=(WindowManager)context.getSystemService(android.content.Context.WINDOW_SERVICE);
     }
@@ -121,8 +124,21 @@ public final class JarvisMacroPointPicker {
         @Override public boolean onTouchEvent(MotionEvent event) {
             if(!choosing)return false;
             if(event.getActionMasked()==MotionEvent.ACTION_UP) {
-                double px=100.0*event.getX()/Math.max(1,getWidth());
-                double py=100.0*event.getY()/Math.max(1,getHeight());
+                AccessibilityNodeInfo target=context.getRootInActiveWindow();
+                Rect bounds=new Rect();
+                if(target==null || target.getPackageName()==null ||
+                   !expectedPackage.equals(target.getPackageName().toString())) {
+                    status.setText("Зараз відкрита інша програма. Повернись до цільової.");
+                    return true;
+                }
+                target.getBoundsInScreen(bounds);
+                if(bounds.width()<120 || bounds.height()<160 ||
+                   !bounds.contains((int)event.getRawX(),(int)event.getRawY())) {
+                    status.setText("Обери точку в активній області програми.");
+                    return true;
+                }
+                double px=100.0*(event.getRawX()-bounds.left)/bounds.width();
+                double py=100.0*(event.getRawY()-bounds.top)/bounds.height();
                 if(px>=3 && px<=97 && py>=3 && py<=97) {
                     x=px; y=py; hasPoint=true;
                     status.setText("Збережеться точка "+
@@ -139,7 +155,15 @@ public final class JarvisMacroPointPicker {
             paint.setColor(Color.argb(44,0,180,255));
             canvas.drawColor(Color.argb(30,0,150,200));
             if(!hasPoint)return;
-            float sx=(float)(getWidth()*x/100.0),sy=(float)(getHeight()*y/100.0);
+            AccessibilityNodeInfo target=context.getRootInActiveWindow();
+            if(target==null || target.getPackageName()==null ||
+               !expectedPackage.equals(target.getPackageName().toString()))return;
+            Rect bounds=new Rect();
+            target.getBoundsInScreen(bounds);
+            int[] offset=new int[2];
+            getLocationOnScreen(offset);
+            float sx=(float)(bounds.left+bounds.width()*x/100.0-offset[0]);
+            float sy=(float)(bounds.top+bounds.height()*y/100.0-offset[1]);
             paint.setColor(Color.YELLOW);
             paint.setStrokeWidth(3f);
             canvas.drawCircle(sx,sy,20,paint);
