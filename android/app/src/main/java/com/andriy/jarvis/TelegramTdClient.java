@@ -87,6 +87,8 @@ public final class TelegramTdClient {
         // Full Telegram commands remain usable to start an entirely new draft.
         if(explicit!=null && (explicit.kind==TelegramReplyCommands.Kind.DRAFT ||
             explicit.kind==TelegramReplyCommands.Kind.DRAFT_AUTO)) {
+            revision++; // invalidate prior recipient searches before starting anew
+            busy=false;
             resetDialogue();
             process(explicit,cb);
             return true;
@@ -97,6 +99,8 @@ public final class TelegramTdClient {
         if(created==0 || now-created>DRAFT_MAX_AGE_MS) {
             boolean wasDictation=dialogue==Dialogue.WAIT_MESSAGE ||
                 dialogue==Dialogue.WAIT_CONTACT;
+            revision++; // expired callbacks cannot recreate a draft
+            busy=false;
             resetDialogue();
             if(action!=TelegramReplyCommands.DialogAction.NONE ||
                explicit!=null || wasDictation) {
@@ -295,6 +299,7 @@ public final class TelegramTdClient {
                 client.send(new TdApi.LoadChats(null,100),ignored->{});
             }else if(state instanceof TdApi.AuthorizationStateClosed){
                 client=null;
+                revision++; // discard callbacks from the terminated TDLib session
                 resetDialogue();
                 busy=false;
             }
