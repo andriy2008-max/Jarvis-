@@ -98,6 +98,9 @@ on:
       - 'android/app/src/test/java/com/andriy/jarvis/OfflineVoicePackRulesTest.java'
       - 'tools/voice-export/**'
       - 'android/app/src/main/java/com/andriy/jarvis/MainActivity.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisListeningAudioFocus.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisInstantCommands.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/JarvisInstantCommandsTest.java'
       - 'android/app/src/main/java/com/andriy/jarvis/AssistantIntents.java'
       - 'android/app/src/test/java/com/andriy/jarvis/AssistantIntentsTest.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisCommandSequence.java'
@@ -151,6 +154,8 @@ jobs:
           mkdir -p /tmp/jarvis-voice-tests
           javac -encoding UTF-8 -d /tmp/jarvis-voice-tests \
             android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java \
+            android/app/src/main/java/com/andriy/jarvis/JarvisInstantCommands.java \
+            android/app/src/test/java/com/andriy/jarvis/JarvisInstantCommandsTest.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisTaxiCommands.java \
             android/app/src/main/java/com/andriy/jarvis/BoltUiLabels.java \
             android/app/src/main/java/com/andriy/jarvis/FinanceVoiceCommands.java \
@@ -233,6 +238,7 @@ jobs:
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisMicrophoneChoiceTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisForegroundAppTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.CommandPatternsTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisInstantCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyMusicCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyUiLabelsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyUriRulesTest
