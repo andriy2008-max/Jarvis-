@@ -44,7 +44,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Root commands are optional and only execute when explicitly saved in the editor.
  */
 public final class JarvisMacros {
-    public interface Listener { void onResult(String result); }
+    public interface Listener {
+        void onResult(String result);
+        default void onProgress(int step, int total, String detail) { }
+    }
 
     private static final String PREFS = "jarvis_local_macros_v1";
     private static final String KEY = "macros";
@@ -106,13 +109,25 @@ public final class JarvisMacros {
             .edit().putString(KEY, data.toString()).commit();
     }
 
+    /** Explicit stop button and voice command share the same cancellation path. */
+    public static void cancelActive(Listener listener) {
+        MAIN.post(() -> {
+            Execution current=active;
+            if(current==null) report(listener,"Зараз немає активного макросу.");
+            else {
+                current.complete(false,"скасовано користувачем");
+                report(listener,"Макрос зупинено.");
+            }
+        });
+    }
+
+    public static boolean isRunning() { return RUNNING.get(); }
+
     public static boolean cancelIfRequested(String words, Listener listener) {
         String text = CommandPatterns.normalize(words);
         if (!text.equals("скасуй макрос") && !text.equals("зупини макрос")
             && !text.equals("стоп макрос")) return false;
-        Execution running = active;
-        if (running == null) report(listener, "Зараз немає активного макросу.");
-        else running.complete(false, "скасовано користувачем");
+        cancelActive(listener);
         return true;
     }
 
@@ -341,6 +356,8 @@ public final class JarvisMacros {
                 if (step == null) { complete(false, "пошкоджений крок"); return; }
                 String type = step.optString("type");
                 String value = step.optString("value").trim();
+                if(listener!=null)listener.onProgress(index,steps.length(),
+                    type+" · "+(value.length()>65?value.substring(0,65)+"…":value));
                 try {
                     switch (type) {
                         case "open_app": {
@@ -402,6 +419,27 @@ public final class JarvisMacros {
                                     return;
                                 }
                                 MAIN.postDelayed(poll[0],250L);
+                            };
+                            poll[0].run();
+                            return;
+                        }
+                        case "wait_field": {
+                            String expected=step.optString("package").trim();
+                            if(!JarvisForegroundApp.validPackage(expected)) {
+                                complete(false,"Вкажи програму з текстовим полем.");return;
+                            }
+                            long start=SystemClock.uptimeMillis();
+                            Runnable[] poll={null};
+                            poll[0]=()->{
+                                if(finished)return;
+                                if(ScreenControlAccessibilityService.macroFocusedEditable(expected)) {
+                                    next();return;
+                                }
+                                if(SystemClock.uptimeMillis()-start>20000L) {
+                                    complete(false,"Текстове поле не активувалося за 20 секунд.");
+                                    return;
+                                }
+                                MAIN.postDelayed(poll[0],250);
                             };
                             poll[0].run();
                             return;
