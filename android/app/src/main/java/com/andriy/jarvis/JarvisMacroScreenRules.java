@@ -31,6 +31,16 @@ public final class JarvisMacroScreenRules {
         return String.format(Locale.ROOT,"%.1f,%.1f",x,y);
     }
 
+    /** Human-readable pause: 0.1–60 seconds; supports Ukrainian comma notation. */
+    public static int secondsToMillis(String raw) {
+        if(raw==null || !raw.trim().matches("\\d{1,2}(?:[.,]\\d{1,3})?"))
+            throw new IllegalArgumentException("Пауза в секундах: 0,1–60, наприклад 1,5.");
+        double seconds=Double.parseDouble(raw.trim().replace(',','.'));
+        if(seconds<0.1 || seconds>60)
+            throw new IllegalArgumentException("Пауза має бути від 0,1 до 60 секунд.");
+        return (int)Math.round(seconds*1000);
+    }
+
     public static boolean validText(String text) {
         return text != null && !text.isEmpty() && text.length() <= 1000 &&
             text.indexOf('\u0000') < 0;
