@@ -18,6 +18,18 @@ public final class BoltUiLabelsTest {
         yes(BoltUiLabels.ridesHomeFallback(true,true,true,false,false));
         yes(!BoltUiLabels.ridesHomeFallback(false,false,true,false,true));
         yes(!BoltUiLabels.ridesHomeFallback(true,false,false,false,true));
+        yes(BoltUiLabels.RIDES_TAP_DELAY_MS==4000L);
+        yes(!BoltUiLabels.ridesTapDue(0L));
+        yes(!BoltUiLabels.ridesTapDue(3999L));
+        yes(BoltUiLabels.ridesTapDue(4000L));
+        yes(BoltUiLabels.ridesTapDue(4100L));
+        for(String safe:new String[]{"Поїздки", "Рушаймо", "Тебе підвезти?",
+            "Bolt Food", "Запланувати", "Куди поїдемо?", ""})
+            yes(!BoltUiLabels.unsafeForTimedRidesTap(safe));
+        for(String risky:new String[]{"Маршрут", "Підтвердити поїздку",
+            "Підтвердити", "Оплатити", "Спосіб оплати", "Payment",
+            "Checkout", "Confirm ride", "Trip details", "Замовити автомобіль"})
+            yes(BoltUiLabels.unsafeForTimedRidesTap(risky));
         int[] rides=BoltUiLabels.screenshotRidesPoint(684,1536);
         yes(rides!=null && rides[0]==184 && rides[1]==482);
         yes(BoltUiLabels.screenshotRidesPoint(1536,684)==null);
