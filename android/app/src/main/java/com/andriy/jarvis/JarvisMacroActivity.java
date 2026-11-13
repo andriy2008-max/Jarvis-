@@ -47,6 +47,7 @@ public final class JarvisMacroActivity extends Activity {
     };
     private static final String[] ACTIONS = {
         "Команда керування Джарвіса", "Пауза (мілісекунди)",
+        "Пауза (секунди)",
         "Сповіщення", "Вібрація (мілісекунди)", "Root shell (su -c)",
         "Відкрити застосунок", "Чекати відкриття застосунку",
         "Дочекатися кнопки за назвою", "Натиснути кнопку за назвою",
@@ -54,7 +55,7 @@ public final class JarvisMacroActivity extends Activity {
         "Написати текст в активне поле"
     };
     private static final String[] ACTION_KEYS = {
-        "command", "wait", "notification", "vibrate", "root",
+        "command", "wait", "wait_seconds", "notification", "vibrate", "root",
         "open_app", "wait_app", "wait_label", "tap_label", "tap_point",
         "wait_field", "type_text"
     };
@@ -291,6 +292,7 @@ public final class JarvisMacroActivity extends Activity {
         else if("wait_label".equals(type))row.value.setHint("Чекати появи: Пошук");
         else if("type_text".equals(type))row.value.setHint("Точний текст для активного поля");
         else if("wait".equals(type))row.value.setHint("Час паузи: 1500 мс");
+        else if("wait_seconds".equals(type))row.value.setHint("Час паузи: 2 або 1,5 секунди");
         else row.value.setHint("Команда / параметри дії");
     }
 
@@ -613,6 +615,8 @@ public final class JarvisMacroActivity extends Activity {
                     "wait_field".equals(action)) &&
                    !JarvisForegroundApp.validPackage(value(row.packageName)))
                     throw new IllegalArgumentException("Вибери програму для екранного кроку.");
+                if("wait_seconds".equals(action))
+                    JarvisMacroScreenRules.secondsToMillis(actionValue);
                 if("wait".equals(action) || "vibrate".equals(action)) {
                     int number = Integer.parseInt(actionValue);
                     int max = "wait".equals(action) ? 60000 : 5000;
