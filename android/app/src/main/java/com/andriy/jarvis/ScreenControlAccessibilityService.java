@@ -228,6 +228,14 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         }
     }
 
+    public static void stopMacroPointPicker() {
+        ScreenControlAccessibilityService service=connected.get();
+        if(service!=null && service.macroPointPicker!=null) {
+            service.macroPointPicker.close();
+            service.macroPointPicker=null;
+        }
+    }
+
     public static boolean focusedEditableIn(String packageName) {
         ScreenControlAccessibilityService service = connected.get();
         if (service == null || !service.sessionActive || packageName == null)
