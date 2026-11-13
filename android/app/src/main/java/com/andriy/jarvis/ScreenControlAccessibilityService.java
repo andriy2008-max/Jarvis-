@@ -49,6 +49,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     private WindowManager windows;
     private View buttonOverlay;
     private SpeechRecognizer recognizer;
+    private JarvisHeadsetAudioRouter headsetRoute;
     private boolean recording;
     private final Handler main = new Handler(Looper.getMainLooper());
     private JarvisSequenceExecutor sequences;
@@ -1039,6 +1040,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if (recognizer != null) {
             try { recognizer.cancel(); } catch (Exception ignored) {}
         }
+        if(headsetRoute!=null)headsetRoute.end();
     }
 
     private void recordOneCommand() {
@@ -1068,10 +1070,12 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                     @Override public void onEndOfSpeech() {}
                     @Override public void onError(int error) {
                         recording = false;
+                        if(headsetRoute!=null)headsetRoute.end();
                         if (sessionActive) toast("Не розпізнав команду. Натисни мікрофон ще раз.");
                     }
                     @Override public void onResults(Bundle results) {
                         recording = false;
+                        if(headsetRoute!=null)headsetRoute.end();
                         if (!sessionActive) return;
                         ArrayList<String> phrases =
                             results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
@@ -1209,10 +1213,23 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             speech.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "uk-UA");
             speech.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false);
             speech.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+            if(headsetRoute==null){
+                headsetRoute=new JarvisHeadsetAudioRouter(this);
+                headsetRoute.setOnRouteLost(() -> {
+                    String reason=headsetRoute.problem();
+                    stopListening();
+                    toast(reason);
+                });
+            }
+            if(!headsetRoute.begin()){
+                toast(headsetRoute.problem());
+                return;
+            }
             recording = true;
             recognizer.startListening(speech);
         } catch (Exception error) {
             recording = false;
+            if(headsetRoute!=null)headsetRoute.end();
             toast("Не вдалося розпочати розпізнавання. Перевір дозвіл мікрофона.");
         }
     }
