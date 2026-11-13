@@ -203,6 +203,7 @@ public final class FloatingJarvisService extends Service {
     private boolean recognizerSessionActive;
     private int recognizerFailures;
     private String currentTtsId;
+    private boolean telegramDictationAfterReply;
     private TextToSpeech tts;
     private OfflineVoicePackManager packs;
     private OfflineSpeechClient offline;
@@ -1126,11 +1127,40 @@ public final class FloatingJarvisService extends Service {
         }
     }
 
+    private void replyTelegram(boolean ok,String info) {
+        if(closing)return;
+        telegramDictationAfterReply =
+            TelegramReplyController.needsFollowupDictation(this);
+        reply(info);
+        boolean ttsEnabled=getSharedPreferences("MainActivity",MODE_PRIVATE)
+            .getBoolean("voiceEnabled",true);
+        if(telegramDictationAfterReply && (!ttsEnabled || phoneListening))
+            restartTelegramDictation();
+    }
+
+    private void restartTelegramDictation() {
+        if(!telegramDictationAfterReply)return;
+        telegramDictationAfterReply=false;
+        ui.postDelayed(()->{
+            if(!closing && !recording && !phoneListening &&
+                !recognizerSessionActive &&
+                TelegramReplyController.needsFollowupDictation(this))
+                toggleListening();
+        },450L);
+    }
+
     private void executeCommand(String raw) {
         if (closing) return;
         if (JarvisMacros.cancelIfRequested(raw, result -> {
             if (!closing) reply(result);
         })) return;
+        if(TelegramReplyController.handleFollowup(this,raw,this::replyTelegram))
+            return;
+        TelegramReplyCommands.Request telegram=TelegramReplyCommands.parse(raw);
+        if(telegram!=null) {
+            TelegramReplyController.perform(this,telegram,this::replyTelegram);
+            return;
+        }
         // User-defined phrases take precedence over built-in commands.
         if (JarvisMacros.handleVoice(this, raw, result -> {
             if (!closing) reply(result);
@@ -1605,6 +1635,7 @@ public final class FloatingJarvisService extends Service {
                 currentTtsId = null;
                 JarvisSpeechMouth.stopSystemTts();
                 setFace("idle");
+                restartTelegramDictation();
             }
         });
     }
@@ -1625,14 +1656,14 @@ public final class FloatingJarvisService extends Service {
                 .getString("jarvisSupertonicVoice", "M1");
             if (supertonicSpeech.speak(text, voice, new NeuralSpeechClient.Listener() {
                 @Override public void onStart() { setFace("speaking"); }
-                @Override public void onDone() { setFace("idle"); }
+                @Override public void onDone() { setFace("idle"); restartTelegramDictation(); }
                 @Override public void onFailure(String reason) { remoteOrSystem(text); }
             })) return;
         }
         if (offline != null && offline.isInstalled()) {
             if (offline.speak(text, selectedVoice(), new NeuralSpeechClient.Listener() {
                 @Override public void onStart() { setFace("speaking"); }
-                @Override public void onDone() { setFace("idle"); }
+                @Override public void onDone() { setFace("idle"); restartTelegramDictation(); }
                 @Override public void onFailure(String reason) { remoteOrSystem(text); }
             })) return;
         }
@@ -1643,7 +1674,7 @@ public final class FloatingJarvisService extends Service {
         if (neural != null && neural.isConfigured()) {
             if (neural.speak(text, selectedVoice(), new NeuralSpeechClient.Listener() {
                 @Override public void onStart() { setFace("speaking"); }
-                @Override public void onDone() { setFace("idle"); }
+                @Override public void onDone() { setFace("idle"); restartTelegramDictation(); }
                 @Override public void onFailure(String reason) { speakSystem(text); }
             })) return;
         }
@@ -1661,6 +1692,7 @@ public final class FloatingJarvisService extends Service {
             }
         } else {
             setFace("idle");
+            restartTelegramDictation();
         }
     }
 
@@ -1677,6 +1709,7 @@ public final class FloatingJarvisService extends Service {
 
     @Override public void onDestroy() {
         closing = true;
+        telegramDictationAfterReply=false;
         ui.removeCallbacks(overlayLayoutTick);
         if (activeOverlay.get()==this) activeOverlay.clear();
         JarvisPhoneMode.unsubscribe(phoneModeListener);
