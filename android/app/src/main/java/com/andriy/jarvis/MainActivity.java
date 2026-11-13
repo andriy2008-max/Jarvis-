@@ -56,6 +56,7 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.text.InputType;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -1052,11 +1053,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     /**
-     * Wear OS is a single full-screen animated pixel face. No visible text
-     * input, menus, lists or mic buttons. Face tap controls recording; hardware
-     * stem key also toggles it. Swipe left removes the last recognized word.
-     * Internal output views remain detached so shared conversation/AI code can
-     * deliver speech without maintaining a second, incompatible watch engine.
+     * Wear OS keeps the animated pixel face full-screen, with a compact
+     * three-dot settings button inside the usable area of the round display.
+     * Face tap controls recording; hardware stem key also toggles it.
+     * Swipe left removes the last recognized word. The settings overlay
+     * has its own touch target so it never starts/stops the microphone.
+     * Internal output views remain detached for shared conversation/AI code.
      */
     private void buildWatchInterface() {
         getWindow().getDecorView().setSystemUiVisibility(
@@ -1073,7 +1075,26 @@ public final class MainActivity extends Activity implements RecognitionListener 
         face.setBackgroundColor(BG);
         face.setContentDescription(
             "Джарвіс. Натисни обличчя для голосової команди; свайп вліво скасовує слово.");
-        setContentView(face, new ViewGroup.LayoutParams(
+        FrameLayout watchScreen = new FrameLayout(this);
+        watchScreen.setBackgroundColor(BG);
+        watchScreen.addView(face, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // Keep the face as the main control. The overflow button is a separate
+        // 44dp accessible touch target, inset so it stays inside a round watch.
+        TextView settingsMenu = makeText("⋮", 27, WHITE, Gravity.CENTER, true);
+        settingsMenu.setContentDescription("Відкрити налаштування Джарвіса");
+        settingsMenu.setBackground(roundedFill(Color.rgb(16, 37, 63), CYAN, 99));
+        settingsMenu.setClickable(true);
+        settingsMenu.setFocusable(true);
+        settingsMenu.setOnClickListener(v -> showWatchActions());
+        FrameLayout.LayoutParams settingsParams = new FrameLayout.LayoutParams(
+            dp(44), dp(44), Gravity.TOP | Gravity.END);
+        settingsParams.topMargin = dp(26);
+        settingsParams.rightMargin = dp(27);
+        watchScreen.addView(settingsMenu, settingsParams);
+        setContentView(watchScreen, new ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -1786,31 +1807,58 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private void showWatchActions() {
+        // Android's list dialog scrolls on small Wear OS screens.
         final String[] actions = {
-            "Підключення до ШІ", "Новий діалог", "Показати нотатки",
-            "Що ти вмієш?", "Введення текстом", "Голосова активація", "Дмитро / Лада",
-            "Керування екраном"
+            "🔊 Голос: Дмитро / Лада",
+            "🔈 Голосові відповіді: " + (voiceEnabled ? "увімкнені" : "вимкнені"),
+            "⏳ Пауза після слова: " + speechPauseSeconds() + " с",
+            "🤖 ШІ — підключення",
+            "📱 Стан керування телефоном",
+            "⌨ Написати команду",
+            "🗒 Показати нотатки",
+            "🧹 Новий діалог",
+            "❔ Що ти вмієш?"
         };
-        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Джарвіс — дії")
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Налаштування Джарвіса")
             .setItems(actions, (d, which) -> {
                 switch (which) {
-                    case 0: showAiSettings(); break;
-                    case 1: clearAiConversation(); break;
-                    case 2: processCommand("покажи нотатки"); break;
-                    case 3: processCommand("що ти вмієш"); break;
-                    case 4: showWatchTextInput(); break;
-                    case 5:
-                        if (supportsOnDeviceRecognizer && wakeToggle != null) {
-                            wakeToggle.setChecked(!wakeToggle.isChecked());
-                        } else {
-                            setStatus("Для активації голосом потрібне локальне розпізнавання Android.");
+                    case 0: showVoiceSettings(); break;
+                    case 1:
+                        voiceEnabled = !voiceEnabled;
+                        getPreferences(MODE_PRIVATE).edit()
+                            .putBoolean("voiceEnabled", voiceEnabled).apply();
+                        if (!voiceEnabled) {
+                            stopSpeaking();
+                            if (face != null) face.setState(
+                                listening ? "listening" : processing ? "thinking" : "idle");
                         }
+                        setStatus(voiceEnabled
+                            ? "Голосові відповіді увімкнено."
+                            : "Голосові відповіді вимкнено.");
                         break;
-                    case 6: showVoiceSettings(); break;
-                    case 7: showScreenControlConsent(); break;
+                    case 2: showSpeechPauseSettings(); break;
+                    case 3: showAiSettings(); break;
+                    case 4: {
+                        boolean active = watchPhoneLink != null && watchPhoneLink.active();
+                        AlertDialog linkInfo = new AlertDialog.Builder(this)
+                            .setTitle("Зв'язок із телефоном")
+                            .setMessage(active
+                                ? "Сеанс керування телефоном підтверджено."
+                                : "Немає підтвердженого сеансу керування телефоном. Перевір з'єднання через Galaxy Wearable, Google Play services та наявність Джарвіса на обох пристроях.")
+                            .setPositiveButton("Закрити", null).create();
+                        showDialogWithoutWake(linkInfo);
+                        break;
+                    }
+                    case 5: showWatchTextInput(); break;
+                    case 6: processCommand("покажи нотатки"); break;
+                    case 7: clearAiConversation(); break;
+                    case 8: processCommand("що ти вмієш"); break;
                     default: break;
                 }
-            }).create();
+            })
+            .setNegativeButton("Закрити", null)
+            .create();
         showDialogWithoutWake(dialog);
     }
     private TextView panelHeading(String title) {
