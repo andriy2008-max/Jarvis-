@@ -11,9 +11,7 @@ public final class BoltTaxiController {
     private static final String BOLT="ee.mtakso.client";
     private static final Handler HANDLER=new Handler(Looper.getMainLooper());
     private static final long POLL_MS=350L;
-    // User-requested fixed delay from launching Bolt: do not wait for the
-    // «Поїздки» accessibility label before making the first tap.
-    private static final long RIDES_TAP_DELAY_MS=4000L;
+    // Four-second delay and guard live in the testable BoltUiLabels contract.
     private static final long RETAP_AFTER_MS=2300L;
     private static final long TIMEOUT_MS=30000L;
     private static final long TOTAL_TIMEOUT_MS=45000L;
@@ -75,7 +73,7 @@ public final class BoltTaxiController {
         BoltTaxiController job=new BoltTaxiController(listener,address,lease);
         synchronized(BoltTaxiController.class){active=job;}
         listener.onProgress("Відкриваю Bolt. Через 4 секунди натисну «Поїздки»...");
-        HANDLER.postDelayed(job.tick,RIDES_TAP_DELAY_MS);
+        HANDLER.postDelayed(job.tick,BoltUiLabels.RIDES_TAP_DELAY_MS);
     }
     private void move(Stage next,String info){
         stage=next;started=SystemClock.elapsedRealtime();
@@ -104,7 +102,7 @@ public final class BoltTaxiController {
             case OPEN_APP: {
                 // Wait is measured from the successful startActivity(), not
                 // from locating any text/tile inside Bolt.
-                if(SystemClock.elapsedRealtime()-flowStarted<RIDES_TAP_DELAY_MS)
+                if(!BoltUiLabels.ridesTapDue(SystemClock.elapsedRealtime()-flowStarted))
                     break;
                 ScreenControlAccessibilityService.BoltStep result=
                     ScreenControlAccessibilityService.boltRidesAtFourSeconds();
