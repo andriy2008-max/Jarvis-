@@ -31,7 +31,11 @@ public final class BoltUiLabelsTest {
             "Checkout", "Confirm ride", "Trip details", "Замовити автомобіль"})
             yes(BoltUiLabels.unsafeForTimedRidesTap(risky));
         int[] rides=BoltUiLabels.screenshotRidesPoint(684,1536);
-        yes(rides!=null && rides[0]==184 && rides[1]==482);
+        yes(rides!=null && rides[0]==184 && rides[1]==321);
+        // 684x1536: the current «Поїздки» tile is x=26..336,y=218..423.
+        // The former y=482 accidentally targeted the Bolt Food row.
+        yes(rides[0]>=26 && rides[0]<=336 && rides[1]>=218 && rides[1]<=423);
+        yes(rides[1]<434);
         yes(BoltUiLabels.screenshotRidesPoint(1536,684)==null);
         yes(BoltUiLabels.screenshotRidesPoint(684,900)==null);
         yes(BoltUiLabels.destination("Куди поїдемо?"));
