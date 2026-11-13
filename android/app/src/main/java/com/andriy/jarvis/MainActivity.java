@@ -778,6 +778,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
             LinearLayout.LayoutParams micSourceParams = new LinearLayout.LayoutParams(-1,dp(43));
             micSourceParams.topMargin=dp(7);
             chatPanel.addView(microphoneSourceButton,micSourceParams);
+            TextView micNote=makeText(
+                "Android може перевизначити мікрофон для розпізнавання мовлення.",
+                11,MUTED,Gravity.CENTER,false);
+            chatPanel.addView(micNote);
         }
         speechPauseButton = secondaryButton("", this::showSpeechPauseSettings);
         refreshSpeechPauseLabel();
@@ -1308,9 +1312,6 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     ". Налаштування діє для головного та плаваючого Джарвіса.");
                 d.dismiss();
             })
-            .setMessage("Android може сам вибирати мікрофон для сервісу "+
-                "розпізнавання. Джарвіс запитує вибраний маршрут, але "+
-                "остаточний пристрій залежить від Android.")
             .setNegativeButton("Скасувати",null).create();
         showDialogWithoutWake(dialog);
     }
