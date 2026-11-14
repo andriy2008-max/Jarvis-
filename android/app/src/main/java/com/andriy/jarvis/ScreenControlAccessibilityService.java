@@ -1543,8 +1543,13 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if(event!=null &&
            event.getEventType()==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
            event.getPackageName()!=null) {
-            foregroundWindowPackage=event.getPackageName().toString();
-            foregroundWindowAt=android.os.SystemClock.elapsedRealtime();
+            String next=event.getPackageName().toString();
+            // The Jarvis floating face is not a different foreground app.
+            // Keep the last actual window identity when it redraws.
+            if(!next.equals(getPackageName())) {
+                foregroundWindowPackage=next;
+                foregroundWindowAt=android.os.SystemClock.elapsedRealtime();
+            }
         }
     }
 
