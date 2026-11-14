@@ -743,7 +743,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         boolean bolt="ee.mtakso.client".equals(packageName);
         boolean spotify="com.spotify.music".equals(packageName);
         boolean allowed=bolt ? ((x==333 && y==645) || (x==450 && y==520)) :
-            (spotify && x==403 && y==2211);
+            (spotify && ((x==403 && y==2211) || (x==490 && y==550)));
         if(!allowed || !sessionActive || !trustedExternalApp(packageName)) {
             cb.finished(false,"Програма не підтверджена на передньому плані.");
             return;
