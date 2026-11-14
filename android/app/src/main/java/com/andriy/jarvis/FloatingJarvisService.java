@@ -923,10 +923,8 @@ public final class FloatingJarvisService extends Service {
                         if (active() && recording) setFace("listening");
                     }
                     @Override public void onRmsChanged(float rms) {
-                        if (active() && phoneListening && recording && !stopRequested && rms > 2f) {
-                            speechPause.sawVoice(SystemClock.uptimeMillis());
-                            scheduleSilenceCheck();
-                        }
+                        // Traffic and ambient audio may keep RMS high indefinitely.
+                        // The phone-mode timer resets ONLY for new recognized words.
                     }
                     @Override public void onBufferReceived(byte[] buffer) {}
                     @Override public void onEndOfSpeech() {
@@ -946,9 +944,12 @@ public final class FloatingJarvisService extends Service {
                                 speechDraft.toString(), partialSpeech);
                             speechDraft.setLength(0);
                             speechDraft.append(combined);
-                            if (autoSilenceStop && !phoneListening)
-                                speechPause.sawWords(combined, SystemClock.uptimeMillis());
-                            else observeWords(combined);
+                            if (autoSilenceStop) {
+                                // Preserve final words but never rearm an expired
+                                // phone-mode deadline while awaiting final results.
+                                if (!phoneListening)
+                                    speechPause.sawWords(combined, SystemClock.uptimeMillis());
+                            } else observeWords(combined);
                         }
                         partialSpeech = "";
                         if(!stopRequested &&
@@ -966,7 +967,7 @@ public final class FloatingJarvisService extends Service {
                             }
                         }
                         if (stopRequested) {
-                            if (autoSilenceStop && !speechPause.expired(
+                            if (autoSilenceStop && !phoneListening && !speechPause.expired(
                                 SystemClock.uptimeMillis(), speechPauseSeconds())) {
                                 stopRequested = false;
                                 autoSilenceStop = false;
@@ -1030,9 +1031,12 @@ public final class FloatingJarvisService extends Service {
                                 speechDraft.toString(), finalSegment);
                             speechDraft.setLength(0);
                             speechDraft.append(combined);
-                            if (autoSilenceStop && !phoneListening)
-                                speechPause.sawWords(combined, SystemClock.uptimeMillis());
-                            else observeWords(combined);
+                            if (autoSilenceStop) {
+                                // Preserve final words but never rearm an expired
+                                // phone-mode deadline while awaiting final results.
+                                if (!phoneListening)
+                                    speechPause.sawWords(combined, SystemClock.uptimeMillis());
+                            } else observeWords(combined);
                         }
                         partialSpeech = "";
                         correctingWord = false;
@@ -1043,7 +1047,7 @@ public final class FloatingJarvisService extends Service {
                             return;
                         }
                         if (stopRequested) {
-                            if (autoSilenceStop && !speechPause.expired(
+                            if (autoSilenceStop && !phoneListening && !speechPause.expired(
                                 SystemClock.uptimeMillis(), speechPauseSeconds())) {
                                 stopRequested = false;
                                 autoSilenceStop = false;
