@@ -18,7 +18,7 @@ public final class BoltTaxiController {
         void onProgress(String status);
         void onFinished(boolean ok,String status);
     }
-    private enum Stage { COORD_RIDES, COORD_DROPOFF, COORD_TYPE }
+    private enum Stage { COORD_RIDES, COORD_DROPOFF, COORD_TYPE, COORD_ENTER }
     private final Context context;
     private final Listener listener;
     private final String address;
@@ -99,6 +99,7 @@ public final class BoltTaxiController {
      * home «Рушаймо» (333,645), 2s later «Місце висадки» (450,520).
      * Each coordinate is tapped once. If the destination editor belongs to
      * Bolt, Android's Accessibility InputMethod enters the spoken address.
+     * After the address is entered, Enter is sent once to the same Bolt editor.
      * No UI text reads, auto-retries on unknown pages, or ride confirmation.
      */
     private void pollCoordinates() {
@@ -167,11 +168,35 @@ public final class BoltTaxiController {
                 ScreenControlAccessibilityService.BoltStep typed=
                     ScreenControlAccessibilityService.boltTypeViaInputMethod(address);
                 if(typed==ScreenControlAccessibilityService.BoltStep.ENTERED) {
-                    finish(true,"Надіслав адресу в поле Bolt: "+address+
-                        ". Перевір текст і вибери правильний результат. Поїздку не замовляв.");
+                    // The user explicitly asked for Enter after typing.
+                    // Do not assume commitText alone triggers Bolt's search.
+                    move(Stage.COORD_ENTER,
+                        "Адресу введено. Через 500 мс натисну Enter для пошуку...");
+                    HANDLER.postDelayed(tick,500L);
+                    return;
                 } else if(typed==ScreenControlAccessibilityService.BoltStep.BLOCKED) {
                     finish(false,"Android не дозволив введення в поле Bolt. "+
                         "Перевір, чи відкрилося поле адреси.");
+                } else HANDLER.postDelayed(tick,POLL_MS);
+                return;
+            case COORD_ENTER:
+                if(elapsed<500L) {
+                    HANDLER.postDelayed(tick,500L-elapsed);return;
+                }
+                if(elapsed>8000L) {
+                    finish(false,"Bolt не підтвердив активне поле адреси для Enter. "+
+                        "Адресу введено, але Enter не натискав. Поїздку не замовляв.");
+                    return;
+                }
+                ScreenControlAccessibilityService.BoltStep enter=
+                    ScreenControlAccessibilityService.boltSubmitDestinationSearch();
+                if(enter==ScreenControlAccessibilityService.BoltStep.SUBMITTED) {
+                    finish(true,"Ввів адресу «"+address+
+                        "» і один раз натиснув Enter у пошуку Bolt. "+
+                        "Перевір правильність результату. Поїздку не замовляв.");
+                } else if(enter==ScreenControlAccessibilityService.BoltStep.BLOCKED) {
+                    finish(false,"Android не дозволив натиснути Enter у Bolt. "+
+                        "Адресу вже введено. Поїздку не замовляв.");
                 } else HANDLER.postDelayed(tick,POLL_MS);
                 return;
             default:
