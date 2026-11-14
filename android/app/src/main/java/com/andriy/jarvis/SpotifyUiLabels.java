@@ -108,25 +108,6 @@ public final class SpotifyUiLabels {
             (t+b)/2f>rootT+rh*.16f && (t+b)/2f<rootT+rh*.66f;
     }
 
-    /** Unlabelled Compose Play buttons can still expose clickable bounds.
-     * Require a large almost-round node on the right side of a verified
-     * playlist toolbar. Shuffle/download/menu icons are smaller and the
-     * bottom mini-player lies below this region. */
-    public static boolean unlabeledPlaylistPlayAt(int l,int t,int r,int b,
-                                                   int rootL,int rootT,
-                                                   int rootR,int rootB,float density) {
-        int w=r-l,h=b-t,rw=rootR-rootL,rh=rootB-rootT;
-        return rw>=240 && rh>=400 &&
-            w>=43*density && h>=43*density &&
-            w<=104*density && h<=104*density &&
-            w<rw*.26f && h<rh*.13f &&
-            w>=h*.78f && h>=w*.78f &&
-            (l+r)/2f>rootL+rw*.76f &&
-            (l+r)/2f<rootR-rw*.012f &&
-            (t+b)/2f>rootT+rh*.10f &&
-            (t+b)/2f<rootT+rh*.62f;
-    }
-
     /** Last-resort Play tap calibrated from the user's Spotify playlist
      * screenshot (684×1536), x≈616,y≈369. Only use after identifying a
      * PLAYLIST page in Spotify; never on library/search/mini-player screens. */
