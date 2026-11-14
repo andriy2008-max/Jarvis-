@@ -216,7 +216,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 manualCapture=false;
                 manualStopRequested=false;
                 stopPhoneListening();
-                resetListening("Мікрофон Watch7 не запустився після трьох спроб. "+
+                resetListening("Не вдалося запустити мікрофон Watch7 після трьох спроб. "+
                     "Перевір дозвіл мікрофона й службу голосового вводу.");
             }
         };
@@ -294,7 +294,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 if(manualTranscript.length()>0)finishManualCapture();
                 else{
                     manualCapture=false;
-                    resetListening("Розпізнавання Watch7 не відповідає. "+
+                    resetListening("Не вдалося отримати результат розпізнавання Watch7. "+
                         "Перевір службу голосового вводу.");
                 }
                 return;
