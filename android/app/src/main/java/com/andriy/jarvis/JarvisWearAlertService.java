@@ -96,19 +96,21 @@ public final class JarvisWearAlertService extends Service {
     private void ring() {
         Uri sound=RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
         if(sound!=null) {
+            MediaPlayer candidate=null;
             try {
-                MediaPlayer p=new MediaPlayer();
-                p.setAudioAttributes(new AudioAttributes.Builder()
+                candidate=new MediaPlayer();
+                candidate.setAudioAttributes(new AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ALARM)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
-                p.setDataSource(this,sound);
-                p.setLooping(true);
-                p.prepare();
-                p.start();
-                player=p;
+                candidate.setDataSource(this,sound);
+                candidate.setLooping(true);
+                candidate.prepare();
+                candidate.start();
+                player=candidate;
                 return;
             }catch(Exception ignored) {
-                if(player!=null){player.release();player=null;}
+                if(candidate!=null)candidate.release();
+                player=null;
             }
         }
         try {
