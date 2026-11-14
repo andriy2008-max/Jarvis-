@@ -46,6 +46,8 @@ public final class AssistantIntentsTest {
         assertTime("постав будильник на 25", null, null);
         assertTime("постав будильник на 19 77", null, null);
         eq(AssistantIntents.alarmNeedsTime("постав будильник"), true);
+        eq(AssistantIntents.alarmNeedsTime(
+            CommandPatterns.normalizeControlVerb("Джарвіс, постав будильник")),true);
         eq(AssistantIntents.alarmNeedsTime("встанови будильник"), true);
         eq(AssistantIntents.alarmNeedsTime("будильник"), true);
         eq(AssistantIntents.alarmNeedsTime("розбуди мене"), true);
