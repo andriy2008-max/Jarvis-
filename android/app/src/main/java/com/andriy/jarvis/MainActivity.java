@@ -3827,6 +3827,26 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 } else setStatus("Spotify ще виконує команду. Скажи «Скасуй Spotify».");
                 return;
             }
+            // Taxi must be routed to the PHONE before the generic AI fallback,
+            // whether or not manual phone-control mode is already active.
+            if (JarvisTaxiCommands.destination(raw) != null) {
+                if (watchPhoneLink == null) {
+                    setStatus("Немає зв'язку з телефоном. Bolt запускається на телефоні.");
+                    return;
+                }
+                watchPhoneLink.taxi(raw, (ok, detail) -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+                    appendDialogue("Джарвіс", detail);
+                    setStatus(detail);
+                    if (voiceEnabled) speakReply(detail);
+                });
+                return;
+            }
+            if (watchPhoneLink != null && watchPhoneLink.taxiRunning()) {
+                setStatus("Bolt готує маршрут на телефоні. Дочекайся результату.");
+                return;
+            }
             if (modeTransition == JarvisPhoneMode.Transition.ENTER) {
                 if (watchPhoneLink == null) {
                     setStatus("На годиннику немає з'єднання з телефоном.");
