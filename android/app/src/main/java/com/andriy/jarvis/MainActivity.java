@@ -3650,6 +3650,25 @@ public final class MainActivity extends Activity implements RecognitionListener 
         Calendar now = Calendar.getInstance();
         android.app.TimePickerDialog picker = new android.app.TimePickerDialog(
             this, (view, hour, minute) -> {
+                if(isWatchDevice) {
+                    if(watchPhoneLink==null) {
+                        setStatus("Немає зв’язку з Pixel для встановлення будильника.");
+                        return;
+                    }
+                    String command=String.format(Locale.ROOT,
+                        "постав будильник на %02d:%02d",hour,minute);
+                    setStatus("Встановлюю будильник на Pixel...");
+                    // No app launch on Wear: the phone creates an exact alarm
+                    // through its already user-approved AlarmManager.
+                    watchPhoneLink.assistant(command,(ok,detail)->{
+                        if(isFinishing() || isDestroyed())return;
+                        appendDialogue("Джарвіс",detail);
+                        setStatus(detail);
+                        if(voiceEnabled)speakReply(detail);
+                        else if(face!=null)face.setState("idle");
+                    });
+                    return;
+                }
                 String feedback = openAlarmClock(
                     new AssistantIntents.ClockTime(hour,minute),"Будильник Джарвіса");
                 appendDialogue("Джарвіс",feedback);
@@ -4480,6 +4499,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (modeTransition == JarvisPhoneMode.Transition.EXIT &&
                 JarvisPhoneMode.isActive()) {
                 exitPhoneMode();
+                return;
+            }
+            // «Постав будильник» without a dictated hour must ask for one
+            // on Watch7; never send an underspecified command to the AI.
+            if(AssistantIntents.alarmNeedsTime(
+                CommandPatterns.normalizeControlVerb(raw))) {
+                showAlarmPicker();
                 return;
             }
             // Image requests from the watch are handled on Pixel, not by
