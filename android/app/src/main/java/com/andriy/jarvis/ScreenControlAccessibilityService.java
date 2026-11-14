@@ -2038,7 +2038,9 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             if(!node.isVisibleToUser() || !node.isEnabled() || node.isPassword())continue;
             if(!node.isEditable() &&
                (SpotifyTrackSearchRules.exactSong(title,asString(node.getText())) ||
-                SpotifyTrackSearchRules.exactSong(title,asString(node.getContentDescription())))) {
+                SpotifyTrackSearchRules.exactSong(title,asString(node.getContentDescription())) ||
+                SpotifyTrackSearchRules.exactTypedSong(title,
+                    asString(node.getContentDescription())))) {
                 AccessibilityNodeInfo action=clickable(node);
                 if(action!=null && action.isEnabled() && action.isClickable()) {
                     Rect r=new Rect();action.getBoundsInScreen(r);
