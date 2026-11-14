@@ -28,6 +28,20 @@ public final class SpotifyMusicCommandsTest {
         is("Сыграй песню Трава у дома",SpotifyMusicCommands.Kind.TRACK);
         is("Увімкни пісню Плакала",SpotifyMusicCommands.Kind.TRACK);
         is("Увімкни пісню Весна прийде",SpotifyMusicCommands.Kind.TRACK);
+        is("Увімкни пісню Shape of You",SpotifyMusicCommands.Kind.TRACK);
+        is("Увімкни пісню Billie Jean",SpotifyMusicCommands.Kind.TRACK);
+        is("Увімкни пісню Bohemian Rhapsody",SpotifyMusicCommands.Kind.TRACK);
+        is("Увімкни пісню Метель",SpotifyMusicCommands.Kind.TRACK);
+        is("Увімкни пісню Всё как у людей",SpotifyMusicCommands.Kind.TRACK);
+        is("Джарвіс, увімкни пісню Never Gonna Give You Up",
+            SpotifyMusicCommands.Kind.TRACK);
+        if (!"shape of you".equals(SpotifyMusicCommands.namedTrack(
+                 "Увімкни пісню Shape of You")) ||
+            !"всё как у людей".equals(SpotifyMusicCommands.namedTrack(
+                 "Увімкни пісню Всё как у людей")) ||
+            !"billie jean".equals(SpotifyMusicCommands.namedTrack(
+                 "Джарвіс, увімкни пісню Billie Jean")))
+            throw new AssertionError("Ukrainian command must preserve Russian/English song titles");
         is("Включи музыку",SpotifyMusicCommands.Kind.OPEN);
         is("Проиграй украинскую музыку",SpotifyMusicCommands.Kind.UKRAINIAN);
         if (!"всё как у людей".equals(SpotifyMusicCommands.namedTrack(
