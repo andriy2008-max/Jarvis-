@@ -201,7 +201,36 @@ public final class SpotifyPlaybackController {
         if (listener != null) listener.onProgress(message);
     }
 
+    /** Never let an invalidated Spotify Accessibility node or a changing
+     * Compose hierarchy crash the entire Jarvis process on the UI thread. */
     private void tick() {
+        if(!active)return;
+        try {
+            tickStep();
+        } catch(RuntimeException failure) {
+            Stage failedStage=stage;
+            android.util.Log.e("JARVIS_SPOTIFY",
+                "Spotify step failed: "+(failedStage==null?"unknown":failedStage.name()),
+                failure);
+            if(!active)return;
+            String stageName=failedStage==null?"unknown":failedStage.name();
+            // Do not include track titles or other private screen data in logs.
+            try {
+                finish(false,"Spotify: помилка доступу до екрана на етапі "+
+                    stageName+" ("+failure.getClass().getSimpleName()+
+                    "). Послідовність зупинено; повторних натискань не робив.");
+            } catch(RuntimeException cleanupFailure) {
+                android.util.Log.e("JARVIS_SPOTIFY",
+                    "Spotify cleanup failed",cleanupFailure);
+                handler.removeCallbacks(poll);
+                active=false;
+                stage=null;
+                listener=null;
+            }
+        }
+    }
+
+    private void tickStep() {
         if (!active || stage == null) return;
         if (!JarvisPhoneScreenGuard.available(context)) {
             finish(false,JarvisPhoneScreenGuard.MESSAGE); return;
