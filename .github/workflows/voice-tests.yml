@@ -25,10 +25,12 @@ on:
       - 'android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisSearchRouting.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisVoicePause.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisSpeechLanguages.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisWavEnvelope.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisSpeechMouth.java'
       - 'android/app/src/main/java/com/andriy/jarvis/OfflineSpeechClient.java'
       - 'android/app/src/test/java/com/andriy/jarvis/JarvisVoicePauseTest.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/JarvisSpeechLanguagesTest.java'
       - 'android/app/src/test/java/com/andriy/jarvis/JarvisWavEnvelopeTest.java'
       - 'android/app/src/main/java/com/andriy/jarvis/GeneralWebSearchResults.java'
       - 'android/app/src/main/java/com/andriy/jarvis/GeneralWebSearchClient.java'
@@ -192,6 +194,7 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/SpotifyUriRules.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisSearchRouting.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisVoicePause.java \
+            android/app/src/main/java/com/andriy/jarvis/JarvisSpeechLanguages.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisWavEnvelope.java \
             android/app/src/main/java/com/andriy/jarvis/GeneralWebSearchResults.java \
             android/app/src/main/java/com/andriy/jarvis/WorldNewsCommands.java \
@@ -224,6 +227,7 @@ jobs:
             android/app/src/test/java/com/andriy/jarvis/SpotifyUriRulesTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisSearchRoutingTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisVoicePauseTest.java \
+            android/app/src/test/java/com/andriy/jarvis/JarvisSpeechLanguagesTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisWavEnvelopeTest.java \
             android/app/src/test/java/com/andriy/jarvis/GeneralWebSearchResultsTest.java \
             android/app/src/test/java/com/andriy/jarvis/WorldNewsCommandsTest.java \
@@ -265,6 +269,7 @@ jobs:
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyUriRulesTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisSearchRoutingTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisVoicePauseTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisSpeechLanguagesTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisWavEnvelopeTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.GeneralWebSearchResultsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.WorldNewsCommandsTest
