@@ -21,6 +21,20 @@ public final class SpotifyMusicCommandsTest {
         is("увімкни пісню Океан",SpotifyMusicCommands.Kind.TRACK);
         is("Джарвіс, включи трек Мій трек",SpotifyMusicCommands.Kind.TRACK);
         is("запусти song Skyfall",SpotifyMusicCommands.Kind.TRACK);
+        is("Включи песню Метель",SpotifyMusicCommands.Kind.TRACK);
+        is("Джарвіс, поставь песню Всё как у людей",SpotifyMusicCommands.Kind.TRACK);
+        is("Проиграй песню Снег",SpotifyMusicCommands.Kind.TRACK);
+        is("Воспроизведи трек Белые розы",SpotifyMusicCommands.Kind.TRACK);
+        is("Сыграй песню Трава у дома",SpotifyMusicCommands.Kind.TRACK);
+        is("Увімкни пісню Плакала",SpotifyMusicCommands.Kind.TRACK);
+        is("Увімкни пісню Весна прийде",SpotifyMusicCommands.Kind.TRACK);
+        is("Включи музыку",SpotifyMusicCommands.Kind.OPEN);
+        is("Проиграй украинскую музыку",SpotifyMusicCommands.Kind.UKRAINIAN);
+        if (!"всё как у людей".equals(SpotifyMusicCommands.namedTrack(
+             "Поставь песню Всё как у людей")) ||
+            !"весна прийде".equals(SpotifyMusicCommands.namedTrack(
+             "Увімкни пісню Весна прийде")))
+            throw new AssertionError("Preserve Ukrainian and Russian dictated titles");
         is("увімкни пісню",null);
         is("виключи пісню Океан",null);
         if(!"океан".equals(SpotifyMusicCommands.namedTrack("увімкни пісню Океан")))
