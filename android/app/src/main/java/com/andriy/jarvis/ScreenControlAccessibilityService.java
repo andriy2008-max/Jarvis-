@@ -46,6 +46,11 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     private static final int MAX_MATCHES = 3;
 
     private volatile boolean sessionActive;
+    // Foreground identity without reading Bolt's often-inaccessible view tree.
+    // Only updated from system window transitions; never starts actions itself.
+    private volatile String foregroundWindowPackage = "";
+    private volatile long foregroundWindowAt;
+
     private WindowManager windows;
     private View buttonOverlay;
     private SpeechRecognizer recognizer;
@@ -676,6 +681,130 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     public static boolean boltVisible() {
         ScreenControlAccessibilityService service = connected.get();
         return service != null && service.sessionActive && service.currentBoltRoot() != null;
+    }
+
+    /**
+     * Only two owner-calibrated Bolt points are allowed here. Android's
+     * accessibility window-state event supplies app identity even when
+     * Bolt hides its view hierarchy. This is NOT proof of a specific screen,
+     * so the controller performs each tap at most once and never books.
+     */
+    public static boolean boltCoordinateReady() {
+        ScreenControlAccessibilityService s=connected.get();
+        return s!=null && s.sessionActive && s.boltWindowTrusted();
+    }
+
+    private boolean boltWindowTrusted() {
+        if(!JarvisPhoneScreenGuard.available(this)) return false;
+        try {
+            if(currentBoltRoot()!=null) return true;
+        } catch(RuntimeException ignored) { /* Bolt may block the tree. */ }
+        return "ee.mtakso.client".equals(foregroundWindowPackage) &&
+            android.os.SystemClock.elapsedRealtime()-foregroundWindowAt<15000L;
+    }
+
+    public static void boltTapCalibrated(int x,int y,Completion cb) {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null || !s.sessionActive || cb==null) {
+            if(cb!=null)cb.finished(false,"Служба керування екраном не активна.");
+            return;
+        }
+        s.tapBoltCalibrated(x,y,cb);
+    }
+
+    private void tapBoltCalibrated(int x,int y,Completion cb) {
+        // Exact coordinates measured on this Pixel, never scaled heuristically.
+        if(!((x==333 && y==645) || (x==450 && y==520)) ||
+            !boltWindowTrusted()) {
+            cb.finished(false,"Bolt не підтверджено на передньому плані.");
+            return;
+        }
+        android.graphics.Point size=new android.graphics.Point();
+        android.view.Display display=getDisplay();
+        if(display==null) {
+            WindowManager wm=(WindowManager)getSystemService(Context.WINDOW_SERVICE);
+            if(wm!=null)display=wm.getDefaultDisplay();
+        }
+        if(display==null) {
+            cb.finished(false,"Не вдалося визначити екран.");return;
+        }
+        display.getRealSize(size);
+        if(size.x<450 || size.y<size.x*1.6f ||
+           x<0 || y<0 || x>=size.x || y>=size.y) {
+            cb.finished(false,"Невідповідна орієнтація або координати екрана.");
+            return;
+        }
+        FloatingJarvisService.avoidControl(new Rect(x-24,y-24,x+24,y+24));
+        final Runnable restore=FloatingJarvisService.hideForGesture();
+        final java.util.concurrent.atomic.AtomicBoolean once=
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+        final Completion finishTap=(ok,detail)->{
+            if(!once.compareAndSet(false,true))return;
+            try {restore.run();}catch(RuntimeException ignored){}
+            cb.finished(ok,detail);
+        };
+        main.postDelayed(()->{
+            if(!sessionActive || !boltWindowTrusted()) {
+                finishTap.finished(false,"Bolt перестав бути активним до натискання.");
+                return;
+            }
+            Path path=new Path();
+            path.moveTo(x,y);
+            GestureDescription gesture=new GestureDescription.Builder()
+                .addStroke(new GestureDescription.StrokeDescription(path,0,90))
+                .build();
+            try {
+                boolean accepted=dispatchGesture(gesture,new GestureResultCallback(){
+                    @Override public void onCompleted(GestureDescription g) {
+                        finishTap.finished(true,"Точку натиснуто.");
+                    }
+                    @Override public void onCancelled(GestureDescription g) {
+                        finishTap.finished(false,"Android скасував натискання.");
+                    }
+                },main);
+                if(!accepted)finishTap.finished(false,"Android відхилив натискання.");
+                else main.postDelayed(()->finishTap.finished(false,
+                    "Час очікування натискання вичерпано."),5000L);
+            }catch(RuntimeException error){
+                finishTap.finished(false,"Не вдалося натиснути координати.");
+            }
+        },80L);
+    }
+
+    /**
+     * Direct keyboard connection works on Android 13+ without inspecting
+     * Bolt's accessibility nodes. Never types if a different app owns
+     * the editor, the field is password-like, or Bolt wasn't tapped first.
+     */
+    public static BoltStep boltTypeViaInputMethod(String address) {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null || !s.sessionActive ||
+            address==null || address.trim().isEmpty() || address.length()>250)
+            return BoltStep.BLOCKED;
+        if(android.os.Build.VERSION.SDK_INT<33) return BoltStep.BLOCKED;
+        try {
+            android.accessibilityservice.InputMethod input=s.getInputMethod();
+            if(input==null || !input.getCurrentInputStarted())return BoltStep.WAIT;
+            android.view.inputmethod.EditorInfo editor=input.getCurrentInputEditorInfo();
+            android.accessibilityservice.InputMethod.AccessibilityInputConnection conn=
+                input.getCurrentInputConnection();
+            if(editor==null || conn==null)return BoltStep.WAIT;
+            if(!"ee.mtakso.client".equals(editor.packageName))
+                return BoltStep.BLOCKED;
+            int type=editor.inputType;
+            int variation=type & InputType.TYPE_MASK_VARIATION;
+            if((type & InputType.TYPE_MASK_CLASS)!=InputType.TYPE_CLASS_TEXT ||
+               variation==InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+               variation==InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
+               variation==InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD)
+                return BoltStep.BLOCKED;
+            conn.commitText(address,1,null);
+            // commitText does not acknowledge that Bolt displayed the string.
+            // Do not repeat it or press any booking/confirmation button.
+            return BoltStep.ENTERED;
+        }catch(RuntimeException denied){
+            return BoltStep.BLOCKED;
+        }
     }
 
     /** Wait for visible «Рушаймо» rather than tapping a four-second guess. */
@@ -1409,7 +1538,14 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     }
 
     @Override public void onAccessibilityEvent(AccessibilityEvent event) {
-        // Deliberately no autonomous screen scanning, action or transmission.
+        // Observe only the foreground package. Never read screen contents,
+        // start a gesture or transmit any accessibility data on an event.
+        if(event!=null &&
+           event.getEventType()==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+           event.getPackageName()!=null) {
+            foregroundWindowPackage=event.getPackageName().toString();
+            foregroundWindowAt=android.os.SystemClock.elapsedRealtime();
+        }
     }
 
     @Override public void onInterrupt() {
