@@ -1,6 +1,12 @@
 package com.andriy.jarvis;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import java.io.InputStream;
+import com.google.android.gms.wearable.Asset;
+import com.google.android.gms.wearable.DataItem;
+import com.google.android.gms.wearable.DataMapItem;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -23,6 +29,12 @@ import java.util.UUID;
 public final class JarvisWearPhoneLink {
     public interface Callback { void finished(boolean ok, String message); }
     public interface DocumentCallback { void finished(boolean ok, Document page); }
+    public interface ImageCallback {
+        void finished(boolean ok,String detail,String imageId,String phoneNode);
+    }
+    public interface PreviewCallback {
+        void finished(boolean ok,Bitmap preview,String detail);
+    }
 
     /** Paginated answer; the document ID remains on watch only while readable. */
     public static final class Document {
@@ -54,6 +66,8 @@ public final class JarvisWearPhoneLink {
     private String pendingType;
     private Callback pendingCallback;
     private Document pendingDocument;
+    private String pendingImageId="";
+    private String pendingImageNode="";
     private Runnable timeout;
     private long feedback;
     private final Runnable sync = new Runnable() {
@@ -135,6 +149,99 @@ public final class JarvisWearPhoneLink {
             Document page=pendingDocument;
             cb.finished(ok,page!=null?page:new Document(detail,"",0,1));
         });
+    }
+
+    /** Execute image generation on Pixel, then receive only image metadata. */
+    public void generateImage(String utterance,ImageCallback cb) {
+        if(cb==null)return;
+        if(!JarvisWearProtocol.validCommand(utterance) ||
+           JarvisWearImageCommands.prompt(utterance)==null) {
+            cb.finished(false,"Не розпізнав команду створення зображення.","","");
+            return;
+        }
+        pendingImageId="";
+        pendingImageNode="";
+        send(JarvisWearProtocol.GENERATE_IMAGE,utterance,(ok,detail)->{
+            cb.finished(ok,detail,pendingImageId,pendingImageNode);
+        });
+    }
+
+    /** The actual PNG stays on Pixel; this is an explicit save request. */
+    public void saveGeneratedImage(String imageId,Callback cb) {
+        if(cb==null)return;
+        if(!JarvisWearProtocol.validId(imageId)) {
+            cb.finished(false,"Зображення недоступне для збереження.");
+            return;
+        }
+        send(JarvisWearProtocol.SAVE_IMAGE,imageId,cb);
+    }
+
+    /** Wear OS Data Layer Asset instead of oversized image bytes in MessageClient. */
+    public void loadImagePreview(String phoneNode,String imageId,PreviewCallback cb) {
+        if(cb==null)return;
+        if(phoneNode==null || phoneNode.isEmpty() ||
+           !JarvisWearProtocol.validId(imageId)) {
+            cb.finished(false,null,"Невірні дані зображення.");
+            return;
+        }
+        fetchPreview(phoneNode,imageId,cb,0);
+    }
+
+    private void fetchPreview(String phoneNode,String imageId,PreviewCallback cb,int attempt) {
+        if(closed) {
+            cb.finished(false,null,"Зв'язок із телефоном закрито.");
+            return;
+        }
+        Uri location=new Uri.Builder().scheme("wear").authority(phoneNode)
+            .path(JarvisWearImageBridge.IMAGE_PATH+imageId).build();
+        try {
+            Wearable.getDataClient(context).getDataItem(location)
+                .addOnSuccessListener(item->{
+                    if(item==null) {
+                        retryPreview(phoneNode,imageId,cb,attempt);
+                        return;
+                    }
+                    Asset preview=DataMapItem.fromDataItem(item)
+                        .getDataMap().getAsset("preview");
+                    if(preview==null) {
+                        retryPreview(phoneNode,imageId,cb,attempt);
+                        return;
+                    }
+                    Wearable.getDataClient(context).getFdForAsset(preview)
+                        .addOnSuccessListener(result->{
+                            if(result==null) {
+                                retryPreview(phoneNode,imageId,cb,attempt);
+                                return;
+                            }
+                            new Thread(()->{
+                                Bitmap bitmap=null;
+                                try(InputStream stream=result.getInputStream()){
+                                    if(stream!=null)bitmap=BitmapFactory.decodeStream(stream);
+                                }catch(Exception ignored){}
+                                final Bitmap complete=bitmap;
+                                main.post(()->{
+                                    if(complete!=null)
+                                        cb.finished(true,complete,"Зображення отримано.");
+                                    else retryPreview(phoneNode,imageId,cb,attempt);
+                                });
+                            },"jarvis-watch-preview").start();
+                        })
+                        .addOnFailureListener(error->
+                            retryPreview(phoneNode,imageId,cb,attempt));
+                }).addOnFailureListener(error->
+                    retryPreview(phoneNode,imageId,cb,attempt));
+        }catch(RuntimeException failure){
+            retryPreview(phoneNode,imageId,cb,attempt);
+        }
+    }
+
+    private void retryPreview(String node,String id,PreviewCallback cb,int count) {
+        if(count>=7) {
+            cb.finished(false,null,"Прев’ю не синхронізувалося з Pixel. "+
+                "Перевір Bluetooth/Wi-Fi й повтори.");
+            return;
+        }
+        main.postDelayed(()->fetchPreview(node,id,cb,count+1),1000L);
     }
 
     /** PIN entered for this single command; never persisted or sent to AI. */
@@ -320,6 +427,9 @@ public final class JarvisWearPhoneLink {
             final Callback cb = pendingCallback;
             final boolean ok = data.optBoolean("ok",false);
             final String detail = data.optString("detail","Телефон не повернув результат.");
+            pendingImageId=data.optString("image_id","");
+            if(!JarvisWearProtocol.validId(pendingImageId))pendingImageId="";
+            pendingImageNode=pendingImageId.isEmpty()?"":event.getSourceNodeId();
             final String documentId=data.optString("document_id","");
             if(JarvisWearProtocol.validId(documentId)) {
                 pendingDocument=new Document(detail,documentId,
