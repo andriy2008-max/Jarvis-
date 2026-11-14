@@ -29,6 +29,7 @@ public final class SpotifyMusicCommandsTest {
         is("Увімкни пісню Плакала",SpotifyMusicCommands.Kind.TRACK);
         is("Увімкни пісню Весна прийде",SpotifyMusicCommands.Kind.TRACK);
         is("Увімкни пісню Shape of You",SpotifyMusicCommands.Kind.TRACK);
+        is("Умімкни пісню Shape of You",SpotifyMusicCommands.Kind.TRACK);
         is("Увімкни пісню Billie Jean",SpotifyMusicCommands.Kind.TRACK);
         is("Увімкни пісню Bohemian Rhapsody",SpotifyMusicCommands.Kind.TRACK);
         is("Увімкни пісню Метель",SpotifyMusicCommands.Kind.TRACK);
