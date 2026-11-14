@@ -1846,7 +1846,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                                 "ні код доступу Cloudflare. Голосові запити, Telegram, " +
                                 "Spotify та інші підтримувані команди передаються " +
                                 "на телефон через Wear OS.")
-                            .setNeutralButton("Перевірити", (dialog, whichButton) ->
+                            .setNeutralButton("Перевірити", (choiceDialog, whichButton) ->
                                 processCommand("перевір підключення ШІ"))
                             .setPositiveButton("Зрозуміло", null).create();
                         showDialogWithoutWake(info);
