@@ -437,6 +437,7 @@ public final class JarvisWearPhoneAssistant {
                 (financeApiToken ? ", API-токен збережено на Pixel" :
                     ", API-токен не налаштований") +
                 "; запис поки через екран.\n" +
+            JarvisWearAlarmScheduler.permissionStatus(phone) + "\n" +
             "Bolt: " + (boltInstalled ? "встановлено" : "не встановлено") +
                 "; Shazam: " + (shazamInstalled ? "встановлено" : "не встановлено") +
                 ".\nКерування екраном: " + (screenAllowed ? "дозволено" :
