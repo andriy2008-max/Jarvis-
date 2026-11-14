@@ -168,23 +168,23 @@ public final class BoltTaxiController {
             case VERIFY_RIDES:
                 if(ScreenControlAccessibilityService.boltRidesReady()) {
                     move(Stage.DELAY,"«Поїздки» відкрито. Шукаю «Місце висадки»...");
-                } else if(age>=RETAP_AFTER_MS) {
-                    // Reacquire only the same «Рушаймо» HOME control. No
-                    // screenshot-coordinate guessing if navigation is slow.
+                } else if(age>=RETAP_AFTER_MS && ridesRetries==0) {
+                    // At most ONE retry, only when «Рушаймо» is still
+                    // explicitly visible. Never tap another unknown screen.
                     ScreenControlAccessibilityService.BoltStep again=
                         ScreenControlAccessibilityService.boltLetsGo();
                     if(again==ScreenControlAccessibilityService.BoltStep.READY) {
                         move(Stage.DELAY,"Маршрут Bolt відкрито. Шукаю «Місце висадки»...");
-                    } else if(again==ScreenControlAccessibilityService.BoltStep.CLICKED &&
-                              ridesRetries++<1) {
+                    } else if(again==ScreenControlAccessibilityService.BoltStep.CLICKED) {
+                        ridesRetries=1;
                         move(Stage.VERIFY_RIDES,"Повторив «Рушаймо». Перевіряю маршрут...");
                     } else if(again==ScreenControlAccessibilityService.BoltStep.BLOCKED) {
                         finish(false,"Bolt перейшов на інший екран; не натискатиму навмання.");
                         return;
-                    } else if(age>=7000L) {
-                        finish(false,"Після «Рушаймо» не з'явився маршрут із «Місце висадки». Поїздку не замовляв.");
-                        return;
                     }
+                } else if(age>=7000L) {
+                    finish(false,"Після «Рушаймо» не з'явився маршрут із «Місце висадки». Поїздку не замовляв.");
+                    return;
                 }
                 break;
             case DELAY:
