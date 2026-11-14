@@ -91,7 +91,14 @@ public final class FloatingJarvisService extends Service {
         if (service == null || service.closing) return () -> {};
         service.gestureHides++;
         service.overlayDragging=false;
-        service.refreshOverlayLayout();
+        try {
+            service.refreshOverlayLayout();
+        }catch(RuntimeException failure) {
+            service.gestureHides=Math.max(0,service.gestureHides-1);
+            android.util.Log.w("JARVIS_FLOATING",
+                "Cannot hide floating face before screen gesture",failure);
+            throw failure; // Caller must NOT tap with an unhidden overlay.
+        }
         if ((service.getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE)!=0)
             android.util.Log.i("JARVIS_FLOATING_QA","qa_overlay_gesture_hidden="+
                 (service.faceParams!=null && service.faceParams.alpha==0f &&
