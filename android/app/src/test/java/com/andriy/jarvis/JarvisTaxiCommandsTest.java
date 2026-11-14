@@ -7,6 +7,12 @@ public final class JarvisTaxiCommandsTest {
             throw new AssertionError(input+": expected "+expected+" got "+actual);
     }
     public static void main(String[] args){
+        check("Таксі","");
+        check("такси","");
+        check("Джарвіс, таксі","");
+        check("Виклич таксі до вокзалу","вокзалу");
+        check("Замов таксі до Стебника","Стебника");
+        check("Джарвіс, таксі до вокзалу","вокзалу");
         check("Джарвіс таксі","");
         check("Таксі Стебник дім","Стебник дім");
         check("Джарвіс, таксі Борислав дім","Борислав дім");
