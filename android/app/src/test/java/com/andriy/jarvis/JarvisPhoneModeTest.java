@@ -9,7 +9,10 @@ public final class JarvisPhoneModeTest {
         eq(JarvisPhoneMode.Transition.ENTER,JarvisPhoneMode.transition("Телефон"));
         eq(JarvisPhoneMode.Transition.ENTER,JarvisPhoneMode.transition("Джарвіс, телефон"));
         eq(JarvisPhoneMode.Transition.ENTER,JarvisPhoneMode.transition("режим телефона"));
+        eq(JarvisPhoneMode.Transition.EXIT,JarvisPhoneMode.transition("Годинник"));
         eq(JarvisPhoneMode.Transition.EXIT,JarvisPhoneMode.transition("Джарвіс"));
+        eq(JarvisPhoneMode.Transition.EXIT,JarvisPhoneMode.transition("Jarvis"));
+        eq(JarvisPhoneMode.Transition.EXIT,JarvisPhoneMode.transition("джарвис"));
         eq(JarvisPhoneMode.Transition.EXIT,JarvisPhoneMode.transition("джарвіс!"));
         eq(JarvisPhoneMode.Transition.EXIT,JarvisPhoneMode.transition("вийди з режиму телефон"));
         eq(JarvisPhoneMode.Transition.NONE,JarvisPhoneMode.transition("джарвіс натисни пошук"));
