@@ -1837,7 +1837,9 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         return service.tapSpotifyControl(target, playlist);
     }
 
-    /** Spotify global Search tab, explicitly on the Pixel; never on Wear. */
+    /** Spotify global Search tab, explicitly on the Pixel; never on Wear.
+     * First try the accessible tab; only if Android rejects ACTION_CLICK,
+     * emulate a touch at the centre of a VISIBLE bottom Search label. */
     public static SpotifyStep spotifySearchTab() {
         ScreenControlAccessibilityService service=connected.get();
         if(service==null || !service.sessionActive)return SpotifyStep.BLOCKED;
@@ -1846,21 +1848,21 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if(service.spotifySearchEditor(root)!=null)return SpotifyStep.ALREADY;
         Rect frame=new Rect();root.getBoundsInScreen(frame);
         ArrayDeque<AccessibilityNodeInfo> nodes=new ArrayDeque<>();nodes.add(root);
+        AccessibilityNodeInfo found=null;Rect labelBox=null;
         int scanned=0;
         while(!nodes.isEmpty() && ++scanned<=MAX_SCAN) {
             AccessibilityNodeInfo node=nodes.removeFirst();
             if(!node.isVisibleToUser() || !node.isEnabled() || node.isPassword())continue;
             if(SpotifyTrackSearchRules.searchTab(asString(node.getText())) ||
                SpotifyTrackSearchRules.searchTab(asString(node.getContentDescription()))) {
-                AccessibilityNodeInfo target=clickable(node);
-                if(target!=null && target.isEnabled() && target.isClickable()) {
-                    Rect rect=new Rect();target.getBoundsInScreen(rect);
-                    if(rect.centerY()>frame.top+frame.height()*.73f &&
-                       rect.centerY()<frame.bottom && rect.height()<frame.height()*.18f) {
-                        FloatingJarvisService.avoidControl(rect);
-                        return target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                            ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
-                    }
+                Rect rect=new Rect();node.getBoundsInScreen(rect);
+                if(SpotifyTrackSearchRules.bottomSearchTabRegion(rect.centerX(),
+                    rect.centerY(),rect.width(),rect.height(),
+                    frame.left,frame.top,frame.right,frame.bottom)) {
+                    AccessibilityNodeInfo target=clickable(node);
+                    if(labelBox!=null && !labelBox.equals(rect))return SpotifyStep.WAIT;
+                    labelBox=rect;
+                    found=target;
                 }
             }
             for(int i=0;i<node.getChildCount();i++){
@@ -1868,7 +1870,60 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                 if(child!=null)nodes.addLast(child);
             }
         }
-        return SpotifyStep.WAIT;
+        if(scanned>MAX_SCAN || labelBox==null ||
+           service.currentSpotifyRoot()==null)return SpotifyStep.WAIT;
+        FloatingJarvisService.avoidControl(labelBox);
+        if(found!=null && found.isEnabled() &&
+           found.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            return SpotifyStep.CLICKED;
+        if(!service.sessionActive || service.currentSpotifyRoot()==null)
+            return SpotifyStep.WAIT;
+        Path path=new Path();
+        path.moveTo(labelBox.exactCenterX(),labelBox.exactCenterY());
+        GestureDescription gesture=new GestureDescription.Builder()
+            .addStroke(new GestureDescription.StrokeDescription(path,0,85))
+            .build();
+        return service.dispatchTrackedGesture(gesture,(ok,detail)->{
+            if(!ok && service.sessionActive)
+                service.toast("Spotify: не вдалося відкрити «Пошук»: "+detail);
+        }) ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
+    }
+
+    /** Did a deep link or normal UI navigate to this exact song query?
+     * Never trust a song-result title alone: only a search editor value or
+     * an upper search-query header authorizes selecting track results. */
+    public static boolean spotifySearchQueryVisible(String title) {
+        ScreenControlAccessibilityService service=connected.get();
+        if(service==null || !service.sessionActive || title==null)return false;
+        AccessibilityNodeInfo root=service.currentSpotifyRoot();
+        return root!=null && service.spotifyQueryPresent(root,title);
+    }
+
+    private boolean spotifyQueryPresent(AccessibilityNodeInfo root,String title) {
+        AccessibilityNodeInfo field=spotifySearchEditor(root);
+        if(field!=null && SpotifyTrackSearchRules.exactSong(title,
+            asString(field.getText())))return true;
+        Rect frame=new Rect();root.getBoundsInScreen(frame);
+        ArrayDeque<AccessibilityNodeInfo> q=new ArrayDeque<>();q.add(root);
+        int scanned=0;
+        while(!q.isEmpty() && ++scanned<=MAX_SCAN) {
+            AccessibilityNodeInfo node=q.removeFirst();
+            if(!node.isVisibleToUser() || !node.isEnabled() || node.isPassword())continue;
+            if(!node.isEditable() &&
+               (SpotifyTrackSearchRules.exactSong(title,asString(node.getText())) ||
+                SpotifyTrackSearchRules.exactSong(title,asString(node.getContentDescription())))) {
+                Rect bounds=new Rect();node.getBoundsInScreen(bounds);
+                if(SpotifyTrackSearchRules.queryHeaderRegion(
+                    bounds.centerX(),bounds.centerY(),bounds.width(),bounds.height(),
+                    frame.left,frame.top,frame.right,frame.bottom))
+                    return true;
+            }
+            for(int i=0;i<node.getChildCount();i++){
+                AccessibilityNodeInfo child=node.getChild(i);
+                if(child!=null)q.addLast(child);
+            }
+        }
+        return false;
     }
 
     private AccessibilityNodeInfo spotifySearchEditor(AccessibilityNodeInfo root) {
@@ -1971,9 +2026,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if(service==null || !service.sessionActive)return SpotifyStep.BLOCKED;
         AccessibilityNodeInfo root=service.currentSpotifyRoot();
         if(root==null || title==null || title.isEmpty())return SpotifyStep.WAIT;
-        AccessibilityNodeInfo editor=service.spotifySearchEditor(root);
-        if(editor==null ||
-           !SpotifyTrackSearchRules.exactSong(title,asString(editor.getText())))
+        if(!service.spotifyQueryPresent(root,title))
             return SpotifyStep.WAIT;
         Rect frame=new Rect();root.getBoundsInScreen(frame);
         ArrayDeque<AccessibilityNodeInfo> nodes=new ArrayDeque<>();nodes.add(root);
