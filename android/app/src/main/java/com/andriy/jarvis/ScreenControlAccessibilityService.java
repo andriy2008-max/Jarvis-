@@ -58,6 +58,14 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     private JarvisMacroPointPicker macroPointPicker;
 
     public static boolean isConnected() { return connected.get() != null; }
+
+    /** Uses Android's supported lock-screen global action, not PIN injection. */
+    public static boolean lockDevice() {
+        ScreenControlAccessibilityService service = connected.get();
+        if (service == null) return false;
+        try { return service.performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN); }
+        catch (RuntimeException denied) { return false; }
+    }
     public static boolean isSessionActive() {
         ScreenControlAccessibilityService s = connected.get();
         return s != null && s.sessionActive;
