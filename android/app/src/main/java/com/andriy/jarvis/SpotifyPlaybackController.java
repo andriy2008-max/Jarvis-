@@ -45,6 +45,7 @@ public final class SpotifyPlaybackController {
     private JarvisPhoneModeManager.Lease temporaryControl;
     private SpotifyAppRemoteBridge directBridge;
     private boolean bypassDirectOnce;
+    private boolean playlistPlayRetried;
 
     public SpotifyPlaybackController(Context context) {
         this.context = context;
@@ -151,6 +152,7 @@ public final class SpotifyPlaybackController {
         namedPlaylist = named == null ? null : named.name;
         this.namedTrack = namedTrack;
         scrolled = 0;
+        playlistPlayRetried = false;
         listener = callback;
         active = true;
         move(Stage.WAIT_APP, "Режим «Телефон»: очікую відкриття Spotify...");
@@ -363,11 +365,29 @@ public final class SpotifyPlaybackController {
                             ? null : pageTarget(),
                         requested==SpotifyMusicCommands.Kind.PLAYLIST
                             ? namedPlaylist : null);
-                if(state==ScreenControlAccessibilityService.SpotifyStep.ALREADY)
+                if(state==ScreenControlAccessibilityService.SpotifyStep.ALREADY) {
                     finish(true,"Spotify показує Pause: плейлист почав відтворюватися.");
-                else if(age>=4800L)
-                    finish(false,"Play натиснув, але не отримав підтвердження " +
-                        "відтворення від Spotify. Перевір звук на Pixel та акаунт Spotify.");
+                } else if(!playlistPlayRetried && age>=2300L) {
+                    // ACTION_CLICK can report success without Spotify
+                    // actually acting. Retry once as a real touch ONLY when
+                    // the explicit large Play still exists on THIS playlist.
+                    // Never tap an unlabeled button again: it may be Pause.
+                    playlistPlayRetried=true;
+                    ScreenControlAccessibilityService.SpotifyStep retried=
+                        ScreenControlAccessibilityService.spotifyRetryExplicitPlaylistPlay(
+                            requested==SpotifyMusicCommands.Kind.PLAYLIST
+                                ? null : pageTarget(),
+                            requested==SpotifyMusicCommands.Kind.PLAYLIST
+                                ? namedPlaylist : null);
+                    if(retried==ScreenControlAccessibilityService.SpotifyStep.ALREADY)
+                        finish(true,"Spotify підтвердив відтворення плейлиста.");
+                    else if(retried==ScreenControlAccessibilityService.SpotifyStep.CLICKED)
+                        move(Stage.VERIFY_PLAY,
+                            "Повторно натиснув видиму Play на сторінці плейлиста. Чекаю Pause...");
+                } else if(age>=4800L) {
+                    finish(false,"Не вдалося підтвердити відтворення плейлиста у Spotify. " +
+                        "Музику не вважаю запущеною. Перевір Pixel та кнопку Play.");
+                }
                 break;
             }
         }
