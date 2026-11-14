@@ -137,14 +137,29 @@ public final class SpotifyUiLabels {
             y>top+pageH*.08f && y<top+pageH*.60f;
     }
 
+    /** The Spotify playlist detail title may be inside a clickable Compose
+     * wrapper and smaller than 27dp. A second, independently visible big
+     * Play/Pause toolbar button is then required to distinguish it from a
+     * similarly named library row. */
+    public static boolean playlistDetailEvidence(boolean largeTitle,
+                                                  boolean clickableSmallTitle,
+                                                  boolean largePlayToolbarVisible,
+                                                  boolean libraryHeadingAtTop,
+                                                  boolean completeScan) {
+        return completeScan && !libraryHeadingAtTop &&
+            (largeTitle || (clickableSmallTitle && largePlayToolbarVisible));
+    }
+
     /** If the large playlist button already says Pause, that specific
      * playlist is playing; never tap it a second time and stop the music. */
     public static boolean largePause(String raw) {
         String s=normalize(raw);
-        return s.equals("pause") || s.equals("pause button") ||
-            s.equals("pause playback") || s.equals("pause music") ||
-            s.equals("пауза") || s.equals("призупинити") ||
-            s.equals("зупинити відтворення") || s.equals("приостановить") ||
+        return s.equals("pause") || s.startsWith("pause ") &&
+            !s.contains("shuffle") ||
+            s.equals("пауза") || s.startsWith("пауза ") ||
+            s.equals("призупинити") || s.startsWith("призупинити ") ||
+            s.equals("зупинити відтворення") ||
+            s.equals("приостановить") || s.startsWith("приостановить ") ||
             s.equals("пауза воспроизведения");
     }
 
