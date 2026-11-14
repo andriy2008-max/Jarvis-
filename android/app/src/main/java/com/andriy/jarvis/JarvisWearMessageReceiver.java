@@ -21,6 +21,15 @@ public final class JarvisWearMessageReceiver extends WearableListenerService {
         String id = request.optString("id","");
         if (!JarvisWearProtocol.validId(id)) return;
         String node = event.getSourceNodeId();
+        if (!JarvisBackgroundService.isRunning()) JarvisBackgroundService.startIfEnabled(this);
+        // Keep CPU awake only for this bounded request and its reply, not all day.
+        android.os.PowerManager power = getSystemService(android.os.PowerManager.class);
+        final android.os.PowerManager.WakeLock work = power == null ? null :
+            power.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK,"jarvis:wear-command");
+        if (work != null) work.acquire(180000L);
+        Runnable release = () -> {
+            if (work != null) synchronized (work) { if (work.isHeld()) work.release(); }
+        };
         JarvisWearPhoneSession.receive(this,node,request,(ok,description,token,ended) -> {
             try {
                 JSONObject reply = new JSONObject();
@@ -40,10 +49,11 @@ public final class JarvisWearMessageReceiver extends WearableListenerService {
                     reply.put("detail",answer + "…");
                     encoded = reply.toString().getBytes(StandardCharsets.UTF_8);
                 }
-                if (encoded.length > JarvisWearProtocol.MAX_BYTES) return;
+                if (encoded.length > JarvisWearProtocol.MAX_BYTES) { release.run(); return; }
                 Wearable.getMessageClient(getApplicationContext()).sendMessage(
-                    node,JarvisWearProtocol.REPLY,encoded);
-            } catch (Exception ignored) { }
+                    node,JarvisWearProtocol.REPLY,encoded)
+                    .addOnCompleteListener(sent -> release.run());
+            } catch (Exception ignored) { release.run(); }
         });
     }
 }

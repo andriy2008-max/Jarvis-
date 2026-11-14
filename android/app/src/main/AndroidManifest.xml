@@ -27,6 +27,11 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- Wear Data Layer works over the phone/watch network as well as Bluetooth. -->
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <!-- Bounded to a received command, never held while idle. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-feature android:name="android.hardware.microphone" android:required="true" />
     <uses-feature android:name="android.hardware.type.watch" android:required="false" />
@@ -69,6 +74,16 @@
                       android:path="/jarvis/phone-control/v1/request" />
             </intent-filter>
         </service>
+
+        <service android:name=".JarvisBackgroundService"
+            android:exported="false" android:stopWithTask="false"
+            android:foregroundServiceType="connectedDevice" />
+        <receiver android:name=".JarvisBackgroundRestoreReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Android Quick Settings: pressing the tile opens only the circular overlay. -->
         <service

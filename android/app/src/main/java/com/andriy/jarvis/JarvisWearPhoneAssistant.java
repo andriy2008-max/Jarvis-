@@ -373,6 +373,7 @@ public final class JarvisWearPhoneAssistant {
         boolean shazamInstalled = installed(phone,"com.shazam.android");
         boolean screenAllowed = ScreenControlAccessibilityService.isConnected();
         return "Підключення Джарвіса на телефоні:\n" +
+            JarvisBackgroundService.status(phone) + "\n" +
             "ШІ: " + (aiReady ? "налаштовано" : "потрібен сервер і код") + ".\n" +
             "Telegram: " + (telegramAuthorized ? "авторизовано" :
                 telegramKeySaved ? "API збережено, вхід не підтверджено" :

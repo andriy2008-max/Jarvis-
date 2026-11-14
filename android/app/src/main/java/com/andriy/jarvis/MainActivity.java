@@ -271,6 +271,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         isWatchDevice = getPackageManager().hasSystemFeature(PackageManager.FEATURE_WATCH);
         pendingLauncherMicrophone = state == null && isPhoneLauncherIntent(getIntent());
         if (isWatchDevice) watchPhoneLink = new JarvisWearPhoneLink(this);
+        else JarvisBackgroundService.startIfEnabled(this);
         isCompact = getResources().getConfiguration().smallestScreenWidthDp < 360;
         shakeEnabled = getPreferences(MODE_PRIVATE).getBoolean(SHAKE_PREF, true);
         shakeSensors = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
@@ -670,6 +671,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             new LinearLayout.LayoutParams(-1,dp(46));
         telegramParams.topMargin=dp(7);
         content.addView(telegramTab,telegramParams);
+        content.addView(secondaryButton("🔌 Фонова робота", this::showBackgroundSettings),
+            new LinearLayout.LayoutParams(-1,dp(48)));
 
         LinearLayout hero = new LinearLayout(this);
         hero.setOrientation(LinearLayout.VERTICAL);
@@ -1819,6 +1822,32 @@ public final class MainActivity extends Activity implements RecognitionListener 
             .setNegativeButton("Скасувати", null)
             .setPositiveButton("Надіслати", (d, which) -> processCommand(editor.getText().toString()))
             .create();
+        showDialogWithoutWake(dialog);
+    }
+
+    private void showBackgroundSettings() {
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Джарвіс у фоні")
+            .setMessage(JarvisBackgroundService.status(this) + "\n\n" +
+                "Для надійної роботи: Android → Джарвіс → Використання батареї → Без обмежень. " +
+                "Дозволь сповіщення, щоб бачити стан служби. Мікрофон не слухає постійно. " +
+                "Після «Примусово зупинити» відкрий застосунок вручну.")
+            .setPositiveButton("Увімкнути", (d,w) -> {
+                JarvisBackgroundService.setEnabled(this,true);
+                if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(
+                        Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+                    requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},9071);
+                setStatus("Запускаю фонову службу. Її стан можна перевірити тут повторно.");
+            })
+            .setNegativeButton("Вимкнути", (d,w) -> {
+                JarvisBackgroundService.setEnabled(this,false);
+                setStatus("Постійну фонову службу вимкнено.");
+            })
+            .setNeutralButton("Налаштування Android", (d,w) -> {
+                try { startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    android.net.Uri.parse("package:"+getPackageName()))); }
+                catch (RuntimeException error) { setStatus("Відкрий налаштування Джарвіса в Android вручну."); }
+            }).create();
         showDialogWithoutWake(dialog);
     }
 
@@ -4430,7 +4459,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         cancelPendingWakeCommand();
         if (commandSequenceExecutor != null) commandSequenceExecutor.cancel();
         if (spotifyPlayback != null) spotifyPlayback.cancel();
-        if(FinanceManagerController.isRunning())FinanceManagerController.cancel();
+        // Finance may belong to a watch request; destroying the UI must not cancel it.
         cancelAutoWakeSchedule();
         wakeConversation.end();
         // Never cancel AlarmManager timers when Android destroys the UI.
