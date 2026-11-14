@@ -27,7 +27,9 @@ public final class BoltUiLabels {
     /** Visible on the passenger home screen above the four service tiles. */
     public static boolean ridesHomeHeading(String s) {
         String v=normal(s);
-        return v.equals("тебе підвезти") || v.equals("need a ride");
+        return v.equals("тебе підвезти") || v.equals("need a ride") ||
+            v.equals("раді тебе бачити") || v.equals("рады тебя видеть") ||
+            v.equals("good to see you");
     }
 
     /** Bolt may render service tiles without accessible text. Only allow a
@@ -38,14 +40,15 @@ public final class BoltUiLabels {
         return cues>=3 || (heading && cues>=2);
     }
 
-    /** Center of «Поїздки» in the user's 684x1536 Bolt screenshot.
-     * The tile spans roughly x=26..336, y=218..423; the former y=482
-     * erroneously pointed into the Bolt Food row on this layout.
-     * Scale using the actual display size, not the accessibility root. */
+    /** Center of the top-left «Поїздки» tile in the 684x1536
+     * screenshot supplied by the user on November 14, 2026.
+     * New Bolt home UI: x=27..335, y=386..589. The previous y=321
+     * targets the HOME HEADING, not «Поїздки», on this layout.
+     * Require verified Bolt home markers and portrait geometry first. */
     public static int[] screenshotRidesPoint(int width,int height) {
         if(width<360 || height<width*2.05f || height>width*2.50f)return null;
-        return new int[]{Math.round(width*(184f/684f)),
-                         Math.round(height*(321f/1536f))};
+        return new int[]{Math.round(width*(182f/684f)),
+                         Math.round(height*(489f/1536f))};
     }
 
     /** Stops a four-second screenshot tap on route/checkout/payment screens.
