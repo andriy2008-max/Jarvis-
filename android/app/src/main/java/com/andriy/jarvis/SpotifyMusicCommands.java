@@ -3,8 +3,9 @@ package com.andriy.jarvis;
 import java.util.Locale;
 
 /**
- * Exact, local Ukrainian voice intents. Never forwards a music control into AI
- * or treats "stop music" as a request to start Spotify.
+ * Exact, local Ukrainian/Russian voice intents. Preserves dictated
+ * Cyrillic song titles for Spotify Search; never forwards explicit music
+ * commands into AI or interprets "stop music" as "start".
  */
 public final class SpotifyMusicCommands {
     public enum Kind { OPEN, RAP, UKRAINIAN, PLAYLIST, TRACK }
@@ -24,7 +25,7 @@ public final class SpotifyMusicCommands {
         String normalized=CommandPatterns.normalize(raw)
             .replaceAll("\\s+"," ").trim();
         java.util.regex.Matcher matched=java.util.regex.Pattern.compile(
-            "^(?:увімкни|ввімкни|увімкну|включи|включити|ввімкнути|запусти|постав|вруби)\\s+"+
+            "^(?:увімкни|ввімкни|увімкну|включи|включить|включити|ввімкнути|запусти|постав|поставь|вруби|проиграй|воспроизведи|сыграй)\\s+"+
             "(?:(?:мій|мою)\\s+)?(?:плейлист|плейліст|playlist)\\s+(.+)$"
         ).matcher(normalized);
         if (!matched.matches()) return null;
@@ -42,13 +43,13 @@ public final class SpotifyMusicCommands {
         return new NamedPlaylist(title,shuffle);
     }
 
-    /** A named song is played only when the user has saved its Spotify link.
-     * This never searches for arbitrary tracks in unrelated applications. */
+    /** Ukrainian/Russian track request, including a name not saved in
+     * library. The phone searches Spotify only, never another app. */
     public static String namedTrack(String raw) {
         String s=CommandPatterns.normalize(raw).replaceAll("\\s+"," ").trim();
         java.util.regex.Matcher matched=java.util.regex.Pattern.compile(
-            "^(?:увімкни|ввімкни|увімкну|включи|включити|ввімкнути|запусти|постав|вруби)\\s+"+
-            "(?:пісню|пісні|песню|трек|song|track)\\s+(.+)$").matcher(s);
+            "^(?:увімкни|ввімкни|увімкну|включи|включить|включити|ввімкнути|запусти|постав|поставь|вруби|проиграй|воспроизведи|сыграй)\\s+"+
+            "(?:пісню|пісні|песню|песни|пісня|песня|трек|song|track)\\s+(.+)$").matcher(s);
         if(!matched.matches())return null;
         String title=matched.group(1).trim()
             .replaceAll("^[«\\\"']+|[»\\\"']+$","").trim();
@@ -61,16 +62,18 @@ public final class SpotifyMusicCommands {
         if (raw == null) return null;
         String s = CommandPatterns.normalize(raw).toLowerCase(Locale.forLanguageTag("uk-UA"))
             .replaceAll("[.,!?]+$", "").replaceAll("\\s+", " ").trim();
-        if (!s.matches("^(увімкни|ввімкни|увімкну|включи|включити|ввімкнути|запусти|постав|вруби)\\s+.+$"))
+        if (!s.matches("^(увімкни|ввімкни|увімкну|включи|включить|включити|ввімкнути|запусти|постав|поставь|вруби|проиграй|воспроизведи|сыграй)\\s+.+$"))
             return null;
         String object = s.replaceFirst(
-            "^(?:увімкни|ввімкни|увімкну|включи|включити|ввімкнути|запусти|постав|вруби)\\s+", "");
+            "^(?:увімкни|ввімкни|увімкну|включи|включить|включити|ввімкнути|запусти|постав|поставь|вруби|проиграй|воспроизведи|сыграй)\\s+", "");
         switch (object) {
-            case "музику": case "музон": case "музика": case "spotify":
+            case "музику": case "музыку": case "музон": case "музика":
+            case "музыка": case "spotify":
             case "спотіфай": case "спотифай": return Kind.OPEN;
             case "реп": case "реп музику": case "репчик": case "rap":
                 return Kind.RAP;
-            case "українське": case "українську музику":
+            case "українське": case "украинское":
+            case "украинскую музыку": case "українську музику":
             case "укр музику": case "укр муз": case "українські пісні":
                 return Kind.UKRAINIAN;
             default: return null;
