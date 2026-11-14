@@ -262,18 +262,23 @@ public final class SpotifyPlaybackController {
                     move(Stage.PLAY, "Знайшов «Реп». Натискаю Play без перемішування...");
                 break;
             case PLAY: {
+                // Opening a playlist is not playback. Wait for the new page to
+                // render and then press its actual large Play (or an emulated
+                // tap in the verified playlist toolbar if icon-only).
+                if(age<1050L)break;
                 ScreenControlAccessibilityService.SpotifyStep result =
                     requested == SpotifyMusicCommands.Kind.PLAYLIST
                         ? ScreenControlAccessibilityService.spotifyNamedPlaylistControl(
                             SpotifyUiLabels.Target.PLAY,namedPlaylist,false)
-                        : ScreenControlAccessibilityService.spotifyControl(
-                            SpotifyUiLabels.Target.PLAY,pageTarget());
-                if (successful(result))
-                    finish(true, requested == SpotifyMusicCommands.Kind.RAP
-                        ? "Натиснув відтворення «Реп» у Spotify."
-                        : requested == SpotifyMusicCommands.Kind.PLAYLIST
-                            ? "Натиснув Play плейлиста «"+namedPlaylist+"» у Spotify."
-                            : "Натиснув відтворення плейлиста «Укр муз» у Spotify.");
+                        : ScreenControlAccessibilityService.spotifyPlaylistPlay(pageTarget());
+                if(successful(result))
+                    finish(true,result == ScreenControlAccessibilityService.SpotifyStep.ALREADY
+                        ? "Spotify вже відтворює вибраний плейлист."
+                        : requested == SpotifyMusicCommands.Kind.RAP
+                            ? "Натиснув Play плейлиста «Реп» у Spotify."
+                            : requested == SpotifyMusicCommands.Kind.PLAYLIST
+                                ? "Натиснув велику кнопку Play плейлиста «"+namedPlaylist+"» у Spotify."
+                                : "Натиснув Play плейлиста «Укр муз» у Spotify.");
                 break;
             }
         }
