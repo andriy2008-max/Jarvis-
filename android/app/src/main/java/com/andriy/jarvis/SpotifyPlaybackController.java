@@ -51,6 +51,7 @@ public final class SpotifyPlaybackController {
     private boolean playlistPlayRetried;
     private boolean playlistRowRetried;
     private boolean coordinateTrackSearch;
+    private boolean coordinatePlaylistPlayUsed;
 
     public SpotifyPlaybackController(Context context) {
         this.context = context;
@@ -160,6 +161,7 @@ public final class SpotifyPlaybackController {
         playlistPlayRetried = false;
         playlistRowRetried = false;
         coordinateTrackSearch = false;
+        coordinatePlaylistPlayUsed = false;
         listener = callback;
         active = true;
         move(Stage.WAIT_APP, "Режим «Телефон»: очікую відкриття Spotify...");
@@ -269,12 +271,14 @@ public final class SpotifyPlaybackController {
         boolean coordinateNavigation=requested==SpotifyMusicCommands.Kind.TRACK &&
             (stage==Stage.WAIT_APP || stage==Stage.COORD_SEARCH_FIRST ||
              stage==Stage.COORD_SEARCH_SECOND);
+        boolean playlistLibraryNavigation=requested==SpotifyMusicCommands.Kind.PLAYLIST &&
+            (stage==Stage.WAIT_APP || stage==Stage.OPEN_LIBRARY);
         boolean coordinateTyping=stage==Stage.COORD_TYPE_SEARCH;
         boolean selectedAfterCoordinates=coordinateTrackSearch &&
             (stage==Stage.SELECT_TRACK || stage==Stage.COORD_SELECT_FIRST);
         if (!ScreenControlAccessibilityService.spotifyVisible() &&
             !coordinateTyping && !selectedAfterCoordinates &&
-            !(coordinateNavigation &&
+            !((coordinateNavigation || playlistLibraryNavigation) &&
               ScreenControlAccessibilityService.spotifyCoordinateReady())) {
             handler.postDelayed(poll, POLL_MS);
             return;
@@ -288,6 +292,13 @@ public final class SpotifyPlaybackController {
                         ScreenControlAccessibilityService.spotifyCoordinateReady())
                         move(Stage.COORD_SEARCH_FIRST,
                             "Відкриваю пошук Spotify за координатами...");
+                } else if(requested==SpotifyMusicCommands.Kind.PLAYLIST) {
+                    // Allow Spotify's foreground window identity even if it
+                    // hides its accessible tree on the home screen.
+                    if(age>=1500L &&
+                        ScreenControlAccessibilityService.spotifyCoordinateReady())
+                        move(Stage.OPEN_LIBRARY,
+                            "Відкриваю «Моя бібліотека» за координатами...");
                 } else
                     move(Stage.OPEN_LIBRARY,"Відкриваю «Моя бібліотека»...");
                 break;
@@ -433,13 +444,30 @@ public final class SpotifyPlaybackController {
                 break;
             }
             case OPEN_LIBRARY:
+                if(requested==SpotifyMusicCommands.Kind.PLAYLIST) {
+                    if(!ScreenControlAccessibilityService.spotifyCoordinateReady()) {
+                        finish(false,"Spotify не відкритий для натискання «Моя бібліотека».");
+                        return;
+                    }
+                    ScreenControlAccessibilityService.spotifyTapCalibrated(665,2224,
+                        (ok,detail)->{
+                            if(!active || stage!=Stage.OPEN_LIBRARY)return;
+                            if(!ok) {
+                                finish(false,"Не відкрив «Моя бібліотека»: "+detail);
+                                return;
+                            }
+                            move(Stage.OPEN_COLLECTION,
+                                "Відкрив «Моя бібліотека». Шукаю плейлист «"+
+                                namedPlaylist+"» прокручуванням...");
+                            handler.postDelayed(poll,800L);
+                        });
+                    return;
+                }
                 if (successful(ScreenControlAccessibilityService.spotifyControl(
                     SpotifyUiLabels.Target.LIBRARY, null)))
                     move(Stage.OPEN_COLLECTION, requested == SpotifyMusicCommands.Kind.RAP
                         ? "Чекаю «Пісні, що сподобалися»..."
-                        : requested == SpotifyMusicCommands.Kind.PLAYLIST
-                            ? "Шукаю плейлист «"+namedPlaylist+"» у бібліотеці..."
-                            : "Шукаю плейлист «Укр муз»...");
+                        : "Шукаю плейлист «Укр муз»...");
                 break;
             case OPEN_COLLECTION: {
                 ScreenControlAccessibilityService.SpotifyStep found;
@@ -490,11 +518,37 @@ public final class SpotifyPlaybackController {
                 // large visible Pause has been observed, never merely because
                 // ACTION_CLICK/dispatchGesture accepted a press.
                 if(age<1050L)break;
+                if(requested==SpotifyMusicCommands.Kind.PLAYLIST) {
+                    // User-calibrated green Play. A verified exact playlist
+                    // header must remain visible; do not tap a random page.
+                    if(ScreenControlAccessibilityService.spotifyPlaylistPlaybackState(
+                        null,namedPlaylist)==ScreenControlAccessibilityService.SpotifyStep.ALREADY) {
+                        finish(true,"Потрібний плейлист уже відтворюється.");
+                        return;
+                    }
+                    if(ScreenControlAccessibilityService.spotifyNamedPlaylistDetailReady(
+                        namedPlaylist)!=ScreenControlAccessibilityService.SpotifyStep.ALREADY) {
+                        finish(false,"Не можу підтвердити сторінку плейлиста «"+
+                            namedPlaylist+"». Play не натискав.");
+                        return;
+                    }
+                    ScreenControlAccessibilityService.spotifyTapNamedPlaylistPlay(
+                        namedPlaylist,(ok,detail)->{
+                            if(!active || stage!=Stage.PLAY)return;
+                            if(!ok) {
+                                finish(false,"Не вдалося натиснути Play (977,1291): "+detail);
+                                return;
+                            }
+                            coordinatePlaylistPlayUsed=true;
+                            move(Stage.VERIFY_PLAY,
+                                "Натиснув Play за координатами (977,1291). "+
+                                "Перевіряю, чи музика грає...");
+                            handler.postDelayed(poll,POLL_MS);
+                        });
+                    return;
+                }
                 ScreenControlAccessibilityService.SpotifyStep result =
-                    requested == SpotifyMusicCommands.Kind.PLAYLIST
-                        ? ScreenControlAccessibilityService.spotifyNamedPlaylistControl(
-                            SpotifyUiLabels.Target.PLAY,namedPlaylist,false)
-                        : ScreenControlAccessibilityService.spotifyPlaylistPlay(pageTarget());
+                    ScreenControlAccessibilityService.spotifyPlaylistPlay(pageTarget());
                 if(result==ScreenControlAccessibilityService.SpotifyStep.ALREADY)
                     finish(true,"Spotify показує Pause: плейлист уже відтворюється.");
                 else if(result==ScreenControlAccessibilityService.SpotifyStep.CLICKED)
@@ -512,6 +566,13 @@ public final class SpotifyPlaybackController {
                             ? namedPlaylist : null);
                 if(state==ScreenControlAccessibilityService.SpotifyStep.ALREADY) {
                     finish(true,"Spotify показує Pause: плейлист почав відтворюватися.");
+                } else if(coordinatePlaylistPlayUsed) {
+                    // Never tap the calibrated point again: after playback
+                    // starts, the same location may be Pause.
+                    if(age>=5000L)
+                        finish(false,"Play натиснуто на плейлисті «"+namedPlaylist+
+                            "», але Spotify не підтвердив відтворення. "+
+                            "Повторно не натискав, щоб не поставити на паузу.");
                 } else if(!playlistPlayRetried && age>=2300L) {
                     // ACTION_CLICK can report success without Spotify
                     // actually acting. Retry once as a real touch ONLY when
@@ -562,6 +623,7 @@ public final class SpotifyPlaybackController {
         namedPlaylist = null;
         namedTrack = null;
         coordinateTrackSearch = false;
+        coordinatePlaylistPlayUsed = false;
         JarvisPhoneModeManager.Lease lease = temporaryControl;
         temporaryControl = null;
         // Always restore Jarvis' normal face, even on errors/cancellation.
