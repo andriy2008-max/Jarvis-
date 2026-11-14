@@ -1837,6 +1837,179 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         return service.tapSpotifyControl(target, playlist);
     }
 
+    /** Spotify global Search tab, explicitly on the Pixel; never on Wear. */
+    public static SpotifyStep spotifySearchTab() {
+        ScreenControlAccessibilityService service=connected.get();
+        if(service==null || !service.sessionActive)return SpotifyStep.BLOCKED;
+        AccessibilityNodeInfo root=service.currentSpotifyRoot();
+        if(root==null)return SpotifyStep.WAIT;
+        if(service.spotifySearchEditor(root)!=null)return SpotifyStep.ALREADY;
+        Rect frame=new Rect();root.getBoundsInScreen(frame);
+        ArrayDeque<AccessibilityNodeInfo> nodes=new ArrayDeque<>();nodes.add(root);
+        int scanned=0;
+        while(!nodes.isEmpty() && ++scanned<=MAX_SCAN) {
+            AccessibilityNodeInfo node=nodes.removeFirst();
+            if(!node.isVisibleToUser() || !node.isEnabled() || node.isPassword())continue;
+            if(SpotifyTrackSearchRules.searchTab(asString(node.getText())) ||
+               SpotifyTrackSearchRules.searchTab(asString(node.getContentDescription()))) {
+                AccessibilityNodeInfo target=clickable(node);
+                if(target!=null && target.isEnabled() && target.isClickable()) {
+                    Rect rect=new Rect();target.getBoundsInScreen(rect);
+                    if(rect.centerY()>frame.top+frame.height()*.73f &&
+                       rect.centerY()<frame.bottom && rect.height()<frame.height()*.18f) {
+                        FloatingJarvisService.avoidControl(rect);
+                        return target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                            ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
+                    }
+                }
+            }
+            for(int i=0;i<node.getChildCount();i++){
+                AccessibilityNodeInfo child=node.getChild(i);
+                if(child!=null)nodes.addLast(child);
+            }
+        }
+        return SpotifyStep.WAIT;
+    }
+
+    private AccessibilityNodeInfo spotifySearchEditor(AccessibilityNodeInfo root) {
+        if(root==null)return null;
+        Rect frame=new Rect();root.getBoundsInScreen(frame);
+        ArrayDeque<AccessibilityNodeInfo> scan=new ArrayDeque<>();scan.add(root);
+        AccessibilityNodeInfo field=null;
+        int checked=0;
+        while(!scan.isEmpty() && ++checked<=MAX_SCAN) {
+            AccessibilityNodeInfo item=scan.removeFirst();
+            if(!item.isVisibleToUser() || !item.isEnabled() || item.isPassword())continue;
+            if(item.isEditable()) {
+                Rect r=new Rect();item.getBoundsInScreen(r);
+                String labels=asString(item.getText())+" "+
+                    asString(item.getContentDescription())+" "+
+                    asString(item.getHintText());
+                if(r.centerY()>frame.top+frame.height()*.02f &&
+                   r.centerY()<frame.top+frame.height()*.32f &&
+                   r.width()>frame.width()*.35f &&
+                   (SpotifyTrackSearchRules.searchField(asString(item.getHintText())) ||
+                    SpotifyTrackSearchRules.searchField(asString(item.getContentDescription())) ||
+                    SpotifyTrackSearchRules.searchField(asString(item.getText())) ||
+                    item.isFocused())) {
+                    if(field!=null && field!=item)return null;
+                    field=item;
+                }
+            }
+            for(int i=0;i<item.getChildCount();i++){
+                AccessibilityNodeInfo child=item.getChild(i);
+                if(child!=null)scan.addLast(child);
+            }
+        }
+        return checked>MAX_SCAN?null:field;
+    }
+
+    /** Focus a visible, unambiguous top-of-page Spotify Search field. */
+    public static SpotifyStep spotifyFocusSearch() {
+        ScreenControlAccessibilityService service=connected.get();
+        if(service==null || !service.sessionActive)return SpotifyStep.BLOCKED;
+        AccessibilityNodeInfo root=service.currentSpotifyRoot();
+        if(root==null)return SpotifyStep.WAIT;
+        AccessibilityNodeInfo field=service.spotifySearchEditor(root);
+        if(field!=null) {
+            if(field.isFocused())return SpotifyStep.ALREADY;
+            return field.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
+        }
+        Rect frame=new Rect();root.getBoundsInScreen(frame);
+        ArrayDeque<AccessibilityNodeInfo> nodes=new ArrayDeque<>();nodes.add(root);
+        int scanned=0;
+        while(!nodes.isEmpty() && ++scanned<=MAX_SCAN) {
+            AccessibilityNodeInfo node=nodes.removeFirst();
+            if(!node.isVisibleToUser() || !node.isEnabled() || node.isPassword())continue;
+            if(SpotifyTrackSearchRules.searchField(asString(node.getText())) ||
+               SpotifyTrackSearchRules.searchField(asString(node.getContentDescription()))) {
+                AccessibilityNodeInfo target=clickable(node);
+                if(target!=null && target.isEnabled()) {
+                    Rect r=new Rect();target.getBoundsInScreen(r);
+                    if(r.centerY()<frame.top+frame.height()*.35f &&
+                       r.width()>frame.width()*.34f) {
+                        FloatingJarvisService.avoidControl(r);
+                        return target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                            ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
+                    }
+                }
+            }
+            for(int i=0;i<node.getChildCount();i++){
+                AccessibilityNodeInfo child=node.getChild(i);
+                if(child!=null)nodes.addLast(child);
+            }
+        }
+        return SpotifyStep.WAIT;
+    }
+
+    /** Set exact user-dictated song title in Spotify's own Search textbox. */
+    public static SpotifyStep spotifyTypeTrack(String title) {
+        if(title==null || title.trim().isEmpty() || title.length()>100)
+            return SpotifyStep.BLOCKED;
+        ScreenControlAccessibilityService service=connected.get();
+        if(service==null || !service.sessionActive)return SpotifyStep.BLOCKED;
+        AccessibilityNodeInfo root=service.currentSpotifyRoot();
+        if(root==null)return SpotifyStep.WAIT;
+        AccessibilityNodeInfo input=service.spotifySearchEditor(root);
+        if(input==null || !input.isFocused() || input.isPassword())
+            return SpotifyStep.WAIT;
+        if(SpotifyTrackSearchRules.exactSong(title,asString(input.getText())))
+            return SpotifyStep.ALREADY;
+        Bundle args=new Bundle();
+        args.putCharSequence(
+            AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,title);
+        return input.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)
+            ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
+    }
+
+    /** Select the FIRST exact-title song on the search-results page only.
+     * Never selects a similarly named artist/album/playlist, search field,
+     * card in a carousel or an unrelated result. */
+    public static SpotifyStep spotifySelectTrack(String title) {
+        ScreenControlAccessibilityService service=connected.get();
+        if(service==null || !service.sessionActive)return SpotifyStep.BLOCKED;
+        AccessibilityNodeInfo root=service.currentSpotifyRoot();
+        if(root==null || title==null || title.isEmpty())return SpotifyStep.WAIT;
+        AccessibilityNodeInfo editor=service.spotifySearchEditor(root);
+        if(editor==null ||
+           !SpotifyTrackSearchRules.exactSong(title,asString(editor.getText())))
+            return SpotifyStep.WAIT;
+        Rect frame=new Rect();root.getBoundsInScreen(frame);
+        ArrayDeque<AccessibilityNodeInfo> nodes=new ArrayDeque<>();nodes.add(root);
+        AccessibilityNodeInfo chosen=null;
+        Rect chosenBox=null;
+        int scanned=0;
+        while(!nodes.isEmpty() && ++scanned<=MAX_SCAN) {
+            AccessibilityNodeInfo node=nodes.removeFirst();
+            if(!node.isVisibleToUser() || !node.isEnabled() || node.isPassword())continue;
+            if(!node.isEditable() &&
+               (SpotifyTrackSearchRules.exactSong(title,asString(node.getText())) ||
+                SpotifyTrackSearchRules.exactSong(title,asString(node.getContentDescription())))) {
+                AccessibilityNodeInfo action=clickable(node);
+                if(action!=null && action.isEnabled() && action.isClickable()) {
+                    Rect r=new Rect();action.getBoundsInScreen(r);
+                    if(SpotifyTrackSearchRules.resultRegion(r.centerX(),r.centerY(),
+                        r.width(),r.height(),frame.left,frame.top,
+                        frame.right,frame.bottom)) {
+                        if(chosen==null || r.top<chosenBox.top) {
+                            chosen=action;chosenBox=r;
+                        }
+                    }
+                }
+            }
+            for(int i=0;i<node.getChildCount();i++){
+                AccessibilityNodeInfo child=node.getChild(i);
+                if(child!=null)nodes.addLast(child);
+            }
+        }
+        if(scanned>MAX_SCAN || chosen==null ||
+           service.currentSpotifyRoot()==null)return SpotifyStep.WAIT;
+        FloatingJarvisService.avoidControl(chosenBox);
+        return chosen.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
+    }
+
     /** Open one saved playlist selected by an explicit voice command.
      * A library item must have an exact visible title and a clickable row.
      * Ambiguous duplicates do not get clicked. */
