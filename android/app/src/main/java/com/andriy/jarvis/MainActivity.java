@@ -1470,24 +1470,26 @@ public final class MainActivity extends Activity implements RecognitionListener 
         } else showVoiceUnavailable(profile);
     }
 
-    /** Manual Wear/Pixel voice input supports Ukrainian and Russian.
-     * AUTO asks Android 14+ for bilingual language switching; the installed
-     * recognition service may ignore that optional API. Users can select a
-     * single recognition language when automatic switching is unsupported. */
+    /** Manual Wear/Pixel voice input supports Ukrainian, Russian, English.
+     * AUTO asks Android 14+ for multilingual language switching. The
+     * recognition provider may ignore this optional API; explicit fallback
+     * language settings remain available. */
     private void showSpeechRecognitionLanguageSettings() {
         String[] codes={JarvisSpeechLanguages.AUTO,
-            JarvisSpeechLanguages.UKRAINIAN,JarvisSpeechLanguages.RUSSIAN};
-        String[] labels={"Авто — українська + російська",
-            "Українська (uk-UA)","Російська (ru-RU)"};
+            JarvisSpeechLanguages.UKRAINIAN,JarvisSpeechLanguages.RUSSIAN,
+            JarvisSpeechLanguages.ENGLISH};
+        String[] labels={"Авто — українська + російська + англійська",
+            "Українська (uk-UA)","Російська (ru-RU)","Англійська (en-US)"};
         String current=JarvisSpeechLanguages.mode(getPreferences(MODE_PRIVATE)
             .getString(JarvisSpeechLanguages.PREF,JarvisSpeechLanguages.AUTO));
         int selected=0;
         for(int i=0;i<codes.length;i++)if(codes[i].equals(current))selected=i;
         AlertDialog dialog=new AlertDialog.Builder(this)
             .setTitle("Мова голосових команд")
-            .setMessage("Авто пробує розпізнавати українську та російську. Якщо " +
-                "служба Android не підтримує перемикання мов, обери одну мову. " +
-                "Це впливає на розпізнавання команд і назв пісень, а не на голос Джарвіса.")
+            .setMessage("Авто пробує розпізнавати змішані фрази, наприклад " +
+                "«Увімкни пісню Shape of You» або «Увімкни пісню Метель». " +
+                "Якщо служба Android не підтримує перемикання мов, обери одну мову. " +
+                "Це налаштування не змінює голос Джарвіса.")
             .setSingleChoiceItems(labels,selected,(d,which)->{
                 String chosen=codes[which];
                 getPreferences(MODE_PRIVATE).edit()
@@ -3032,11 +3034,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if(manualCapture && Build.VERSION.SDK_INT>=34 &&
            JarvisSpeechLanguages.automatic(languageMode)) {
             // Android SpeechRecognizer may ignore these hints; no claim that
-            // speech translation is provided. Auto detection is restricted
-            // to the two supported speech languages.
+            // speech translation is provided. Mixed-script song titles
+            // remain unchanged; request UA/RU/EN recognition for a single
+            // phrase. Provider may reject unsupported language packs.
             ArrayList<String> languages=new ArrayList<>();
             languages.add("uk-UA");
             languages.add("ru-RU");
+            languages.add("en-US");
             intent.putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_DETECTION,true);
             intent.putStringArrayListExtra(
                 RecognizerIntent.EXTRA_LANGUAGE_DETECTION_ALLOWED_LANGUAGES,languages);
