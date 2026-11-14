@@ -722,7 +722,19 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             if(cb!=null)cb.finished(false,"Служба керування екраном не активна.");
             return;
         }
-        s.tapCalibratedForApp("com.spotify.music",x,y,cb);
+        s.tapCalibratedForApp("com.spotify.music",x,y,null,cb);
+    }
+
+    /** A calibrated Play press is permitted only on the verified named
+     * playlist's detail page. It never targets the bottom mini-player. */
+    public static void spotifyTapNamedPlaylistPlay(String name,Completion cb) {
+        ScreenControlAccessibilityService s=connected.get();
+        if(cb==null)return;
+        if(s==null || !s.sessionActive || name==null || name.trim().isEmpty()) {
+            cb.finished(false,"Керування Spotify або назва плейлиста недоступні.");
+            return;
+        }
+        s.tapCalibratedForApp("com.spotify.music",977,1291,name,cb);
     }
 
     public static void boltTapCalibrated(int x,int y,Completion cb) {
@@ -731,7 +743,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             if(cb!=null)cb.finished(false,"Служба керування екраном не активна.");
             return;
         }
-        s.tapCalibratedForApp("ee.mtakso.client",x,y,cb);
+        s.tapCalibratedForApp("ee.mtakso.client",x,y,null,cb);
     }
 
     /**
@@ -739,13 +751,24 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
      * requested Spotify Search point. Do not infer coordinates on new devices.
      * Callback fires only after Android has completed or cancelled a gesture.
      */
-    private void tapCalibratedForApp(String packageName,int x,int y,Completion cb) {
+    private boolean verifiedNamedPlaylistReady(String name) {
+        if(name==null || name.trim().isEmpty())return false;
+        AccessibilityNodeInfo root=currentSpotifyRoot();
+        return root!=null && spotifyPlaylistHeaderVisible(root,null,name) &&
+            !spotifyLargePauseVisible(root);
+    }
+
+    private void tapCalibratedForApp(String packageName,int x,int y,
+                                     String verifiedPlaylistName,Completion cb) {
         boolean bolt="ee.mtakso.client".equals(packageName);
         boolean spotify="com.spotify.music".equals(packageName);
+        boolean playlistPlay=spotify && x==977 && y==1291;
         boolean allowed=bolt ? ((x==333 && y==645) || (x==450 && y==520)) :
-            (spotify && ((x==403 && y==2211) || (x==490 && y==550)));
-        if(!allowed || !sessionActive || !trustedExternalApp(packageName)) {
-            cb.finished(false,"Програма не підтверджена на передньому плані.");
+            (spotify && ((x==403 && y==2211) || (x==490 && y==550) ||
+                (playlistPlay && verifiedPlaylistName!=null)));
+        if(!allowed || !sessionActive || !trustedExternalApp(packageName) ||
+           (playlistPlay && !verifiedNamedPlaylistReady(verifiedPlaylistName))) {
+            cb.finished(false,"Програма або сторінка потрібного плейлиста не підтверджена.");
             return;
         }
         android.graphics.Point size=new android.graphics.Point();
@@ -773,8 +796,10 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             cb.finished(ok,detail);
         };
         main.postDelayed(()->{
-            if(!sessionActive || !trustedExternalApp(packageName)) {
-                finishTap.finished(false,"Активна програма змінилася до натискання.");
+            if(!sessionActive || !trustedExternalApp(packageName) ||
+               (playlistPlay && !verifiedNamedPlaylistReady(verifiedPlaylistName))) {
+                finishTap.finished(false,
+                    "Програма або сторінка плейлиста змінилася до натискання.");
                 return;
             }
             Path path=new Path();
