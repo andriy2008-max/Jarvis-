@@ -335,6 +335,9 @@ public final class JarvisWearPhoneAssistant {
                 String reply = error == null && answer != null ? answer.reply : error;
                 boolean ok = error == null && answer != null && reply != null && !reply.trim().isEmpty();
                 if (reply == null || reply.trim().isEmpty()) reply = "ШІ не повернув відповіді.";
+                if(ok && "web".equals(mode) && answer.sources!=null &&
+                   !answer.sources.trim().isEmpty())
+                    reply += "\n\nДжерела:\n"+answer.sources;
                 completion.finished(ok,reply);
             });
         } catch (RuntimeException error) {
