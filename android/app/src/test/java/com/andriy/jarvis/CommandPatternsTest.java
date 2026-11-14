@@ -25,6 +25,14 @@ public final class CommandPatternsTest {
         eq(CommandPatterns.spokenText("Скажи Привіт!"), "Привіт!");
         eq(CommandPatterns.spokenText("Джарвіс, скажи: Я тут. Як справи?"), "Я тут. Як справи?");
         eq(CommandPatterns.spokenText("Jarvis — СКАЖИ 100%"), "100%");
+        eq(CommandPatterns.spokenText("Джарвіс скажи Доброго вечора, друзі!"),
+            "Доброго вечора, друзі!");
+        eq(CommandPatterns.spokenText("скажи Я залишаюся відкритим на Watch7."),
+            "Я залишаюся відкритим на Watch7.");
+        eq(CommandPatterns.spokenText("Скажи Привіт українською й англійською"),
+            "Привіт українською й англійською");
+        eq(CommandPatterns.spokenText("Увімкни плейлист Скажи мені"),null);
+        eq(CommandPatterns.spokenText("Напиши Скажи мені"),null);
         eq(CommandPatterns.spokenText("Скажи"), "");
         eq(CommandPatterns.spokenText("Скажи: "), "");
         eq(CommandPatterns.spokenText("скажи замовкни"), "замовкни");
