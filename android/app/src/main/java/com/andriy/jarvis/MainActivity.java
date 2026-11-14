@@ -188,6 +188,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
     };
     private JarvisWearPhoneLink watchPhoneLink;
+    private AlertDialog watchReadingDialog;
+    private ScrollView watchReadingScroll;
+    private TextView watchReadingText;
+    private JarvisWearPhoneLink.Document watchReadingPage;
+    private String watchReadingTitle = "Відповідь Джарвіса";
     private boolean phoneListening;
     // Watch phone mode must re-arm automatically after EVERY phone reply.
     // It is independent of launching/closing the main Activity on Pixel.
@@ -1970,6 +1975,91 @@ public final class MainActivity extends Activity implements RecognitionListener 
         showDialogWithoutWake(dialog);
     }
 
+    /** The full page is never placed on the animated face: readable large
+     * text lives in an independent scrollable Wear dialog. Pages are fetched
+     * only when the user presses next/previous, never by rerunning AI. */
+    private void showWatchReading(String title,JarvisWearPhoneLink.Document page) {
+        if(!isWatchDevice || page==null)return;
+        if(watchReadingDialog!=null && watchReadingDialog.isShowing())
+            watchReadingDialog.dismiss();
+        watchReadingTitle=title==null || title.trim().isEmpty() ?
+            "Відповідь Джарвіса" : title;
+        watchReadingPage=page;
+        watchReadingScroll=new ScrollView(this);
+        watchReadingScroll.setFillViewport(true);
+        watchReadingScroll.setVerticalScrollBarEnabled(true);
+        watchReadingText=new TextView(this);
+        watchReadingText.setTextSize(TypedValue.COMPLEX_UNIT_SP,17);
+        watchReadingText.setTextColor(WHITE);
+        watchReadingText.setLineSpacing(dp(3),1.1f);
+        watchReadingText.setPadding(dp(18),dp(10),dp(18),dp(20));
+        watchReadingText.setTextIsSelectable(true);
+        watchReadingScroll.addView(watchReadingText,
+            new ScrollView.LayoutParams(-1,-2));
+        AlertDialog dialog=new AlertDialog.Builder(this)
+            .setTitle(watchReadingTitle)
+            .setView(watchReadingScroll)
+            .setNeutralButton("◀",null)
+            .setPositiveButton("▶",null)
+            .setNegativeButton("Закрити",null)
+            .create();
+        watchReadingDialog=dialog;
+        dialog.setOnShowListener(v->{
+            // Rewire the navigation buttons to prevent dismissing this reader.
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL)
+                .setOnClickListener(btn->switchWatchReadingPage(-1));
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(btn->switchWatchReadingPage(1));
+            displayWatchReadingPage(page);
+        });
+        showDialogWithoutWake(dialog);
+    }
+
+    private void displayWatchReadingPage(JarvisWearPhoneLink.Document page) {
+        if(page==null || watchReadingDialog==null || !watchReadingDialog.isShowing())
+            return;
+        watchReadingPage=page;
+        watchReadingDialog.setTitle(watchReadingTitle+
+            (page.pageCount>1 ? "  "+(page.pageIndex+1)+"/"+page.pageCount : ""));
+        if(watchReadingText!=null)watchReadingText.setText(page.text);
+        if(watchReadingScroll!=null)watchReadingScroll.post(()->{
+            if(watchReadingScroll!=null)watchReadingScroll.scrollTo(0,0);
+        });
+        android.widget.Button previous=watchReadingDialog.getButton(
+            AlertDialog.BUTTON_NEUTRAL);
+        android.widget.Button next=watchReadingDialog.getButton(
+            AlertDialog.BUTTON_POSITIVE);
+        if(previous!=null) previous.setEnabled(!page.documentId.isEmpty() &&
+            page.pageIndex>0);
+        if(next!=null) next.setEnabled(page.hasMore());
+    }
+
+    private void switchWatchReadingPage(int direction) {
+        JarvisWearPhoneLink.Document current=watchReadingPage;
+        if(watchPhoneLink==null || current==null || current.documentId.isEmpty() ||
+           watchPhoneLink.busy())return;
+        int target=current.pageIndex+direction;
+        if(target<0 || target>=current.pageCount)return;
+        watchPhoneLink.readPage(current.documentId,target,(ok,page)->{
+            if(isFinishing() || isDestroyed() || watchReadingDialog==null ||
+               !watchReadingDialog.isShowing())return;
+            if(ok && page!=null && current.documentId.equals(page.documentId) &&
+               target==page.pageIndex) displayWatchReadingPage(page);
+            else android.widget.Toast.makeText(this,
+                page==null?"Не вдалося завантажити сторінку.":page.text,
+                android.widget.Toast.LENGTH_SHORT).show();
+        });
+    }
+
+    private boolean watchReadableCommand(String raw) {
+        String normalized=CommandPatterns.normalize(raw);
+        return normalized.contains("покажи нотатки") ||
+            normalized.contains("мої нотатки") ||
+            normalized.contains("прочитай нотатки") ||
+            JarvisSearchRouting.query(raw)!=null ||
+            WorldNewsCommands.requestsWorldNews(normalized);
+    }
+
     private void showWatchTextInput() {
         EditText editor = new EditText(this);
         editor.setSingleLine(false);
@@ -2041,6 +2131,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "📱 Зв'язок із телефоном",
             "⌨ Написати команду",
             "🗒 Показати нотатки",
+            "📖 Остання відповідь",
             "🧹 Новий діалог",
             "❔ Що ти вмієш?",
             "🔌 Стан підключень телефона",
@@ -2104,9 +2195,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     }
                     case 5: showWatchTextInput(); break;
                     case 6: processCommand("покажи нотатки"); break;
-                    case 7: processCommand("новий діалог"); break;
-                    case 8: processCommand("що ти вмієш"); break;
-                    case 10: {
+                    case 7:
+                        if(watchReadingPage==null)
+                            setStatus("Ще немає відповіді для перегляду.");
+                        else showWatchReading(watchReadingTitle,watchReadingPage);
+                        break;
+                    case 8: processCommand("новий діалог"); break;
+                    case 9: processCommand("що ти вмієш"); break;
+                    case 11: {
                         boolean enabled = !getPreferences(MODE_PRIVATE)
                             .getBoolean(WATCH_LAUNCH_GESTURE_PREF,false);
                         getPreferences(MODE_PRIVATE).edit()
@@ -2116,8 +2212,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
                             : "Автоматичний мікрофон при запуску вимкнено.");
                         break;
                     }
-                    case 12: showSpeechRecognitionLanguageSettings(); break;
-                    case 11:
+                    case 13: showSpeechRecognitionLanguageSettings(); break;
+                    case 12:
                         shakeEnabled = !shakeEnabled;
                         getPreferences(MODE_PRIVATE).edit()
                             .putBoolean(SHAKE_PREF,shakeEnabled).apply();
@@ -2127,7 +2223,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                             ? "Струс зап'ястя в Джарвісі: перший — слухати, другий — надіслати. Можливі випадкові спрацювання."
                             : "Керування струсом зап'ястя вимкнено.");
                         break;
-                    case 9:
+                    case 10:
                         if (watchPhoneLink == null) {
                             setStatus("Немає з'єднання з телефоном.");
                             break;
@@ -3918,13 +4014,16 @@ public final class MainActivity extends Activity implements RecognitionListener 
             processing = true;
             face.setState("thinking");
             setStatus("Телефон обробляє запит через ШІ...");
-            watchPhoneLink.assistant(question,(ok,detail) -> {
+            watchPhoneLink.assistantDocument(question,(ok,page) -> {
                 processing = false;
                 if (isFinishing() || isDestroyed()) return;
+                String detail=page==null?"Телефон не повернув відповіді.":page.text;
                 if (promptForPhonePin(detail)) return;
                 appendDialogue("Джарвіс",detail);
                 setStatus(detail);
-                if (voiceEnabled) speakReply(detail);
+                if(ok) showWatchReading("Відповідь ШІ",page);
+                if(voiceEnabled) speakReply(ok
+                    ? "Відповідь готова. Вона відкрита на годиннику." : detail);
                 else face.setState("idle");
             });
             return;
@@ -4278,15 +4377,22 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 processing = true;
                 face.setState("thinking");
                 setStatus("Передаю команду Джарвісу на телефоні...");
-                watchPhoneLink.assistant(raw,(ok,detail) -> {
+                watchPhoneLink.assistantDocument(raw,(ok,page) -> {
                     processing = false;
                     if (isFinishing() || isDestroyed()) return;
+                    String detail=page==null?"Телефон не повернув відповіді.":page.text;
                     if (promptForPhonePin(detail)) return;
                     ensureWatchPhoneListening();
                     if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                     appendDialogue("Джарвіс",detail);
                     setStatus(detail);
-                    if (voiceEnabled) speakReply(detail);
+                    boolean showReader=ok && (watchReadableCommand(raw) ||
+                        (page!=null && page.pageCount>1));
+                    if(showReader) showWatchReading(
+                        CommandPatterns.normalize(raw).contains("нотатки")
+                            ? "Мої нотатки" : "Інтернет / Джарвіс",page);
+                    if (voiceEnabled) speakReply(showReader
+                        ? "Відповідь відкрита на екрані годинника." : detail);
                     else face.setState("idle");
                 });
             }
