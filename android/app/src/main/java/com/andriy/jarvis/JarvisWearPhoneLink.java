@@ -127,6 +127,18 @@ public final class JarvisWearPhoneLink {
         send(JarvisWearProtocol.ASSISTANT,voice,callback);
     }
 
+    /** Watch alarm uses a dedicated phone action so the Clock command never
+     * enters AI, Accessibility or a screen-control session. */
+    public void setAlarm(AssistantIntents.ClockTime selected,Callback callback) {
+        if(callback==null)return;
+        String time=JarvisWatchAlarmRequest.encode(selected);
+        if(time==null) {
+            callback.finished(false,"Некоректний час будильника.");
+            return;
+        }
+        send(JarvisWearProtocol.SET_ALARM,time,callback);
+    }
+
     /** Same phone assistant request, with all pages available in a watch reader. */
     public void assistantDocument(String voice,DocumentCallback cb) {
         if(cb==null)return;
