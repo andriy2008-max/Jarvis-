@@ -43,6 +43,16 @@ public final class JarvisWearProtocolTest {
         yes(!JarvisWearProtocol.validId("wrong-id"),"valid request id");
         yes(JarvisWearProtocol.SESSION_IDLE_MS > JarvisWearProtocol.ACK_TIMEOUT_MS,
             "session must outlast a round trip");
+        // Regression: a valid six-step UI plan can outlast the old 12s ACK.
+        yes(JarvisWearProtocol.timeoutMs(JarvisWearProtocol.COMMAND) >
+            JarvisCommandSequence.MAX_STEPS * JarvisSequenceEngine.STEP_TIMEOUT_MS,
+            "screen command ACK must outlast the worst-case supported sequence");
+        yes(JarvisWearProtocol.timeoutMs(JarvisWearProtocol.ASSISTANT) > 120000,
+            "remote macro deadline must finish before watch timeout");
+        yes(JarvisWearProtocol.timeoutMs(JarvisWearProtocol.CANCEL_SPOTIFY) < 20000,
+            "cancellation must await a bounded separate phone reply");
+        yes(JarvisWearProtocol.timeoutMs(JarvisWearProtocol.SYNC) <
+            JarvisWearProtocol.SESSION_IDLE_MS,"heartbeat cannot block for a full UI timeout");
         System.out.println("PASS JarvisWearProtocolTest");
     }
 }

@@ -46,6 +46,8 @@ public final class JarvisWearPhoneAssistant {
             return;
         }
 
+        if (handleMacro(phone,raw,completion)) return;
+
         // Telegram: explicit user-authored messages only. Do not give an AI
         // model implicit power to choose contacts, write drafts or send.
         TelegramReplyCommands.Request telegram = TelegramReplyCommands.parse(raw);
@@ -175,8 +177,7 @@ public final class JarvisWearPhoneAssistant {
 
         String app = AssistantIntents.requestedApp(normalized);
         if (app != null) {
-            String opened = JarvisWearPhoneSession.launchApp(phone,app);
-            completion.finished(opened.startsWith("Відкриваю"),opened);
+            JarvisWearPhoneSession.launchApp(phone,app,completion);
             return;
         }
 
@@ -239,13 +240,32 @@ public final class JarvisWearPhoneAssistant {
         if (normalized.equals("перевір підключення ші") ||
             normalized.equals("стан ші") ||
             normalized.equals("статус ші")) {
+            if (aiBusy) {
+                completion.finished(false,"ШІ ще відповідає. Повтори перевірку після завершення.");
+                return;
+            }
             if (ai == null) ai = new AiChatClient(phone);
-            boolean configured = ai.isConfigured();
-            completion.finished(configured,configured
-                ? "На телефоні збережено HTTPS-адресу ШІ та код доступу. " +
-                  "Доступність сервера перевіряється під час запиту."
-                : "На телефоні ШІ не налаштований. Відкрий Джарвіс → " +
-                  "«ШІ — підключення» та введи адресу сервера й код доступу.");
+            if (!ai.isConfigured()) {
+                completion.finished(false,"На телефоні ШІ не налаштований. Відкрий «ШІ — підключення».");
+                return;
+            }
+            aiBusy = true;
+            try {
+                ai.checkConnection((answer,error) -> {
+                    aiBusy = false;
+                    completion.finished(error == null,error == null
+                        ? "ШІ працює: телефон отримав відповідь сервера й моделі."
+                        : error);
+                });
+            } catch (RuntimeException error) {
+                aiBusy = false;
+                completion.finished(false,"Не вдалося запустити перевірку ШІ. Повтори запит.");
+            }
+            return;
+        }
+
+        if (normalized.matches("^(?:увімкни|вимкни|відкрий|закрий|натисни|зажми|свайпни|прокрути|постав|встанови|скасуй|зупини|напиши)(?:\\s+.*)?$")) {
+            completion.finished(false,"Не розпізнав підтримувану команду телефона. Уточни дію або назву програми.");
             return;
         }
 
@@ -273,14 +293,23 @@ public final class JarvisWearPhoneAssistant {
             ai.sendDetailed(raw,mode,null,(answer,error) -> {
                 aiBusy = false;
                 String reply = error == null && answer != null ? answer.reply : error;
-                if (reply == null || reply.trim().isEmpty())
-                    reply = "ШІ не повернув відповіді.";
-                completion.finished(error == null && answer != null,reply);
+                boolean ok = error == null && answer != null && reply != null && !reply.trim().isEmpty();
+                if (reply == null || reply.trim().isEmpty()) reply = "ШІ не повернув відповіді.";
+                completion.finished(ok,reply);
             });
         } catch (RuntimeException error) {
             aiBusy = false;
             completion.finished(false,"Не вдалося передати запит телефонному ШІ.");
         }
+    }
+
+    static boolean handleMacro(Context phone,String raw,Completion completion) {
+        JarvisMacros.Listener result = new JarvisMacros.Listener() {
+            @Override public void onResult(String message) { completion.finished(false,message); }
+            @Override public void onComplete(boolean ok,String message) { completion.finished(ok,message); }
+        };
+        return JarvisMacros.cancelIfRequested(raw,result) ||
+            JarvisMacros.handleVoice(phone,raw,result,120000L);
     }
 
     /** Read the same preferences as MainActivity.getPreferences(MODE_PRIVATE). */

@@ -90,6 +90,14 @@ public final class JarvisWearPhoneLink {
             callback.finished(false,"Команда занадто довга або порожня.");
             return;
         }
+        String normalized = CommandPatterns.normalizeControlVerb(voice);
+        if (JarvisWearProtocol.ASSISTANT.equals(pendingType) &&
+            (normalized.equals("скасуй макрос") || normalized.equals("зупини макрос") ||
+             normalized.equals("стоп макрос"))) {
+            Callback previous = pendingCallback;
+            clearPending();
+            if (previous != null) previous.finished(false,"Очікую зупинку макросу на телефоні.");
+        }
         send(JarvisWearProtocol.ASSISTANT,voice,callback);
     }
 
@@ -107,25 +115,11 @@ public final class JarvisWearPhoneLink {
             callback.finished(false,"Немає активного запиту Spotify.");
             return;
         }
-        final String destination = pendingNode;
+        // Retire the old request; cancellation has its own id and phone ACK.
+        Callback previous = pendingCallback;
         clearPending();
-        if (activeSession.isEmpty()) JarvisPhoneMode.setActive(false);
-        try {
-            JSONObject request = new JSONObject();
-            request.put("id",UUID.randomUUID().toString());
-            request.put("action",JarvisWearProtocol.CANCEL_SPOTIFY);
-            request.put("session","");
-            request.put("text","");
-            messageClient.sendMessage(destination, JarvisWearProtocol.REQUEST,
-                request.toString().getBytes(StandardCharsets.UTF_8))
-                .addOnSuccessListener(result ->
-                    callback.finished(true,"Надіслав на телефон скасування Spotify."))
-                .addOnFailureListener(error ->
-                    callback.finished(false,"Не вдалося надіслати скасування. " +
-                        "Керування на телефоні завершиться за тайм-аутом."));
-        } catch (Exception error) {
-            callback.finished(false,"Помилка скасування Spotify на телефоні.");
-        }
+        if (previous != null) previous.finished(false,"Очікую скасування Spotify на телефоні.");
+        send(JarvisWearProtocol.CANCEL_SPOTIFY,"",callback);
     }
 
     public void enter(Callback cb) { send(JarvisWearProtocol.ENTER, "", cb); }
@@ -221,14 +215,7 @@ public final class JarvisWearPhoneLink {
                     if (data.length > JarvisWearProtocol.MAX_BYTES)
                         throw new IllegalArgumentException("Payload too large");
                     timeout = () -> failPending("Телефон не підтвердив виконання команди.");
-                    main.postDelayed(timeout,
-                        JarvisWearProtocol.SPOTIFY.equals(type) ?
-                            JarvisWearProtocol.SPOTIFY_ACK_TIMEOUT_MS :
-                        JarvisWearProtocol.TAXI.equals(type) ?
-                            JarvisWearProtocol.TAXI_ACK_TIMEOUT_MS :
-                        JarvisWearProtocol.ASSISTANT.equals(type) ?
-                            JarvisWearProtocol.ASSISTANT_ACK_TIMEOUT_MS :
-                            JarvisWearProtocol.ACK_TIMEOUT_MS);
+                    main.postDelayed(timeout,JarvisWearProtocol.timeoutMs(type));
                     if (JarvisWearProtocol.SPOTIFY.equals(type) ||
                         JarvisWearProtocol.TAXI.equals(type))
                         JarvisPhoneMode.setActive(true);
@@ -298,6 +285,7 @@ public final class JarvisWearPhoneLink {
                 activeSession = "";
                 JarvisPhoneMode.setActive(false);
             } else if (JarvisWearProtocol.SPOTIFY.equals(type) ||
+                       JarvisWearProtocol.CANCEL_SPOTIFY.equals(type) ||
                        JarvisWearProtocol.TAXI.equals(type)) {
                 // Temporary task complete: restore the usual 8-bit face.
                 if (activeSession.isEmpty()) JarvisPhoneMode.setActive(false);
@@ -312,7 +300,8 @@ public final class JarvisWearPhoneLink {
     private void failPending(String reason) {
         Callback cb = pendingCallback;
         boolean exiting = JarvisWearProtocol.EXIT.equals(pendingType);
-        boolean spotify = JarvisWearProtocol.SPOTIFY.equals(pendingType);
+        boolean spotify = JarvisWearProtocol.SPOTIFY.equals(pendingType) ||
+            JarvisWearProtocol.CANCEL_SPOTIFY.equals(pendingType);
         boolean taxi = JarvisWearProtocol.TAXI.equals(pendingType);
         boolean syncing = JarvisWearProtocol.SYNC.equals(pendingType);
         clearPending();

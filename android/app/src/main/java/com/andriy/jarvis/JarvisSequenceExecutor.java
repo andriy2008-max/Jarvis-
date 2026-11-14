@@ -76,6 +76,9 @@ public final class JarvisSequenceExecutor {
 
     private void tick() {
         if (!running || engine == null) return;
+        if (!JarvisPhoneScreenGuard.available(context)) {
+            finish(false,JarvisPhoneScreenGuard.MESSAGE); return;
+        }
         int step = engine.completedSteps();
         if (step != lastAnnounced) {
             lastAnnounced = step;

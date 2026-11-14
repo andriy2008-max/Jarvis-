@@ -100,6 +100,11 @@ public final class FinanceManagerController {
     }
     private void poll(){
         if(finished)return;
+        if (!JarvisPhoneScreenGuard.available(context)) {
+            finish(false,JarvisPhoneScreenGuard.MESSAGE + (saveAttempted
+                ? " Збереження вже натиснуто: спочатку перевір історію, не повторюй запис." : ""));
+            return;
+        }
         if(!ScreenControlAccessibilityService.isSessionActive()){
             finish(false,"Керування екраном вимкнулося. Фінансову операцію зупинено.");return;
         }
@@ -268,9 +273,9 @@ public final class FinanceManagerController {
                 break;
             case VERIFY_SAVED:
                 if(screen==ScreenControlAccessibilityService.FinanceScreen.HOME) {
-                    finish(true,(entry.kind==FinanceVoiceCommands.Kind.EXPENSE?
-                        "Витрата ":"Дохід ")+entry.amount+" грн, "+
-                        entry.category+": форма закрилася після збереження.");
+                    finish(false,"Збереження натиснуто, форма закрилася. Не можу підтвердити запис " +
+                        entry.amount+" грн, «"+entry.category+"» в історії. " +
+                        "Перевір операцію вручну; не повторюй команду до перевірки.");
                     return;
                 }
                 if(elapsed>7000L){

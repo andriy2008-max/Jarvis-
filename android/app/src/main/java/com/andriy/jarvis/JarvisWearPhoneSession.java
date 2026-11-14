@@ -47,7 +47,18 @@ public final class JarvisWearPhoneSession {
     private JarvisWearPhoneSession() {}
 
     public static void receive(Context context, String sourceNode, JSONObject request, Result result) {
-        main.post(() -> receiveOnMain(context.getApplicationContext(),sourceNode,request,result));
+        main.post(() -> {
+            final boolean[] completed = {false};
+            Result once = (ok,detail,token,ended) -> {
+                if (completed[0]) return;
+                completed[0] = true;
+                result.reply(ok,detail,token,ended);
+            };
+            try { receiveOnMain(context.getApplicationContext(),sourceNode,request,once); }
+            catch (RuntimeException error) {
+                once.reply(false,"Помилка виконання команди на телефоні. Перевір результат перед повторенням.","",true);
+            }
+        });
     }
 
     private static void receiveOnMain(Context context,String sourceNode,JSONObject request,Result originalOut) {
@@ -126,7 +137,9 @@ public final class JarvisWearPhoneSession {
                 return;
             }
             if (spotify != null) spotify.cancel();
-            out.reply(true,"Скасував керування Spotify.","",false);
+            boolean stopped = spotify == null || !spotify.isRunning();
+            out.reply(stopped,stopped ? "Скасував керування Spotify." :
+                "Не підтвердив зупинку Spotify.","",false);
             return;
         }
         if (JarvisWearProtocol.TAXI.equals(action)) {
@@ -164,6 +177,9 @@ public final class JarvisWearPhoneSession {
             return;
         }
         if (JarvisWearProtocol.ENTER.equals(action)) {
+            if (!JarvisPhoneScreenGuard.available(context)) {
+                out.reply(false,JarvisPhoneScreenGuard.MESSAGE,"",true); return;
+            }
             if (!ScreenControlAccessibilityService.isConnected()) {
                 out.reply(false,"На телефоні потрібно вручну увімкнути «Джарвіс — керування екраном» у Спеціальних можливостях.","",true);
                 return;
@@ -206,6 +222,9 @@ public final class JarvisWearPhoneSession {
             return;
         }
         extend();
+        final String macroToken = session;
+        if (JarvisWearPhoneAssistant.handleMacro(context,command,
+                (ok,detail) -> out.reply(ok,detail,macroToken,false))) return;
         if (sequences != null && sequences.isRunning()) {
             out.reply(false,"Телефон ще виконує послідовність. Повтори пізніше.",session,false);
             return;
@@ -302,8 +321,8 @@ public final class JarvisWearPhoneSession {
         }
         String app = AssistantIntents.requestedApp(normalized);
         if (app != null) {
-            String launched = launchApp(context,app);
-            out.reply(launched.startsWith("Відкриваю"),launched,session,false);
+            final String token = session;
+            launchApp(context,app,(ok,detail) -> out.reply(ok,detail,token,false));
             return;
         }
         out.reply(false,"У режимі «Телефон» доступні «Натисни», «Зажми», «Напиши», " +
@@ -311,7 +330,15 @@ public final class JarvisWearPhoneSession {
             session,false);
     }
 
-    static String launchApp(Context context,String voiceName) {
+    static void launchApp(Context context,String voiceName,
+                          JarvisWearPhoneAssistant.Completion completion) {
+        if (!JarvisPhoneScreenGuard.available(context)) {
+            completion.finished(false,JarvisPhoneScreenGuard.MESSAGE); return;
+        }
+        if (!ScreenControlAccessibilityService.isConnected()) {
+            completion.finished(false,"Увімкни «Джарвіс — керування екраном» на телефоні, щоб перевірити відкриття програми.");
+            return;
+        }
         PackageManager pm = context.getPackageManager();
         Intent launcher = new Intent(Intent.ACTION_MAIN);
         launcher.addCategory(Intent.CATEGORY_LAUNCHER);
@@ -325,17 +352,34 @@ public final class JarvisWearPhoneSession {
                     activity.activityInfo.name,label));
             }
             AppNameMatcher.Result match = AppNameMatcher.match(voiceName,apps);
-            if (match.ambiguous()) return "Знайшов кілька програм. Уточни назву.";
-            if (!match.found()) return "Не знайшов програму «" + voiceName + "» на телефоні.";
+            if (match.ambiguous()) {
+                completion.finished(false,"Знайшов кілька програм. Уточни назву."); return;
+            }
+            if (!match.found()) {
+                completion.finished(false,"Не знайшов програму «" + voiceName + "» на телефоні."); return;
+            }
             Intent intent = new Intent(Intent.ACTION_MAIN);
             intent.addCategory(Intent.CATEGORY_LAUNCHER);
             intent.setClassName(match.app.packageName,match.app.activityName);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             context.startActivity(intent);
-            return "Відкриваю «" + match.app.label + "» на телефоні.";
+            awaitVisible(context,match.app.packageName,match.app.label,
+                SystemClock.elapsedRealtime()+10000L,completion);
         } catch (Exception error) {
-            return "Не вдалося відкрити програму на телефоні. Розблокуй телефон та спробуй ще.";
+            completion.finished(false,"Не вдалося відкрити програму на телефоні. Розблокуй телефон та спробуй ще.");
         }
+    }
+
+    private static void awaitVisible(Context context,String pkg,String label,long until,
+                                     JarvisWearPhoneAssistant.Completion completion) {
+        if (!JarvisPhoneScreenGuard.available(context)) {
+            completion.finished(false,JarvisPhoneScreenGuard.MESSAGE);
+        } else if (pkg.equals(ScreenControlAccessibilityService.foregroundPackageForMacro())) {
+            completion.finished(true,"Відкрито «"+label+"» на телефоні.");
+        } else if (SystemClock.elapsedRealtime() >= until) {
+            completion.finished(false,"Не підтвердив відкриття «"+label+
+                "». Android міг обмежити запуск із фону. Відкрий Джарвіса на телефоні та повтори.");
+        } else main.postDelayed(() -> awaitVisible(context,pkg,label,until,completion),250L);
     }
 
     private static void extend() {
@@ -345,7 +389,7 @@ public final class JarvisWearPhoneSession {
             if (!session.isEmpty() && SystemClock.elapsedRealtime() >= deadline) {
                 if ((sequences != null && sequences.isRunning()) ||
                     (spotify != null && spotify.isRunning()) ||
-                    FinanceManagerController.isRunning()) extend();
+                    FinanceManagerController.isRunning() || JarvisMacros.isRunning()) extend();
                 else endSession();
             }
         };

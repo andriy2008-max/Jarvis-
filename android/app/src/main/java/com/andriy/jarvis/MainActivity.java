@@ -1219,12 +1219,28 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     /** Prefer fully-local two-speaker ONNX, then private TTS server, then Android TTS. */
     private void speakReply(String text) {
-        if (phoneListening) return; // keep listening without recognizing our own reply
+        if (phoneListening && !isWatchDevice) return; // phone overlay owns its audio loop
         if (!voiceEnabled || text == null || text.trim().isEmpty()) {
             endSpeaking();
             return;
         }
         stopSpeaking();
+        // Keep the continuous-mode preference, but retire capture before TTS.
+        // phoneListenAgain already waits for speaking/busy to clear.
+        if (isWatchDevice) {
+            cancelManualRestart();
+            cancelSilenceCheck();
+            manualCapture = false;
+            listening = false;
+            recognizerSessionActive = false;
+            autoWakeListening = false;
+            // Invalidate listener generation so cancel callbacks cannot restart
+            // recognition, replace the answer, or clear processing during TTS.
+            retireDisconnectedRecognizer();
+            if (headsetRoute != null) headsetRoute.end();
+            if (listeningAudioFocus != null) listeningAudioFocus.end();
+            prepareSpeech();
+        }
         if (getPreferences(MODE_PRIVATE).getBoolean("jarvisSupertonicSelected", false) &&
             supertonicSpeech != null && supertonicSpeech.isInstalled()) {
             prepareSpeech();
@@ -3813,6 +3829,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     if (isFinishing() || isDestroyed()) return;
                     appendDialogue("Джарвіс", detail);
                     setStatus(detail);
+                    if (voiceEnabled) speakReply(detail);
                 });
                 return;
             }
@@ -3822,7 +3839,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                     appendDialogue("Джарвіс", detail);
                     setStatus(detail);
-                    if (!ok && voiceEnabled) speakReply(detail);
+                    if (voiceEnabled) speakReply(detail);
                 });
             } else JarvisPhoneMode.setActive(false);
             return;
@@ -3877,7 +3894,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     request.equals("скасуй спотіфай") ||
                     request.equals("зупини spotify")) {
                     watchPhoneLink.cancelSpotify((ok, detail) -> {
-                        if (!isFinishing() && !isDestroyed()) setStatus(detail);
+                        if (!isFinishing() && !isDestroyed()) {
+                            setStatus(detail);
+                            appendDialogue("Джарвіс",detail);
+                            if (voiceEnabled) speakReply(detail);
+                        }
                     });
                 } else setStatus("Spotify ще виконує команду. Скажи «Скасуй Spotify».");
                 return;
@@ -3912,7 +3933,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                     appendDialogue("Джарвіс", detail);
                     setStatus(detail);
-                    if (!ok && voiceEnabled) speakReply(detail);
+                    if (voiceEnabled) speakReply(detail);
                 });
                 return;
             }
@@ -3932,7 +3953,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                     appendDialogue("Джарвіс", detail);
                     setStatus(detail);
-                    if (!ok && voiceEnabled) speakReply(detail);
+                    if (voiceEnabled) speakReply(detail);
                 });
                 return;
             }
@@ -3953,7 +3974,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                     appendDialogue("Джарвіс",detail);
                     setStatus(detail);
-                    if (!ok && voiceEnabled) speakReply(detail);
+                    if (voiceEnabled) speakReply(detail);
                 });
             } else {
                 // Keep the watch microphone idle until the phone has either

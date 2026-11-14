@@ -1212,6 +1212,10 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             callback.finished(false,"Служба керування екраном недоступна.");
             return;
         }
+        if (!JarvisPhoneScreenGuard.available(service)) {
+            callback.finished(false,JarvisPhoneScreenGuard.MESSAGE);
+            return;
+        }
         service.gestureCompletion = callback;
         try {
             String result = perform(action);
@@ -1298,6 +1302,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             return "Служба керування екраном не активована в налаштуваннях Android.";
         if (action == null)
             return "Невідома команда керування.";
+        if (!JarvisPhoneScreenGuard.available(s)) return JarvisPhoneScreenGuard.MESSAGE;
         if (!s.sessionActive)
             return "Спочатку скажи: увімкни керування екраном.";
         // Phone mode and screen control share the same session; gestures need no second switch.
@@ -1608,6 +1613,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     }
 
     private AccessibilityNodeInfo currentExternalRoot() {
+        if (!JarvisPhoneScreenGuard.available(this)) return null;
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) return null;
         CharSequence pkg = root.getPackageName();

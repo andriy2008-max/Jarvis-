@@ -23,6 +23,7 @@ public final class BoltTaxiController {
         void onFinished(boolean ok,String status);
     }
     private enum Stage { OPEN_APP, VERIFY_RIDES, DELAY, FOCUS_DROPOFF, WAIT_DROPOFF, TYPE, ENTER }
+    private final Context context;
     private final Listener listener;
     private final String address;
     private final JarvisPhoneModeManager.Lease lease;
@@ -34,7 +35,8 @@ public final class BoltTaxiController {
     private int ridesRetries;
     private int dropoffRetries;
 
-    private BoltTaxiController(Listener listener,String address,JarvisPhoneModeManager.Lease lease){
+    private BoltTaxiController(Context context,Listener listener,String address,JarvisPhoneModeManager.Lease lease){
+        this.context=context.getApplicationContext();
         this.listener=listener;this.address=address;this.lease=lease;
     }
     public static synchronized boolean isRunning(){return active!=null;}
@@ -63,16 +65,13 @@ public final class BoltTaxiController {
             listener.onFinished(false,"Адреса занадто довга.");return;
         }
         JarvisPhoneModeManager.Lease lease=JarvisPhoneModeManager.acquireForCommand(context);
+        if(!lease.granted){listener.onFinished(false,lease.message);return;}
         try{context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));}
         catch(RuntimeException error){
             JarvisPhoneModeManager.releaseForCommand(lease);
             listener.onFinished(false,"Android не дозволив відкрити Bolt.");return;
         }
-        if(!lease.granted){
-            listener.onFinished(false,"Bolt відкритий, але потрібна служба «Джарвіс — керування екраном» у Спеціальних можливостях. "+lease.message);
-            return;
-        }
-        BoltTaxiController job=new BoltTaxiController(listener,address,lease);
+        BoltTaxiController job=new BoltTaxiController(context,listener,address,lease);
         synchronized(BoltTaxiController.class){active=job;}
         listener.onProgress("Відкриваю Bolt. Через 4 секунди натисну «Поїздки»...");
         HANDLER.postDelayed(job.tick,BoltUiLabels.RIDES_TAP_DELAY_MS);
@@ -109,6 +108,9 @@ public final class BoltTaxiController {
 
     private void poll(){
         if(finished)return;
+        if(!JarvisPhoneScreenGuard.available(context)){
+            finish(false,JarvisPhoneScreenGuard.MESSAGE);return;
+        }
         if(!ScreenControlAccessibilityService.isSessionActive()){
             finish(false,"Керування екраном вимкнулося.");return;
         }

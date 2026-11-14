@@ -23,6 +23,17 @@ public final class JarvisWearProtocol {
     // Includes slow personal AI requests and consented phone-side app workflows.
     public static final int ASSISTANT_ACK_TIMEOUT_MS = 150000;
 
+    // Six sequential screen steps can each take 18 seconds.
+    public static final int COMMAND_ACK_TIMEOUT_MS = 150000;
+
+    public static int timeoutMs(String action) {
+        if (SPOTIFY.equals(action)) return SPOTIFY_ACK_TIMEOUT_MS;
+        if (TAXI.equals(action)) return TAXI_ACK_TIMEOUT_MS;
+        if (ASSISTANT.equals(action)) return ASSISTANT_ACK_TIMEOUT_MS;
+        if (COMMAND.equals(action)) return COMMAND_ACK_TIMEOUT_MS;
+        return ACK_TIMEOUT_MS;
+    }
+
     private JarvisWearProtocol() {}
 
     public static boolean validAction(String action) {

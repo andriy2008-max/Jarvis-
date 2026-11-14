@@ -45,6 +45,7 @@ public final class JarvisPhoneModeManager {
             return "Ця конфігурація Джарвіса не підтримує керування екраном.";
         if (!ScreenControlAccessibilityService.isConnected())
             return consentNeeded();
+        if (!JarvisPhoneScreenGuard.available(context)) return JarvisPhoneScreenGuard.MESSAGE;
         // An explicit "Телефон" supersedes temporary automated control.
         automaticOwner = null;
         showPhoneIcon(context);
@@ -67,6 +68,8 @@ public final class JarvisPhoneModeManager {
             return new Lease(null,false,"Керування екраном недоступне на цьому пристрої.");
         if (!ScreenControlAccessibilityService.isConnected())
             return new Lease(null,false,consentNeeded());
+        if (!JarvisPhoneScreenGuard.available(context))
+            return new Lease(null,false,JarvisPhoneScreenGuard.MESSAGE);
         if (automaticOwner != null)
             return new Lease(null,false,"Інша команда вже керує екраном.");
         if (ScreenControlAccessibilityService.isSessionActive()) {

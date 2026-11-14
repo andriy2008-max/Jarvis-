@@ -46,6 +46,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class JarvisMacros {
     public interface Listener {
         void onResult(String result);
+        default void onComplete(boolean ok,String result) { onResult(result); }
         default void onProgress(int step, int total, String detail) { }
     }
 
@@ -116,7 +117,7 @@ public final class JarvisMacros {
             if(current==null) report(listener,"Зараз немає активного макросу.");
             else {
                 current.complete(false,"скасовано користувачем");
-                report(listener,"Макрос зупинено.");
+                MAIN.post(() -> { if (listener != null) listener.onComplete(true,"Макрос зупинено."); });
             }
         });
     }
@@ -132,6 +133,10 @@ public final class JarvisMacros {
     }
 
     public static boolean handleVoice(Context context, String words, Listener listener) {
+        return handleVoice(context,words,listener,0L);
+    }
+
+    public static boolean handleVoice(Context context, String words, Listener listener,long limitMs) {
         String normalized = CommandPatterns.normalizeControlVerb(words)
             .replaceAll("\\s+", " ").trim();
         if (normalized.isEmpty()) return false;
@@ -161,10 +166,13 @@ public final class JarvisMacros {
         // Deduplicate repeated ASR callbacks for the exact selected macro.
         String token=normalized+"|"+selected.optString("id");
         long now=SystemClock.elapsedRealtime();
-        if(token.equals(lastVoice) && now-lastVoiceMs<2200)return true;
+        if(token.equals(lastVoice) && now-lastVoiceMs<2200) {
+            report(listener,"Повторну команду макросу пропущено. Перевір результат попередньої.");
+            return true;
+        }
         lastVoice=token;
         lastVoiceMs=now;
-        execute(context,selected,listener);
+        execute(context,selected,listener,limitMs);
         return true;
     }
 
@@ -289,6 +297,10 @@ public final class JarvisMacros {
     }
 
     public static void execute(Context context, JSONObject macro, Listener listener) {
+        execute(context,macro,listener,0L);
+    }
+
+    private static void execute(Context context, JSONObject macro, Listener listener,long limitMs) {
         if (!allowed(context, macro)) {
             report(listener, "Макрос «" + macro.optString("name") +
                 "» не виконано: обмеження не виконуються.");
@@ -334,6 +346,7 @@ public final class JarvisMacros {
         Execution execution = new Execution(context.getApplicationContext(),
             macro.optString("name"), actions, listener);
         active = execution;
+        if (limitMs > 0L) MAIN.postDelayed(execution.timeout,limitMs);
         execution.next();
     }
 
@@ -349,6 +362,7 @@ public final class JarvisMacros {
         int index;
         volatile boolean finished;
         volatile Process rootProcess;
+        final Runnable timeout = () -> complete(false,"час виконання з годинника вичерпано; наступні кроки скасовано");
         JarvisSequenceExecutor ongoingSequence;
         Execution(Context context, String name, JSONArray steps, Listener listener) {
             this.context = context;
@@ -359,6 +373,7 @@ public final class JarvisMacros {
         void complete(boolean ok, String info) {
             if (finished) return;
             finished = true;
+            MAIN.removeCallbacks(timeout);
             // The nested command executor owns its own polling loop and phone-mode
             // lease. Cancelling the outer macro must cancel that executor too.
             JarvisSequenceExecutor sequence=ongoingSequence;
@@ -367,8 +382,9 @@ public final class JarvisMacros {
             if (rootProcess != null) rootProcess.destroyForcibly();
             if (active == this) active = null;
             RUNNING.set(false);
-            report(listener, (ok ? "Макрос «" + name + "» завершено." :
-                "Макрос «" + name + "» зупинено: " + info));
+            String result = ok ? "Макрос «" + name + "» завершено." :
+                "Макрос «" + name + "» зупинено: " + info;
+            if (listener != null) MAIN.post(() -> listener.onComplete(ok,result));
         }
         void next() {
             MAIN.post(() -> {

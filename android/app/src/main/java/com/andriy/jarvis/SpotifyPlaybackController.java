@@ -124,32 +124,28 @@ public final class SpotifyPlaybackController {
             directBridge.connect();
             return;
         }
-        JarvisPhoneModeManager.Lease lease = null;
-        if (kind != SpotifyMusicCommands.Kind.OPEN) {
-            // An explicit voice request grants permission to use the
-            // ALREADY user-enabled Android Accessibility service for this task.
-            // A manual/watch session is borrowed and NEVER closed by this task.
-            lease = JarvisPhoneModeManager.acquireForCommand(context);
-            if (!lease.granted) {
-                if (callback != null) callback.onFinished(false, lease.message);
-                return;
-            }
+        if (kind == SpotifyMusicCommands.Kind.OPEN) {
+            active = true;
+            listener = callback;
+            requested = kind;
+            final Listener owner = callback;
+            JarvisWearPhoneSession.launchApp(context,"Spotify",(ok,detail) -> {
+                if (active && listener == owner) finish(ok,detail);
+            });
+            return;
         }
-        long openFeedback = kind == SpotifyMusicCommands.Kind.OPEN && JarvisPhoneMode.isActive()
-            ? JarvisControlFeedback.begin() : 0L;
+        // Direct API was unavailable; screen automation needs an unlocked phone.
+        JarvisPhoneModeManager.Lease lease = JarvisPhoneModeManager.acquireForCommand(context);
+        if (!lease.granted) {
+            if (callback != null) callback.onFinished(false,lease.message);
+            return;
+        }
         try {
             launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             context.startActivity(launch);
         } catch (Exception error) {
-            JarvisControlFeedback.finish(openFeedback,false,SystemClock.uptimeMillis());
             JarvisPhoneModeManager.releaseForCommand(lease);
-            if (callback != null) callback.onFinished(false,
-                "Android не дозволив відкрити Spotify.");
-            return;
-        }
-        if (kind == SpotifyMusicCommands.Kind.OPEN) {
-            JarvisControlFeedback.finish(openFeedback,true,SystemClock.uptimeMillis());
-            if (callback != null) callback.onFinished(true, "Відкриваю Spotify.");
+            if (callback != null) callback.onFinished(false,"Android не дозволив відкрити Spotify.");
             return;
         }
         temporaryControl = lease;
@@ -175,6 +171,9 @@ public final class SpotifyPlaybackController {
 
     private void tick() {
         if (!active || stage == null) return;
+        if (!JarvisPhoneScreenGuard.available(context)) {
+            finish(false,JarvisPhoneScreenGuard.MESSAGE); return;
+        }
         if (!ScreenControlAccessibilityService.isSessionActive()) {
             finish(false, "Керування екраном вимкнулося. Послідовність зупинена.");
             return;

@@ -118,6 +118,34 @@ public final class AiChatClient {
             callback.onComplete(response == null ? null : response.reply, error));
     }
 
+    /** Real authenticated model request, isolated from conversation history. */
+    public void checkConnection(Callback callback) {
+        if (closed || !isConfigured()) {
+            ui.post(() -> callback.onComplete(null,"ШІ не налаштований або вимкнений."));
+            return;
+        }
+        final String url = endpoint();
+        executor.execute(() -> {
+            String answer = null;
+            String error = null;
+            try {
+                JSONObject request = new JSONObject();
+                request.put("message","Відповідай одним словом: OK");
+                request.put("mode","chat");
+                request.put("history",new JSONArray());
+                String token = decrypt(prefs.getString("code_encrypted",""));
+                AiResponse response = post(url,token,request);
+                if (response == null || response.reply == null || response.reply.trim().isEmpty())
+                    throw new Exception("ШІ повернув порожню відповідь.");
+                answer = response.reply;
+            } catch (Exception failure) {
+                error = failure.getMessage() == null ? "Не вдалося перевірити ШІ." : failure.getMessage();
+            }
+            final String reply = answer, problem = error;
+            ui.post(() -> callback.onComplete(reply,problem));
+        });
+    }
+
     /**
      * Explicit modes, optional user-picked URI. Only the selected file is read.
      * Parsing, encoding and network I/O all happen on our worker thread.
