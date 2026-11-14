@@ -26,7 +26,8 @@ public final class SpotifyPlaybackController {
     private static final long NAMED_FIND_TIMEOUT_MS = 52000L;
 
     private enum Stage {
-        WAIT_APP, OPEN_LIBRARY, OPEN_COLLECTION, CHOOSE_RAP, PLAY, VERIFY_PLAY,
+        WAIT_APP, OPEN_LIBRARY, OPEN_COLLECTION, WAIT_PLAYLIST_PAGE,
+        CHOOSE_RAP, PLAY, VERIFY_PLAY,
         OPEN_SEARCH, VERIFY_SEARCH_LINK, OPEN_SEARCH_TAB,
         FOCUS_SEARCH, TYPE_SEARCH, SELECT_TRACK
     }
@@ -46,6 +47,7 @@ public final class SpotifyPlaybackController {
     private SpotifyAppRemoteBridge directBridge;
     private boolean bypassDirectOnce;
     private boolean playlistPlayRetried;
+    private boolean playlistRowRetried;
 
     public SpotifyPlaybackController(Context context) {
         this.context = context;
@@ -153,6 +155,7 @@ public final class SpotifyPlaybackController {
         this.namedTrack = namedTrack;
         scrolled = 0;
         playlistPlayRetried = false;
+        playlistRowRetried = false;
         listener = callback;
         active = true;
         move(Stage.WAIT_APP, "Режим «Телефон»: очікую відкриття Spotify...");
@@ -230,6 +233,10 @@ public final class SpotifyPlaybackController {
                     reason = "Натиснув Play, але Spotify не підтвердив відтворення. " +
                         "Перевір, чи музика грає та чи не обмежений акаунт.";
                     break;
+                case WAIT_PLAYLIST_PAGE:
+                    reason = "Spotify не перейшов із бібліотеки на сторінку плейлиста «" +
+                        namedPlaylist + "», хоча прийняв натискання.";
+                    break;
                 case OPEN_COLLECTION:
                     reason = requested == SpotifyMusicCommands.Kind.RAP
                         ? "Не знайшов «Пісні, що сподобалися» в бібліотеці."
@@ -294,6 +301,32 @@ public final class SpotifyPlaybackController {
                     finish(true,"Натиснув пісню «"+namedTrack+
                         "» у результатах Spotify на телефоні. Перевіряй відтворення.");
                 break;
+            case WAIT_PLAYLIST_PAGE: {
+                ScreenControlAccessibilityService.SpotifyStep ready=
+                    ScreenControlAccessibilityService.spotifyNamedPlaylistDetailReady(
+                        namedPlaylist);
+                if(ready==ScreenControlAccessibilityService.SpotifyStep.ALREADY) {
+                    move(Stage.PLAY,"Плейлист відкрито. Запускаю велику кнопку Play...");
+                } else if(!playlistRowRetried && age>=2600L) {
+                    // Spotify Compose may acknowledge ACTION_CLICK without
+                    // leaving My Library. Retry the exact named row once,
+                    // using its visible label, not guessed screen coordinates.
+                    playlistRowRetried=true;
+                    ScreenControlAccessibilityService.SpotifyStep again=
+                        ScreenControlAccessibilityService.spotifyRetryNamedPlaylistEntry(
+                            namedPlaylist);
+                    if(again==ScreenControlAccessibilityService.SpotifyStep.ALREADY)
+                        move(Stage.PLAY,"Відкрився плейлист. Натискаю Play...");
+                    else if(again==ScreenControlAccessibilityService.SpotifyStep.CLICKED)
+                        move(Stage.WAIT_PLAYLIST_PAGE,
+                            "Повторно відкриваю плейлист дотиком. Чекаю сторінку...");
+                } else if(age>=8500L) {
+                    finish(false,"Не вдалося відкрити сторінку плейлиста «"+
+                        namedPlaylist+"». Play не натискав.");
+                    return;
+                }
+                break;
+            }
             case OPEN_LIBRARY:
                 if (successful(ScreenControlAccessibilityService.spotifyControl(
                     SpotifyUiLabels.Target.LIBRARY, null)))
@@ -313,11 +346,18 @@ public final class SpotifyPlaybackController {
                     found = ScreenControlAccessibilityService.spotifyControl(item,null);
                 }
                 if (successful(found)) {
-                    move(requested == SpotifyMusicCommands.Kind.RAP ?
-                        Stage.CHOOSE_RAP : Stage.PLAY,
-                        requested == SpotifyMusicCommands.Kind.RAP
-                            ? "Чекаю кнопку жанру «Реп»..."
-                            : "Плейлист відкрито. Натискаю велику зелену Play...");
+                    // A successful click merely opens the library row. Do
+                    // not infer that the destination page has rendered.
+                    if(requested==SpotifyMusicCommands.Kind.PLAYLIST &&
+                        found==ScreenControlAccessibilityService.SpotifyStep.CLICKED)
+                        move(Stage.WAIT_PLAYLIST_PAGE,
+                            "Натиснув плейлист. Очікую його сторінку...");
+                    else
+                        move(requested == SpotifyMusicCommands.Kind.RAP ?
+                            Stage.CHOOSE_RAP : Stage.PLAY,
+                            requested == SpotifyMusicCommands.Kind.RAP
+                                ? "Чекаю кнопку жанру «Реп»..."
+                                : "Сторінка плейлиста відкрита. Натискаю Play...");
                 } else {
                     boolean canScroll = requested == SpotifyMusicCommands.Kind.UKRAINIAN ||
                         requested == SpotifyMusicCommands.Kind.PLAYLIST;
