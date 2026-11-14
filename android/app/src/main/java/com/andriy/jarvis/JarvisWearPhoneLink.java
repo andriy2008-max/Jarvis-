@@ -64,6 +64,20 @@ public final class JarvisWearPhoneLink {
         return JarvisWearProtocol.SPOTIFY.equals(pendingType);
     }
 
+    public boolean taxiRunning() {
+        return JarvisWearProtocol.TAXI.equals(pendingType);
+    }
+
+    /** Local taxi command: phone controls Bolt without invoking conversational AI. */
+    public void taxi(String voice, Callback callback) {
+        if (!JarvisWearProtocol.validCommand(voice) ||
+            JarvisTaxiCommands.destination(voice) == null) {
+            callback.finished(false, "Невідома команда таксі.");
+            return;
+        }
+        send(JarvisWearProtocol.TAXI, voice, callback);
+    }
+
     public void spotify(String voice, Callback callback) {
         if (!JarvisWearProtocol.validCommand(voice) ||
             SpotifyMusicCommands.parse(voice) == null) {
@@ -131,6 +145,9 @@ public final class JarvisWearPhoneLink {
 
     private void send(String type, String text, Callback cb) {
         if (closed) { cb.finished(false, "Зв'язок із телефоном вимкнено."); return; }
+        // A background 10-second sync must never block a user's taxi command.
+        if (!JarvisWearProtocol.SYNC.equals(type) &&
+            JarvisWearProtocol.SYNC.equals(pendingType)) clearPending();
         if (busy()) { cb.finished(false, "Чекаю відповіді телефона на попередню команду."); return; }
         if (!JarvisWearProtocol.validAction(type)) {
             cb.finished(false, "Непідтримувана команда телефона."); return;
@@ -168,7 +185,9 @@ public final class JarvisWearPhoneLink {
                     pendingNode = target.getId();
                     pendingType = type;
                     pendingCallback = cb;
-                    if (JarvisWearProtocol.COMMAND.equals(type) || JarvisWearProtocol.SPOTIFY.equals(type))
+                    if (JarvisWearProtocol.COMMAND.equals(type) ||
+                        JarvisWearProtocol.SPOTIFY.equals(type) ||
+                        JarvisWearProtocol.TAXI.equals(type))
                         feedback = JarvisControlFeedback.begin();
                     if (data.length > JarvisWearProtocol.MAX_BYTES)
                         throw new IllegalArgumentException("Payload too large");
@@ -176,8 +195,11 @@ public final class JarvisWearPhoneLink {
                     main.postDelayed(timeout,
                         JarvisWearProtocol.SPOTIFY.equals(type) ?
                             JarvisWearProtocol.SPOTIFY_ACK_TIMEOUT_MS :
+                        JarvisWearProtocol.TAXI.equals(type) ?
+                            JarvisWearProtocol.TAXI_ACK_TIMEOUT_MS :
                             JarvisWearProtocol.ACK_TIMEOUT_MS);
-                    if (JarvisWearProtocol.SPOTIFY.equals(type))
+                    if (JarvisWearProtocol.SPOTIFY.equals(type) ||
+                        JarvisWearProtocol.TAXI.equals(type))
                         JarvisPhoneMode.setActive(true);
                     messageClient.sendMessage(target.getId(),JarvisWearProtocol.REQUEST,data)
                         .addOnFailureListener(err -> failPending(
@@ -236,8 +258,9 @@ public final class JarvisWearPhoneLink {
                        data.optBoolean("session_ended",false)) {
                 activeSession = "";
                 JarvisPhoneMode.setActive(false);
-            } else if (JarvisWearProtocol.SPOTIFY.equals(type)) {
-                // The temporary control was limited to the Spotify command.
+            } else if (JarvisWearProtocol.SPOTIFY.equals(type) ||
+                       JarvisWearProtocol.TAXI.equals(type)) {
+                // Temporary task complete: restore the usual 8-bit face.
                 if (activeSession.isEmpty()) JarvisPhoneMode.setActive(false);
             }
             JarvisControlFeedback.finish(feedback,ok,SystemClock.uptimeMillis());
@@ -251,10 +274,11 @@ public final class JarvisWearPhoneLink {
         Callback cb = pendingCallback;
         boolean exiting = JarvisWearProtocol.EXIT.equals(pendingType);
         boolean spotify = JarvisWearProtocol.SPOTIFY.equals(pendingType);
+        boolean taxi = JarvisWearProtocol.TAXI.equals(pendingType);
         boolean syncing = JarvisWearProtocol.SYNC.equals(pendingType);
         clearPending();
         if (syncing) { activeSession = ""; JarvisPhoneMode.setActive(false); }
-        if (spotify && activeSession.isEmpty()) JarvisPhoneMode.setActive(false);
+        if ((spotify || taxi) && activeSession.isEmpty()) JarvisPhoneMode.setActive(false);
         if (exiting) {
             activeSession = "";
             JarvisPhoneMode.setActive(false);
