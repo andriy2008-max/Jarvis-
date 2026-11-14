@@ -55,6 +55,8 @@ on:
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisWearPhoneLink.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisShakePattern.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisShakeGate.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisWatchMicVisualRules.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/JarvisWatchMicVisualRulesTest.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisSpeechErrorPolicy.java'
       - 'android/app/src/test/java/com/andriy/jarvis/JarvisSpeechErrorPolicyTest.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisShakeWakeProbe.java'
@@ -210,6 +212,8 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/JarvisShakePattern.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisShakeGate.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisSpeechErrorPolicy.java \
+            android/app/src/main/java/com/andriy/jarvis/JarvisWatchMicVisualRules.java \
+            android/app/src/test/java/com/andriy/jarvis/JarvisWatchMicVisualRulesTest.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisCommandSequence.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisSequenceEngine.java \
             android/app/src/main/java/com/andriy/jarvis/AssistantIntents.java \
@@ -286,6 +290,7 @@ jobs:
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisShakePatternTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisShakeGateTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisSpeechErrorPolicyTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisWatchMicVisualRulesTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisCommandSequenceTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisSequenceEngineTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.ScreenTextInsertionTest
