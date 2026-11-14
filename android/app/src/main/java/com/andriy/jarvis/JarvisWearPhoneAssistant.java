@@ -174,6 +174,29 @@ public final class JarvisWearPhoneAssistant {
             return;
         }
 
+        // Wear commands for alarms/reminders are handled by the phone's
+        // AlarmManager; the Clock UI need not be open or screen-unlocked.
+        AssistantIntents.ClockTime clock=AssistantIntents.alarmTime(normalized);
+        if(clock!=null) {
+            String result=JarvisWearAlarmScheduler.setAlarm(phone,clock);
+            completion.finished(result.startsWith("Будильник встановлено"),result);
+            return;
+        }
+        AssistantIntents.Reminder reminder=AssistantIntents.reminder(normalized);
+        if(reminder!=null) {
+            String result=JarvisWearAlarmScheduler.setReminder(phone,reminder);
+            completion.finished(result.startsWith("Нагадування встановлено"),result);
+            return;
+        }
+        if(AssistantIntents.isAlarmCommand(normalized) ||
+           AssistantIntents.isReminderCommand(normalized)) {
+            completion.finished(false,AssistantIntents.isAlarmCommand(normalized)
+                ? "Не розпізнав час будильника. Скажи «Постав будильник на 07:30»."
+                : "Скажи, наприклад, «Нагадай мені через 20 хвилин випити води» "+
+                  "або «Нагадай о 18:30 зустріч».");
+            return;
+        }
+
         Integer timer = CommandPatterns.timerSeconds(normalized);
         if (timer != null) {
             boolean ok = timer > 0 && TimerScheduler.start(phone,timer);
