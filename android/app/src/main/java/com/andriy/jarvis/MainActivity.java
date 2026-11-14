@@ -778,6 +778,37 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 new LinearLayout.LayoutParams(-1, -2);
             batteryParams.topMargin = dp(5);
             hero.addView(batterySettings,batteryParams);
+
+            CheckBox remoteUnlock = new CheckBox(this);
+            remoteUnlock.setText("🔐 Експериментально: розблокувати Pixel PIN із Watch7 (root)");
+            remoteUnlock.setTextColor(MUTED);
+            remoteUnlock.setTextSize(TypedValue.COMPLEX_UNIT_SP,isCompact ? 11 : 12);
+            remoteUnlock.setButtonTintList(ColorStateList.valueOf(CYAN));
+            remoteUnlock.setChecked(JarvisRemoteUnlock.enabled(this));
+            remoteUnlock.setOnCheckedChangeListener((toggle,checked) -> {
+                if (!checked) {
+                    JarvisRemoteUnlock.setEnabled(this,false);
+                    return;
+                }
+                AlertDialog confirm = new AlertDialog.Builder(this)
+                    .setTitle("Root-розблокування з годинника")
+                    .setMessage("Вимагає root-дозвіл для Джарвіса на Pixel, " +
+                        "захищений PIN годинника й числовий PIN телефона. " +
+                        "PIN передається тільки на Pixel через Wear OS, " +
+                        "не зберігається. Це експериментальний режим: Android " +
+                        "може заборонити автоматичне розблокування. " +
+                        "Переконайся, що Джарвіс має root-дозвіл до блокування.")
+                    .setPositiveButton("Увімкнути",(d,w) -> {
+                        JarvisRemoteUnlock.setEnabled(this,true);
+                        setStatus("Root-розблокування увімкнено. Перевір спершу з тестовою командою.");
+                    })
+                    .setNegativeButton("Скасувати",(d,w) -> remoteUnlock.setChecked(false))
+                    .create();
+                showDialogWithoutWake(confirm);
+            });
+            LinearLayout.LayoutParams rootUnlockParams = new LinearLayout.LayoutParams(-1,-2);
+            rootUnlockParams.topMargin=dp(6);
+            hero.addView(remoteUnlock,rootUnlockParams);
         }
 
         wakeToggle = makeWakeToggle();
@@ -1859,6 +1890,53 @@ public final class MainActivity extends Activity implements RecognitionListener 
             .setPositiveButton("Надіслати", (d, which) -> processCommand(editor.getText().toString()))
             .create();
         showDialogWithoutWake(dialog);
+    }
+
+    /** A one-time system PIN is requested only by the paired phone for
+     * an action that needs the actual Pixel screen. Never store the PIN. */
+    private boolean promptForPhonePin(String detail) {
+        if (!isWatchDevice || detail == null || watchPhoneLink == null) return false;
+        final boolean retry = detail.startsWith(JarvisRemoteUnlock.RETRY);
+        final String prefix = retry ? JarvisRemoteUnlock.RETRY : JarvisRemoteUnlock.REQUIRED;
+        if (!detail.startsWith(prefix)) return false;
+        final String challenge = detail.substring(prefix.length());
+        if (!challenge.matches("[0-9a-f]{32}")) return false;
+        EditText pinField = new EditText(this);
+        pinField.setSingleLine(true);
+        pinField.setInputType(InputType.TYPE_CLASS_NUMBER |
+            InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        pinField.setFilters(new android.text.InputFilter[]{
+            new android.text.InputFilter.LengthFilter(12)});
+        pinField.setHint("PIN телефона");
+        pinField.setContentDescription("Одноразовий PIN розблокування Pixel");
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle(retry ? "Невірний PIN або Pixel не розблокувався"
+                : "Pixel заблоковано")
+            .setMessage("Для виконання екранної команди введи числовий PIN " +
+                "Pixel на годиннику. Джарвіс не зберігає його. " +
+                "Після команди Pixel знову заблокується.")
+            .setView(pinField)
+            .setNegativeButton("Скасувати",(d,w) -> pinField.setText(""))
+            .setPositiveButton("Розблокувати",(d,w) -> {
+                String entered = pinField.getText().toString();
+                pinField.setText("");
+                setStatus("Перевіряю PIN на Pixel...");
+                watchPhoneLink.unlockPin(challenge,entered,(ok,response) -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    if (promptForPhonePin(response)) return;
+                    appendDialogue("Джарвіс",response);
+                    setStatus(response);
+                    if (voiceEnabled) speakReply(response);
+                    else if (face != null) face.setState("idle");
+                });
+            })
+            .create();
+        dialog.setOnShowListener(d -> {
+            if (dialog.getWindow()!=null) dialog.getWindow().addFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SECURE);
+        });
+        showDialogWithoutWake(dialog);
+        return true;
     }
 
     private void showWatchActions() {
@@ -3673,6 +3751,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             watchPhoneLink.assistant(question,(ok,detail) -> {
                 processing = false;
                 if (isFinishing() || isDestroyed()) return;
+                if (promptForPhonePin(detail)) return;
                 appendDialogue("Джарвіс",detail);
                 setStatus(detail);
                 if (voiceEnabled) speakReply(detail);
@@ -3951,6 +4030,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 }
                 watchPhoneLink.taxi(raw, (ok, detail) -> {
                     if (isFinishing() || isDestroyed()) return;
+                    if (promptForPhonePin(detail)) return;
                     if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                     appendDialogue("Джарвіс", detail);
                     setStatus(detail);
@@ -3969,6 +4049,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 }
                 watchPhoneLink.enter((ok, detail) -> {
                     if (isFinishing() || isDestroyed()) return;
+                    if (promptForPhonePin(detail)) return;
                     if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                     appendDialogue("Джарвіс", detail);
                     setStatus(detail);
@@ -4024,6 +4105,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 watchPhoneLink.assistant(raw,(ok,detail) -> {
                     processing = false;
                     if (isFinishing() || isDestroyed()) return;
+                    if (promptForPhonePin(detail)) return;
                     if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                     appendDialogue("Джарвіс",detail);
                     setStatus(detail);
