@@ -2,6 +2,7 @@ package com.andriy.jarvis;
 
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -26,7 +27,8 @@ public final class SpotifyPlaybackController {
 
     private enum Stage {
         WAIT_APP, OPEN_LIBRARY, OPEN_COLLECTION, CHOOSE_RAP, PLAY,
-        OPEN_SEARCH, FOCUS_SEARCH, TYPE_SEARCH, SELECT_TRACK
+        OPEN_SEARCH, VERIFY_SEARCH_LINK, OPEN_SEARCH_TAB,
+        FOCUS_SEARCH, TYPE_SEARCH, SELECT_TRACK
     }
 
     private final Context context;
@@ -160,6 +162,26 @@ public final class SpotifyPlaybackController {
         finish(false, "Послідовність Spotify скасовано.");
     }
 
+    /** Avoid brittle nav tabs by using Spotify's own in-app search URI.
+     * Restrict ACTION_VIEW to com.spotify.music: never launch a browser.
+     * If the installed Spotify build rejects the scheme, fall back to
+     * verified visible Search tab controls. */
+    private boolean openDirectSpotifySearch(String title) {
+        if(title==null || title.trim().isEmpty() || title.length()>100)return false;
+        Intent search=new Intent(Intent.ACTION_VIEW,
+            Uri.parse("spotify:search:"+Uri.encode(title.trim())));
+        search.setPackage(PACKAGE);
+        search.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if(search.resolveActivity(context.getPackageManager())==null)
+            return false;
+        try {
+            context.startActivity(search);
+            return true;
+        } catch (RuntimeException rejected) {
+            return false;
+        }
+    }
+
     private void move(Stage next, String message) {
         stage = next;
         stageStart = SystemClock.elapsedRealtime();
@@ -190,8 +212,10 @@ public final class SpotifyPlaybackController {
                     reason = "Не знайшов вкладку «Моя бібліотека» у Spotify.";
                     break;
                 case OPEN_SEARCH:
+                case VERIFY_SEARCH_LINK:
+                case OPEN_SEARCH_TAB:
                 case FOCUS_SEARCH:
-                    reason = "Не вдалося відкрити пошук Spotify.";
+                    reason = "Не вдалося відкрити пошук Spotify. Спробуй вручну відкрити вкладку «Пошук» та повторити команду.";
                     break;
                 case TYPE_SEARCH:
                     reason = "Не вдалося ввести назву пісні в пошук Spotify.";
@@ -229,7 +253,24 @@ public final class SpotifyPlaybackController {
                     move(Stage.OPEN_LIBRARY,"Відкриваю «Моя бібліотека»...");
                 break;
             case OPEN_SEARCH:
-                if(successful(ScreenControlAccessibilityService.spotifySearchTab()))
+                if(openDirectSpotifySearch(namedTrack))
+                    move(Stage.VERIFY_SEARCH_LINK,
+                        "Відкриваю Spotify одразу з пошуком «"+namedTrack+"»...");
+                else
+                    move(Stage.OPEN_SEARCH_TAB,
+                        "Прямий перехід недоступний. Шукаю вкладку «Пошук»...");
+                break;
+            case VERIFY_SEARCH_LINK:
+                if(ScreenControlAccessibilityService.spotifySearchQueryVisible(namedTrack))
+                    move(Stage.SELECT_TRACK,"Пошук відкритий. Обираю точний результат...");
+                else if(age>=4300L)
+                    move(Stage.OPEN_SEARCH_TAB,
+                        "Spotify не підтвердив прямий пошук. Відкриваю вкладку вручну...");
+                break;
+            case OPEN_SEARCH_TAB:
+                if(ScreenControlAccessibilityService.spotifySearchQueryVisible(namedTrack))
+                    move(Stage.SELECT_TRACK,"Знайшов потрібний пошуковий запит...");
+                else if(successful(ScreenControlAccessibilityService.spotifySearchTab()))
                     move(Stage.FOCUS_SEARCH,"Відкриваю поле пошуку пісні...");
                 break;
             case FOCUS_SEARCH:
