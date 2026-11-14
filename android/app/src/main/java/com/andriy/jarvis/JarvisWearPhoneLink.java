@@ -26,7 +26,10 @@ public final class JarvisWearPhoneLink {
     private final Context context;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final MessageClient messageClient;
-    private final MessageClient.OnMessageReceivedListener replies = this::onReply;
+    // Wear message callbacks can arrive on binder threads. Serialize them
+    // with sends, timeouts and node discovery on the Android main looper.
+    private final MessageClient.OnMessageReceivedListener replies =
+        event -> main.post(() -> onReply(event));
     private Task<Void> listenerRegistration;
     private boolean listenerReady;
     private boolean requesting;
