@@ -13,6 +13,10 @@ public final class TimerRestoreReceiver extends BroadcastReceiver {
         if (Intent.ACTION_BOOT_COMPLETED.equals(action) ||
             Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
             TimerScheduler.restore(context);
+            // On boot or APK replacement, restore the phone-side companion
+            // connection only if the owner left it enabled. Android can still
+            // reject background FGS start; WearableListenerService is the fallback.
+            JarvisCompanionService.startIfEnabled(context);
         }
     }
 }
