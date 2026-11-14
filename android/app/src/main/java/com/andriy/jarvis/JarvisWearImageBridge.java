@@ -69,8 +69,7 @@ public final class JarvisWearImageBridge {
         if(callback==null)return;
         final Entry item;
         synchronized(JarvisWearImageBridge.class) {
-            purgeExpired();
-            item=images.get(imageId);
+            item=resolve(context.getApplicationContext(),imageId);
         }
         if(item==null) {
             callback.accept(null);
@@ -228,7 +227,14 @@ public final class JarvisWearImageBridge {
             final File saved=file;
             synchronized(JarvisWearImageBridge.class) {
                 purgeExpired();
-                images.put(id,new Entry(node,id,saved,System.currentTimeMillis()+TTL));
+                long expiry=System.currentTimeMillis()+TTL;
+                images.put(id,new Entry(node,id,saved,expiry));
+                app.getSharedPreferences("jarvis_watch_generated_v1",
+                    Context.MODE_PRIVATE).edit()
+                    .putString(id+".node",node)
+                    .putString(id+".ext",png?"png":"jpg")
+                    .putLong(id+".expiry",expiry)
+                    .apply();
                 while(images.size()>MAX_CACHED) {
                     String first=images.keySet().iterator().next();
                     Entry obsolete=images.remove(first);
@@ -252,6 +258,28 @@ public final class JarvisWearImageBridge {
         }
     }
 
+    /** Restore an image's private ownership metadata after Android kills
+     * the phone process. Only a matching Wear node can request Save. */
+    private static Entry resolve(Context context,String imageId) {
+        if(!JarvisWearProtocol.validId(imageId))return null;
+        purgeExpired();
+        Entry item=images.get(imageId);
+        if(item!=null)return item;
+        android.content.SharedPreferences prefs=context.getSharedPreferences(
+            "jarvis_watch_generated_v1",Context.MODE_PRIVATE);
+        String owner=prefs.getString(imageId+".node","");
+        String ext=prefs.getString(imageId+".ext","");
+        long expiry=prefs.getLong(imageId+".expiry",0);
+        if(owner.isEmpty() || (!ext.equals("png") && !ext.equals("jpg")) ||
+           expiry<System.currentTimeMillis())return null;
+        File file=new File(new File(context.getCacheDir(),"watch-generated"),
+            imageId+"."+ext);
+        if(!file.isFile() || file.length()<=0 || file.length()>MAX_BYTES)return null;
+        item=new Entry(owner,imageId,file,expiry);
+        images.put(imageId,item);
+        return item;
+    }
+
     private static void purgeExpired() {
         long now=System.currentTimeMillis();
         java.util.Iterator<Map.Entry<String,Entry>> it=images.entrySet().iterator();
@@ -271,14 +299,16 @@ public final class JarvisWearImageBridge {
         if(callback==null)return;
         final Entry item;
         synchronized(JarvisWearImageBridge.class) {
-            purgeExpired();
-            item=images.get(imageId);
+            item=resolve(context.getApplicationContext(),imageId);
             if(item==null || watchNode==null || !watchNode.equals(item.watchNode) ||
                !JarvisWearProtocol.validId(imageId)) {
                 callback.finished(false,"Зображення не знайдено або термін зберігання минув.","");
                 return;
             }
             item.expiresAt=System.currentTimeMillis()+TTL;
+            context.getSharedPreferences("jarvis_watch_generated_v1",
+                Context.MODE_PRIVATE).edit()
+                .putLong(imageId+".expiry",item.expiresAt).apply();
         }
         new Thread(()->{
             try {
