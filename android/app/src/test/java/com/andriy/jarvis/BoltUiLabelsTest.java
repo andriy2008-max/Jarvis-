@@ -12,6 +12,9 @@ public final class BoltUiLabelsTest {
         yes(!BoltUiLabels.rides("Історія поїздок"));
         yes(!BoltUiLabels.rides("Замовити авто"));
         yes(BoltUiLabels.ridesHomeHeading("Тебе підвезти?"));
+        yes(BoltUiLabels.ridesHomeHeading("Раді тебе бачити."));
+        yes(BoltUiLabels.ridesHomeHeading("Good to see you"));
+        yes(BoltUiLabels.ridesHomeFallback(true,true,true,true,true));
         yes(!BoltUiLabels.ridesHomeHeading("Маршрут"));
         yes(BoltUiLabels.ridesHomeFallback(false,true,true,true,true));
         yes(BoltUiLabels.ridesHomeFallback(false,true,true,false,true));
@@ -31,11 +34,11 @@ public final class BoltUiLabelsTest {
             "Checkout", "Confirm ride", "Trip details", "Замовити автомобіль"})
             yes(BoltUiLabels.unsafeForTimedRidesTap(risky));
         int[] rides=BoltUiLabels.screenshotRidesPoint(684,1536);
-        yes(rides!=null && rides[0]==184 && rides[1]==321);
-        // 684x1536: the current «Поїздки» tile is x=26..336,y=218..423.
-        // The former y=482 accidentally targeted the Bolt Food row.
-        yes(rides[0]>=26 && rides[0]<=336 && rides[1]>=218 && rides[1]<=423);
-        yes(rides[1]<434);
+        yes(rides!=null && rides[0]==182 && rides[1]==489);
+        // Actual Nov 14 Bolt screenshot: top-left tile x=27..335,y=386..589.
+        // Old y=321 was the heading and never opened the rides flow.
+        yes(rides[0]>=27 && rides[0]<=335 && rides[1]>=386 && rides[1]<=589);
+        yes(rides[1]>430 && rides[1]<590);
         yes(BoltUiLabels.screenshotRidesPoint(1536,684)==null);
         yes(BoltUiLabels.screenshotRidesPoint(684,900)==null);
         yes(BoltUiLabels.destination("Куди поїдемо?"));
