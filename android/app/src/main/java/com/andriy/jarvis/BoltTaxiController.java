@@ -13,7 +13,7 @@ public final class BoltTaxiController {
     // Polling accesses an external Accessibility tree. Leave room for Bolt's
     // own UI thread so repeated traversals cannot monopolize Jarvis main.
     private static final long POLL_MS=650L;
-    // Four-second delay and guard live in the testable BoltUiLabels contract.
+    // Retry only if the explicit «Рушаймо» control appears again.
     private static final long RETAP_AFTER_MS=2300L;
     private static final long TIMEOUT_MS=30000L;
     private static final long TOTAL_TIMEOUT_MS=45000L;
@@ -77,8 +77,8 @@ public final class BoltTaxiController {
         }
         BoltTaxiController job=new BoltTaxiController(context,listener,address,lease);
         synchronized(BoltTaxiController.class){active=job;}
-        listener.onProgress("Відкриваю Bolt. Через 4 секунди натисну «Поїздки»...");
-        HANDLER.postDelayed(job.tick,BoltUiLabels.RIDES_TAP_DELAY_MS);
+        listener.onProgress("Відкриваю Bolt. Чекаю появи «Рушаймо»...");
+        HANDLER.postDelayed(job.tick,POLL_MS);
     }
     private void move(Stage next,String info){
         stage=next;started=SystemClock.elapsedRealtime();
@@ -100,7 +100,8 @@ public final class BoltTaxiController {
             // an AccessibilityNodeInfo while traversing the tree. A single
             // exception is NOT proof the app failed to open. Re-acquire a fresh
             // root on the next tick. Do not retry data entry or booking stages.
-            if ((stage==Stage.OPEN_APP || stage==Stage.VERIFY_RIDES) &&
+            if ((stage==Stage.OPEN_APP || stage==Stage.VERIFY_RIDES ||
+                 stage==Stage.FOCUS_DROPOFF || stage==Stage.WAIT_DROPOFF) &&
                 ++transientScreenFailures<=4 &&
                 SystemClock.elapsedRealtime()-flowStarted<TOTAL_TIMEOUT_MS) {
                 HANDLER.postDelayed(tick,Math.max(850L,POLL_MS));
@@ -142,24 +143,24 @@ public final class BoltTaxiController {
             return;
         }
         if(age>=TIMEOUT_MS){
-            finish(false,"Не знайшов потрібну кнопку або поле Bolt за 30 секунд. Нічого навмання не натискав.");
+            finish(false,stage==Stage.OPEN_APP
+                ? "Не з'явився напис «Рушаймо» на головному екрані Bolt за 30 секунд."
+                : "Не знайшов «Місце висадки» або поле адреси Bolt за 30 секунд. Нічого навмання не натискав.");
             return;
         }
         switch(stage){
             case OPEN_APP: {
-                // Wait is measured from the successful startActivity(), not
-                // from locating any text/tile inside Bolt.
-                if(!BoltUiLabels.ridesTapDue(SystemClock.elapsedRealtime()-flowStarted))
-                    break;
+                // Bolt may load in 1s or 12s; NEVER click from a fixed timer.
+                // Observe exact «Рушаймо» on the verified passenger HOME tile.
                 ScreenControlAccessibilityService.BoltStep result=
-                    ScreenControlAccessibilityService.boltRidesAtFourSeconds();
+                    ScreenControlAccessibilityService.boltLetsGo();
                 if(result==ScreenControlAccessibilityService.BoltStep.READY) {
-                    move(Stage.DELAY,"Екран «Маршрут» уже відкритий. Шукаю місце висадки...");
+                    move(Stage.DELAY,"Маршрут Bolt уже відкритий. Шукаю «Місце висадки»...");
                 } else if(result==ScreenControlAccessibilityService.BoltStep.CLICKED) {
                     move(Stage.VERIFY_RIDES,
-                        "Через 4 секунди натиснув «Поїздки». Перевіряю маршрут...");
+                        "Натиснув «Рушаймо». Чекаю появи «Місце висадки»...");
                 } else if(result==ScreenControlAccessibilityService.BoltStep.BLOCKED) {
-                    finish(false,"Bolt відкрито, але екран не підходить для безпечного натискання «Поїздки».");
+                    finish(false,"Bolt показав інший або небезпечний екран. «Рушаймо» не натискав.");
                     return;
                 }
                 break;
@@ -168,21 +169,20 @@ public final class BoltTaxiController {
                 if(ScreenControlAccessibilityService.boltRidesReady()) {
                     move(Stage.DELAY,"«Поїздки» відкрито. Шукаю «Місце висадки»...");
                 } else if(age>=RETAP_AFTER_MS) {
-                    if(ridesRetries>=1) {
-                        finish(false,"Після натискання «Поїздки» не відкрився маршрут. Натисни «Поїздки» вручну.");
-                        return;
-                    }
-                    // One limited retry after verifying Bolt is still foreground.
-                    // Never tap a payment, booking or route-confirmation screen.
-                    ridesRetries++;
+                    // Reacquire only the same «Рушаймо» HOME control. No
+                    // screenshot-coordinate guessing if navigation is slow.
                     ScreenControlAccessibilityService.BoltStep again=
-                        ScreenControlAccessibilityService.boltRidesAtFourSeconds();
+                        ScreenControlAccessibilityService.boltLetsGo();
                     if(again==ScreenControlAccessibilityService.BoltStep.READY) {
-                        move(Stage.DELAY,"Маршрут Bolt уже відкрито. Шукаю місце висадки...");
-                    } else if(again==ScreenControlAccessibilityService.BoltStep.CLICKED) {
-                        move(Stage.VERIFY_RIDES,"Повторив натискання «Поїздки». Перевіряю маршрут...");
-                    } else {
-                        finish(false,"Bolt не дозволив повторно натиснути «Поїздки» на цьому екрані.");
+                        move(Stage.DELAY,"Маршрут Bolt відкрито. Шукаю «Місце висадки»...");
+                    } else if(again==ScreenControlAccessibilityService.BoltStep.CLICKED &&
+                              ridesRetries++<1) {
+                        move(Stage.VERIFY_RIDES,"Повторив «Рушаймо». Перевіряю маршрут...");
+                    } else if(again==ScreenControlAccessibilityService.BoltStep.BLOCKED) {
+                        finish(false,"Bolt перейшов на інший екран; не натискатиму навмання.");
+                        return;
+                    } else if(age>=7000L) {
+                        finish(false,"Після «Рушаймо» не з'явився маршрут із «Місце висадки». Поїздку не замовляв.");
                         return;
                     }
                 }
@@ -190,7 +190,7 @@ public final class BoltTaxiController {
             case DELAY:
                 if(age>=1400L){
                     if(address.isEmpty()){
-                        finish(true,"Відкрив Bolt → «Поїздки». Назви пункт призначення.");return;
+                        finish(true,"Відкрив Bolt → «Рушаймо». Назви місце висадки.");return;
                     }
                     // After «Поїздки», Bolt displays a two-row route form.
                     // The destination row isn't editable until tapped.
