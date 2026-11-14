@@ -224,6 +224,19 @@ public final class JarvisWearPhoneAssistant {
             return;
         }
 
+        if (normalized.equals("перевір підключення ші") ||
+            normalized.equals("стан ші") ||
+            normalized.equals("статус ші")) {
+            if (ai == null) ai = new AiChatClient(phone);
+            boolean configured = ai.isConfigured();
+            completion.finished(configured,configured
+                ? "На телефоні збережено HTTPS-адресу ШІ та код доступу. " +
+                  "Доступність сервера перевіряється під час запиту."
+                : "На телефоні ШІ не налаштований. Відкрий Джарвіс → " +
+                  "«ШІ — підключення» та введи адресу сервера й код доступу.");
+            return;
+        }
+
         // Only free-form, non-device-control speech reaches the phone's AI.
         // No API key, personal token or other credential is sent to the watch.
         if (aiBusy) {
