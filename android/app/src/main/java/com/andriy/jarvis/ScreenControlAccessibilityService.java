@@ -1933,6 +1933,34 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         SpotifyStep accessible=tapSpotifyControl(SpotifyUiLabels.Target.PLAY,
             playlist);
         if(accessible!=SpotifyStep.WAIT)return accessible;
+        // If it became Pause, the playlist is already playing. A generic
+        // MediaPlay key could change the wrong player's state; avoid it.
+        ArrayDeque<AccessibilityNodeInfo> scanPause=new ArrayDeque<>();
+        scanPause.add(root);
+        Rect page=new Rect();root.getBoundsInScreen(page);
+        float density=getResources().getDisplayMetrics().density;
+        int count=0;
+        while(!scanPause.isEmpty() && ++count<=MAX_SCAN){
+            AccessibilityNodeInfo item=scanPause.removeFirst();
+            if(!item.isVisibleToUser())continue;
+            String name=asString(item.getText())+" "+asString(item.getContentDescription());
+            if(SpotifyUiLabels.largePause(asString(item.getText())) ||
+               SpotifyUiLabels.largePause(asString(item.getContentDescription()))) {
+                AccessibilityNodeInfo action=clickable(item);
+                if(action!=null) {
+                    Rect hit=new Rect();action.getBoundsInScreen(hit);
+                    if(SpotifyUiLabels.playlistPlayAt(hit.left,hit.top,
+                        hit.right,hit.bottom,page.left,page.top,
+                        page.right,page.bottom,density))
+                        return SpotifyStep.ALREADY;
+                }
+            }
+            for(int i=0;i<item.getChildCount();i++){
+                AccessibilityNodeInfo child=item.getChild(i);
+                if(child!=null)scanPause.addLast(child);
+            }
+        }
+        if(count>MAX_SCAN)return SpotifyStep.WAIT;
         // A Spotify build may draw a green circle without exposing its
         // accessibility label; use the known toolbar geometry only on this
         // verified page, not search results, library rows or the mini-player.
