@@ -13,17 +13,22 @@ public final class JarvisWearProtocol {
     public static final String EXIT = "exit";
     public static final String COMMAND = "command";
     public static final String TAXI = "taxi";
+    /** General voice request evaluated on the phone, with no secrets on Wear OS. */
+    public static final String ASSISTANT = "assistant";
     public static final String SPOTIFY = "spotify";
     public static final String CANCEL_SPOTIFY = "cancel_spotify";
     public static final int SPOTIFY_ACK_TIMEOUT_MS = 145000;
     // Bolt UI flow is bounded to 45 s; allow delivery and result latency.
     public static final int TAXI_ACK_TIMEOUT_MS = 65000;
+    // Includes slow personal AI requests and consented phone-side app workflows.
+    public static final int ASSISTANT_ACK_TIMEOUT_MS = 150000;
 
     private JarvisWearProtocol() {}
 
     public static boolean validAction(String action) {
         return SYNC.equals(action) || ENTER.equals(action) || EXIT.equals(action) || COMMAND.equals(action) ||
-            TAXI.equals(action) || SPOTIFY.equals(action) || CANCEL_SPOTIFY.equals(action);
+            TAXI.equals(action) || ASSISTANT.equals(action) ||
+            SPOTIFY.equals(action) || CANCEL_SPOTIFY.equals(action);
     }
 
     public static boolean validCommand(String command) {
