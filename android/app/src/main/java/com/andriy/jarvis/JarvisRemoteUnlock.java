@@ -156,11 +156,7 @@ public final class JarvisRemoteUnlock {
                 failSafe[0]=() -> {
                     if (completed[0]) return;
                     completed[0]=true;
-                    boolean locked=relock(context);
-                    completion.done(false,
-                        "Час виконання минув. " +
-                        (locked?"Pixel знову заблоковано.":
-                            "Не вдалося підтвердити блокування Pixel — заблокуй вручну."));
+                    finishAfterRelock(context,false,"Час виконання минув.",completion);
                 };
                 MAIN.postDelayed(failSafe[0],AUTO_RELOCK_MS);
                 try {
@@ -168,21 +164,42 @@ public final class JarvisRemoteUnlock {
                         if (completed[0]) return;
                         completed[0]=true;
                         MAIN.removeCallbacks(failSafe[0]);
-                        boolean locked=relock(context);
-                        completion.done(ok,detail+" "+
-                            (locked?"Pixel знову заблоковано.":
-                                "Увага: перевір блокування Pixel вручну."));
+                        finishAfterRelock(context,ok,detail,completion);
                     }));
                 } catch (RuntimeException error) {
                     if (!completed[0]) {
                         completed[0]=true;
                         MAIN.removeCallbacks(failSafe[0]);
-                        relock(context);
-                        completion.done(false,"Не вдалося виконати команду після розблокування.");
+                        finishAfterRelock(context,false,
+                            "Не вдалося виконати команду після розблокування.",completion);
                     }
                 }
             });
         },"Jarvis-one-time-root-unlock").start();
+    }
+
+    /** Verify the Android lock state before reporting a completed remote job. */
+    private static void finishAfterRelock(Context context,boolean commandOk,
+                                           String result,Completion completion) {
+        relock(context);
+        MAIN.postDelayed(() -> {
+            KeyguardManager keyguard=context.getSystemService(KeyguardManager.class);
+            if (keyguard!=null && keyguard.isDeviceLocked()) {
+                completion.done(commandOk,result+" Pixel повторно заблоковано.");
+                return;
+            }
+            // Some OEMs accept the Accessibility action but do not lock.
+            // Try the rooted sleep action once and re-check before reporting.
+            rootScript("input keyevent 223\n",2500);
+            MAIN.postDelayed(() -> {
+                KeyguardManager actual=context.getSystemService(KeyguardManager.class);
+                boolean locked=actual!=null && actual.isDeviceLocked();
+                completion.done(commandOk && locked,result+" "+
+                    (locked?"Pixel повторно заблоковано.":
+                        "УВАГА: автоматичне блокування Pixel не підтверджено. " +
+                        "Заблокуй телефон вручну."));
+            },500L);
+        },600L);
     }
 
     private static String randomChallenge() {
