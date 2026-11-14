@@ -218,9 +218,14 @@ public final class JarvisWearPhoneAssistant {
             return;
         }
         if (normalized.startsWith("проаналізуй фото") ||
-            normalized.startsWith("прочитай документ")) {
+            normalized.startsWith("прочитай документ") ||
+            normalized.startsWith("створи зображення") ||
+            normalized.startsWith("згенеруй зображення") ||
+            normalized.startsWith("намалюй ") ||
+            normalized.startsWith("зроби картинку ")) {
             completion.finished(false,
-                "Вибери фото чи документ у Джарвісі на телефоні.");
+                "Зображення, фото й документи відкривай через ШІ Джарвіса " +
+                "на телефоні. Годинник зараз отримує текстові відповіді.");
             return;
         }
 
@@ -252,10 +257,13 @@ public final class JarvisWearPhoneAssistant {
         }
         String webQuery = WorldNewsCommands.requestsWorldNews(normalized)
             ? normalized : JarvisSearchRouting.query(raw);
-        final String mode = webQuery == null ? "chat" : "web";
+        final boolean analysis = normalized.startsWith("обчисли через python") ||
+            normalized.startsWith("перевір через python") ||
+            normalized.startsWith("проаналізуй дані");
+        final String mode = analysis ? "analysis" : webQuery == null ? "chat" : "web";
         aiBusy = true;
         try {
-            ai.sendDetailed(raw,"web".equals(mode) ? "web" : "chat",null,(answer,error) -> {
+            ai.sendDetailed(raw,mode,null,(answer,error) -> {
                 aiBusy = false;
                 String reply = error == null && answer != null ? answer.reply : error;
                 if (reply == null || reply.trim().isEmpty())
