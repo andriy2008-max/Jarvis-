@@ -196,7 +196,19 @@ public final class JarvisRemoteUnlock {
     private static boolean unlockSystemKeyguard(Context context,char[] pin) {
         KeyguardManager keyguard=context.getSystemService(KeyguardManager.class);
         if (keyguard==null) return false;
-        if (!keyguard.isDeviceLocked()) return true;
+        if (JarvisPhoneScreenGuard.available(context)) return true;
+        // An extinguished display may still be in a trusted/unlocked state.
+        // Wake it before deciding whether system PIN entry is necessary.
+        if (!keyguard.isDeviceLocked()) {
+            if (!rootScript("input keyevent 224\ninput keyevent 82\n",3500))
+                return false;
+            for(int i=0;i<5;i++) {
+                if (JarvisPhoneScreenGuard.available(context)) return true;
+                try { Thread.sleep(200L); }
+                catch(InterruptedException e){Thread.currentThread().interrupt();return false;}
+            }
+            return JarvisPhoneScreenGuard.available(context);
+        }
         Point screen=new Point();
         WindowManager wm=context.getSystemService(WindowManager.class);
         if(wm==null)return false;
@@ -216,11 +228,11 @@ public final class JarvisRemoteUnlock {
         script.append("input keyevent 66\n"); // ENTER
         if(!rootScript(script.toString(),8500))return false;
         for(int i=0;i<8;i++) {
-            if(!keyguard.isDeviceLocked())return true;
+            if(JarvisPhoneScreenGuard.available(context))return true;
             try { Thread.sleep(220L); }
             catch(InterruptedException e){Thread.currentThread().interrupt();return false;}
         }
-        return !keyguard.isDeviceLocked();
+        return JarvisPhoneScreenGuard.available(context);
     }
 
     /** Native Accessibility lock action, then root sleep fallback. */
