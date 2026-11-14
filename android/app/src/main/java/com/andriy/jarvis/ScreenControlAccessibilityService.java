@@ -2072,7 +2072,11 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             return SpotifyStep.BLOCKED;
         AccessibilityNodeInfo root=service.currentSpotifyRoot();
         if(root==null)return SpotifyStep.WAIT;
-        if(service.spotifyNamedPlaylistReady(root,name))return SpotifyStep.ALREADY;
+        // Detect an opened playlist by its exact upper header, even when
+        // Spotify hides the big Play icon from Accessibility. The old guard
+        // required a text-labelled Play and got stuck after opening a list.
+        if(service.spotifyPlaylistHeaderVisible(root,null,name))
+            return SpotifyStep.ALREADY;
         Rect frame=new Rect();
         root.getBoundsInScreen(frame);
         ArrayDeque<AccessibilityNodeInfo> q=new ArrayDeque<>();
@@ -2187,9 +2191,42 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             }
         }
         if(count>MAX_SCAN)return SpotifyStep.WAIT;
-        // A Spotify build may draw a green circle without exposing its
-        // accessibility label; use the known toolbar geometry only on this
-        // verified page, not search results, library rows or the mini-player.
+        // Spotify frequently renders Play as a green icon-only Compose
+        // control with no accessibility text. Prefer the ACTUAL visible
+        // large far-right circular control, not the old screenshot position.
+        ArrayDeque<AccessibilityNodeInfo> buttons=new ArrayDeque<>();
+        buttons.add(root);
+        Rect livePlay=null;
+        int inspected=0;
+        while(!buttons.isEmpty() && ++inspected<=MAX_SCAN) {
+            AccessibilityNodeInfo node=buttons.removeFirst();
+            if(!node.isVisibleToUser() || !node.isEnabled() || node.isPassword())
+                continue;
+            if(node.isClickable()) {
+                Rect b=new Rect();node.getBoundsInScreen(b);
+                if(SpotifyUiLabels.unlabelledPlaylistPlayCircle(b.left,b.top,
+                    b.right,b.bottom,page.left,page.top,
+                    page.right,page.bottom,density)) {
+                    if(livePlay==null || b.centerX()>livePlay.centerX())
+                        livePlay=b;
+                    else if(Math.abs(b.centerX()-livePlay.centerX())<density*15 &&
+                            !b.equals(livePlay))
+                        return SpotifyStep.WAIT; // ambiguous right-hand buttons
+                }
+            }
+            for(int i=0;i<node.getChildCount();i++) {
+                AccessibilityNodeInfo child=node.getChild(i);
+                if(child!=null)buttons.addLast(child);
+            }
+        }
+        if(inspected>MAX_SCAN)return SpotifyStep.WAIT;
+        if(livePlay!=null)
+            return gestureTapSpotifyPlaylistPlay(page,livePlay.centerX(),
+                livePlay.centerY());
+
+        // Last resort for icon-only Spotify builds with no accessible
+        // button bounds at all: screenshot-calibrated point, ONLY on an
+        // independently verified exact playlist page in portrait.
         Rect bounds=new Rect(); root.getBoundsInScreen(bounds);
         android.graphics.Point physical=new android.graphics.Point();
         android.view.Display display=getDisplay();
@@ -2203,14 +2240,24 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if(point==null || !bounds.contains(point[0],point[1]) ||
            !sessionActive || currentSpotifyRoot()==null)
             return SpotifyStep.WAIT;
+        return gestureTapSpotifyPlaylistPlay(bounds,point[0],point[1]);
+    }
+
+    /** Touch the actual playlist Play circle rather than toggling global
+     * media state. Never send a tap when Spotify leaves foreground. */
+    private SpotifyStep gestureTapSpotifyPlaylistPlay(Rect page,int x,int y) {
+        if(!sessionActive || !page.contains(x,y) || currentSpotifyRoot()==null)
+            return SpotifyStep.WAIT;
+        Rect control=new Rect(x-28,y-28,x+28,y+28);
+        FloatingJarvisService.avoidControl(control);
         Path path=new Path();
-        path.moveTo(point[0],point[1]);
+        path.moveTo(x,y);
         GestureDescription gesture=new GestureDescription.Builder()
-            .addStroke(new GestureDescription.StrokeDescription(path,0,85))
+            .addStroke(new GestureDescription.StrokeDescription(path,0,90))
             .build();
         return dispatchTrackedGesture(gesture,(ok,detail)->{
             if(!ok && sessionActive)
-                toast("Spotify не натиснув Play: "+detail);
+                toast("Spotify не натиснув кнопку Play: "+detail);
         }) ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
     }
 
