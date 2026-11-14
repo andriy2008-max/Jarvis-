@@ -3866,30 +3866,6 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 exitPhoneMode();
                 return;
             }
-            if (JarvisPhoneMode.isActive()) {
-                if (watchPhoneLink == null) {
-                    JarvisPhoneMode.setActive(false);
-                    setStatus("Зв'язок із телефоном втрачено.");
-                    return;
-                }
-                watchPhoneLink.command(raw,(ok, detail) -> {
-                    if (isFinishing() || isDestroyed()) return;
-                    if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-                    appendDialogue("Джарвіс", detail);
-                    setStatus(detail);
-                    if (!ok && voiceEnabled) speakReply(detail);
-                });
-                return;
-            }
-            if (JarvisPhoneMode.requiresPhone(raw) && SpotifyMusicCommands.parse(raw) == null) {
-                if (watchPhoneLink == null) { setStatus("Телефон не підключений."); return; }
-                watchPhoneLink.enter((ok, detail) -> {
-                    if (isFinishing() || isDestroyed()) return;
-                    if (ok) watchPhoneLink.command(raw, (done, response) -> setStatus(response));
-                    else setStatus(detail);
-                });
-                return;
-            }
             SpotifyMusicCommands.Kind watchMusic = SpotifyMusicCommands.parse(raw);
             if (watchMusic != null) {
                 if (watchPhoneLink == null) {
@@ -3905,6 +3881,38 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 });
                 return;
             }
+            // All remaining watch speech is delegated to the companion phone.
+            // A manually opened screen-control session is used only for
+            // literal screen gestures, not conversational AI or external APIs.
+            if (watchPhoneLink == null) {
+                setStatus("Телефон недоступний. Перевір Galaxy Wearable та Джарвіса.");
+                return;
+            }
+            final boolean screenOnly = JarvisPhoneMode.isActive() &&
+                watchPhoneLink.active() &&
+                JarvisPhoneMode.requiresPhone(raw) &&
+                SpotifyMusicCommands.parse(raw) == null;
+            if (screenOnly) {
+                watchPhoneLink.command(raw,(ok,detail) -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+                    appendDialogue("Джарвіс",detail);
+                    setStatus(detail);
+                    if (!ok && voiceEnabled) speakReply(detail);
+                });
+            } else {
+                face.setState("thinking");
+                setStatus("Передаю команду Джарвісу на телефоні...");
+                watchPhoneLink.assistant(raw,(ok,detail) -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+                    appendDialogue("Джарвіс",detail);
+                    setStatus(detail);
+                    if (voiceEnabled) speakReply(detail);
+                    else face.setState("idle");
+                });
+            }
+            return;
         }
         if (modeTransition == JarvisPhoneMode.Transition.ENTER) {
             String result = JarvisPhoneModeManager.enter(this,
