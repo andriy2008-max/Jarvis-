@@ -1899,10 +1899,11 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if(service==null || !service.sessionActive || name==null)
             return SpotifyStep.BLOCKED;
         AccessibilityNodeInfo root=service.currentSpotifyRoot();
-        if(root==null || !service.spotifyNamedPlaylistReady(root,name))
-            return SpotifyStep.WAIT;
-        if(action==SpotifyUiLabels.Target.SHUFFLE)
+        if(root==null)return SpotifyStep.WAIT;
+        if(action==SpotifyUiLabels.Target.SHUFFLE) {
+            if(!service.spotifyNamedPlaylistReady(root,name))return SpotifyStep.WAIT;
             return service.tapSpotifyRightShuffle(root,null,name,shuffleEnabled);
+        }
         if(action==SpotifyUiLabels.Target.PLAY)
             return service.tapSpotifyPlaylistPlay(null,name);
 
