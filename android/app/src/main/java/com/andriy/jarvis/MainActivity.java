@@ -497,6 +497,18 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void acceptImageIntent(Intent intent) {
         if (intent == null) return;
+        if(!isWatchDevice) {
+            String generatedId=intent.getStringExtra(
+                JarvisWearImageBridge.EXTRA_WEAR_IMAGE_ID);
+            if(generatedId!=null && JarvisWearProtocol.validId(generatedId)) {
+                intent.removeExtra(JarvisWearImageBridge.EXTRA_WEAR_IMAGE_ID);
+                JarvisWearImageBridge.readOnPixel(this,generatedId,bytes->{
+                    if(isFinishing() || isDestroyed())return;
+                    if(bytes!=null)showGeneratedImageFromWatch(bytes);
+                    else setStatus("Тимчасове зображення недоступне. Повтори генерацію.");
+                });
+            }
+        }
         String prompt = intent.getStringExtra(EXTRA_AI_IMAGE_PROMPT);
         if (prompt == null || prompt.trim().isEmpty()) return;
         intent.removeExtra(EXTRA_AI_IMAGE_PROMPT);
@@ -512,6 +524,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     protected void onResume() {
         super.onResume();
         foreground = true;
+        if(!isWatchDevice)JarvisWearImageBridge.attachPhone(this);
         if (isWatchDevice && JarvisPhoneMode.isActive())
             ensureWatchPhoneListening();
         if (isWatchDevice) scheduleWatchLauncherVoice();
@@ -558,6 +571,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         JarvisLiveTranscript.setCorrectionHandler(TRANSCRIPT_OWNER, null);
         JarvisLiveTranscript.unsubscribe(transcriptListener);
         foreground = false;
+        if(!isWatchDevice)JarvisWearImageBridge.detachPhone(this);
         telegramDictationAfterReply=false;
         cancelAutoWakeSchedule();
         cancelManualRestart();
@@ -4078,6 +4092,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
             askAiDetailed(question, "analysis", attachment);
         });
         showDialogWithoutWake(builder.create());
+    }
+
+    /** Shown on Pixel when a Watch7-initiated image is ready or tapped from
+     * notification. The existing phone Save control persists the full PNG. */
+    void showGeneratedImageFromWatch(byte[] data) {
+        if(isWatchDevice || data==null)return;
+        appendDialogue("Джарвіс","🎨 Зображення створено за командою з Watch7.");
+        showGeneratedImage(data);
+        setStatus("Можеш зберегти зображення в галерею телефона.");
     }
 
     private void showGeneratedImage(byte[] data) {
