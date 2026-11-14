@@ -2463,7 +2463,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 getPreferences(MODE_PRIVATE).getString(
                     JarvisSpeechLanguages.PREF,JarvisSpeechLanguages.AUTO)),
             "🖼 Останнє зображення",
-            "⏰ Поставити будильник"
+            "⏰ Поставити будильник",
+            "🗣 Перевірити голос Watch7"
         };
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("Налаштування Джарвіса")
@@ -2536,6 +2537,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     case 13: showSpeechRecognitionLanguageSettings(); break;
                     case 14: processCommand("покажи останнє зображення"); break;
                     case 15: showAlarmPicker(); break;
+                    case 16:
+                        // On-device end-to-end speech test, independent of
+                        // the phone, AI and microphone recognition.
+                        processCommand("Скажи Перевірка голосу. Джарвіс працює на годиннику.");
+                        break;
                     case 12:
                         shakeEnabled = !shakeEnabled;
                         getPreferences(MODE_PRIVATE).edit()
