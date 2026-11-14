@@ -10,6 +10,25 @@ public final class AssistantIntents {
     private static final Pattern ALARM = Pattern.compile(
         "^(?:(?:постав|встанови|заведи)\\s+)?будильник\\s+(?:на|о)\\s+(\\d{1,2})[:.](\\d{2})$|^розбуди\\s+мене\\s+о\\s+(\\d{1,2})[:.](\\d{2})$",
         Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    // Speech recognition commonly returns "на 7" or "на 7 30", not "07:30".
+    // The strict numeric parser above remains for backward compatibility.
+    private static final Pattern ALARM_SPOKEN = Pattern.compile(
+        "^(?:(?:постав|поставити|встанови|установи|заведи|увімкни|включи)\\s+)?будильник\\s+(?:на|о)\\s+(.+)$" +
+        "|^розбуди\\s+мене\\s+о\\s+(.+)$",
+        Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern ALARM_HOUR_MINUTE = Pattern.compile(
+        "^(\\d{1,2})(?:\\s+годин(?:а|у|и)?)?(?:[:.]|\\s+)(\\d{1,2})" +
+        "(?:\\s+хвилин(?:а|у|и)?)?(?:\\s+(ранку|зранку|вранці|вечора|ввечері|увечері|дня|вдень|ночі))?$",
+        Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern ALARM_HOUR_ONLY = Pattern.compile(
+        "^(\\d{1,2})(?:\\s+годин(?:а|у|и)?)?" +
+        "(?:\\s+(ранку|зранку|вранці|вечора|ввечері|увечері|дня|вдень|ночі))?$",
+        Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    private static final Pattern ALARM_NO_TIME = Pattern.compile(
+        "^(?:(?:постав|поставити|встанови|установи|заведи|увімкни|включи)\\s+)?будильник(?:\\s+(?:на|о))?$" +
+        "|^розбуди\\s+мене(?:\\s+о)?$",
+        Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+
     private static final String REMIND_PREFIX = "^(?:нагадай|нагадати)(?:\\s+мені)?\\s+";
     private static final Pattern REMINDER_AFTER = Pattern.compile(
         REMIND_PREFIX + "через\\s+(\\d{1,4})\\s*(секунд(?:у|и|ів)?|сек|с|хвилин(?:у|и)?|хв|годин(?:у|и)?|год)\\s+(.+)$",
@@ -51,9 +70,39 @@ public final class AssistantIntents {
 
     public static ClockTime alarmTime(String normalized) {
         if (normalized == null) return null;
-        Matcher m = ALARM.matcher(normalized);
-        if (!m.matches()) return null;
-        return m.group(1) != null ? clock(m.group(1), m.group(2)) : clock(m.group(3), m.group(4));
+        String spoken=normalized.trim();
+        Matcher m = ALARM.matcher(spoken);
+        if (m.matches())
+            return m.group(1) != null ? clock(m.group(1), m.group(2))
+                : clock(m.group(3), m.group(4));
+        Matcher natural=ALARM_SPOKEN.matcher(spoken);
+        if(!natural.matches())return null;
+        String value=natural.group(1)!=null?natural.group(1):natural.group(2);
+        Matcher minutes=ALARM_HOUR_MINUTE.matcher(value);
+        if(minutes.matches())
+            return spokenClock(minutes.group(1),minutes.group(2),minutes.group(3));
+        Matcher hours=ALARM_HOUR_ONLY.matcher(value);
+        return hours.matches()?spokenClock(hours.group(1),"0",hours.group(2)):null;
+    }
+
+    private static ClockTime spokenClock(String hour,String minute,String period) {
+        ClockTime t=clock(hour,minute);
+        if(t==null || period==null)return t;
+        String p=period.toLowerCase(new Locale("uk","UA"));
+        if(p.equals("вечора") || p.equals("ввечері") || p.equals("увечері") ||
+           p.equals("дня") || p.equals("вдень")) {
+            if(t.hour>=1 && t.hour<=11)return new ClockTime(t.hour+12,t.minute);
+        } else if(p.equals("ранку") || p.equals("зранку") || p.equals("вранці")) {
+            if(t.hour==12)return new ClockTime(0,t.minute);
+        } else if(p.equals("ночі") && t.hour==12) {
+            return new ClockTime(0,t.minute);
+        }
+        return t;
+    }
+
+    /** Bare watch command should open a clock picker, not fail or call AI. */
+    public static boolean alarmNeedsTime(String normalized) {
+        return normalized!=null && ALARM_NO_TIME.matcher(normalized.trim()).matches();
     }
 
     public static Reminder reminder(String normalized) {
