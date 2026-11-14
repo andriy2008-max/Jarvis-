@@ -13,6 +13,14 @@ public final class JarvisWearProtocolTest {
         yes(JarvisWearProtocol.validAction("command"),"command");
         yes(JarvisWearProtocol.validAction(JarvisWearProtocol.TAXI),
             "watch taxi must be a local phone action, not conversational AI");
+        yes(JarvisWearProtocol.validAction(JarvisWearProtocol.ASSISTANT),
+            "watch freeform voice must be delegated to phone AI/API");
+        yes(JarvisWearProtocol.ASSISTANT_ACK_TIMEOUT_MS > 90000,
+            "watch waits for slow phone AI and app callbacks, not send-only ack");
+        yes(JarvisWearProtocol.validCommand("Джарвіс, запиши витрату 350 гривень на харчування"),
+            "phone handles finances without storing keys on watch");
+        yes(JarvisWearProtocol.validCommand("Джарвіс, що ти знаєш про Україну?"),
+            "phone handles natural-language AI question");
         yes(JarvisWearProtocol.TAXI_ACK_TIMEOUT_MS > 45000,
             "watch waits for Bolt UI outcome rather than only message delivery");
         yes(JarvisWearProtocol.TAXI_ACK_TIMEOUT_MS < JarvisWearProtocol.SPOTIFY_ACK_TIMEOUT_MS,
