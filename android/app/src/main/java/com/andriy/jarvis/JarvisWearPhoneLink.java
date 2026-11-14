@@ -30,6 +30,9 @@ public final class JarvisWearPhoneLink {
     private Task<Void> listenerRegistration;
     private boolean listenerReady;
     private boolean requesting;
+    private String requestingType;
+    // Async node lookups may finish after a higher-priority voice command.
+    private long requestEpoch;
     private boolean closed;
     private String activeSession = "";
     private String pendingId;
@@ -154,9 +157,16 @@ public final class JarvisWearPhoneLink {
 
     private void send(String type, String text, Callback cb) {
         if (closed) { cb.finished(false, "Зв'язок із телефоном вимкнено."); return; }
-        // A background 10-second sync must never block a user's taxi command.
-        if (!JarvisWearProtocol.SYNC.equals(type) &&
-            JarvisWearProtocol.SYNC.equals(pendingType)) clearPending();
+        // User voice takes priority over the 10-second background heartbeat.
+        // It can preempt both an in-flight node lookup and an ACK wait.
+        if (!JarvisWearProtocol.SYNC.equals(type)) {
+            if (JarvisWearProtocol.SYNC.equals(requestingType)) {
+                requestEpoch++;
+                requesting = false;
+                requestingType = null;
+            }
+            if (JarvisWearProtocol.SYNC.equals(pendingType)) clearPending();
+        }
         if (busy()) { cb.finished(false, "Чекаю відповіді телефона на попередню команду."); return; }
         if (!JarvisWearProtocol.validAction(type)) {
             cb.finished(false, "Непідтримувана команда телефона."); return;
@@ -172,12 +182,16 @@ public final class JarvisWearPhoneLink {
         }
 
         requesting = true;
+        requestingType = type;
+        final long epoch = ++requestEpoch;
         Wearable.getNodeClient(context).getConnectedNodes()
             .addOnSuccessListener(nodes -> {
-                if (closed) { requesting = false; return; }
+                // A stale SYNC lookup must not overwrite a pending real command.
+                if (closed || epoch != requestEpoch) return;
                 Node target = selectPhone(nodes);
                 if (target == null) {
                     requesting = false;
+                    requestingType = null;
                     cb.finished(false, "Не знайшов підключений Android-телефон. " +
                         "На годиннику й телефоні має бути Джарвіс з однаковим підписом.");
                     return;
@@ -185,8 +199,10 @@ public final class JarvisWearPhoneLink {
                 try {
                     JSONObject request = new JSONObject();
                     pendingId = UUID.randomUUID().toString();
+                    final String requestId = pendingId;
                     requesting = false;
-                    request.put("id",pendingId);
+                    requestingType = null;
+                    request.put("id",requestId);
                     request.put("action",type);
                     request.put("text",text);
                     request.put("session",activeSession);
@@ -214,18 +230,26 @@ public final class JarvisWearPhoneLink {
                         JarvisWearProtocol.TAXI.equals(type))
                         JarvisPhoneMode.setActive(true);
                     messageClient.sendMessage(target.getId(),JarvisWearProtocol.REQUEST,data)
-                        .addOnFailureListener(err -> failPending(
-                            "Не вдалося передати команду на телефон. Перевір Bluetooth/Wi-Fi."));
+                        .addOnFailureListener(err -> {
+                            // The old SYNC send may fail *after* replacement;
+                            // never fail the newer user's request by mistake.
+                            if (requestId.equals(pendingId))
+                                failPending("Не вдалося передати команду на телефон. " +
+                                    "Перевір Bluetooth/Wi-Fi.");
+                        });
                 } catch (Exception error) {
                     requesting = false;
+                    requestingType = null;
                     if (pendingId != null)
                         failPending("Не вдалося підготувати команду для телефона.");
                     else cb.finished(false,"Не вдалося підготувати команду для телефона.");
                 }
             })
             .addOnFailureListener(err -> {
+                if (closed || epoch != requestEpoch) return;
                 requesting = false;
-                if (!closed) cb.finished(false,"Немає зв'язку з телефоном через Wear OS.");
+                requestingType = null;
+                cb.finished(false,"Немає зв'язку з телефоном через Wear OS.");
             });
     }
 
@@ -311,7 +335,9 @@ public final class JarvisWearPhoneLink {
 
     public void close() {
         closed = true;
+        requestEpoch++; // Invalidate in-flight node lookups.
         requesting = false;
+        requestingType = null;
         clearPending();
         main.removeCallbacks(sync);
         messageClient.removeListener(replies);
