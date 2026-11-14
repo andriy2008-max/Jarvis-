@@ -22,13 +22,13 @@ public final class BoltTaxiController {
         void onProgress(String status);
         void onFinished(boolean ok,String status);
     }
-    private enum Stage { OPEN_APP, VERIFY_RIDES, DELAY, FOCUS_DROPOFF, WAIT_DROPOFF, TYPE, ENTER }
+    private enum Stage { COORD_RIDES, COORD_DROPOFF, COORD_TYPE, OPEN_APP, VERIFY_RIDES, DELAY, FOCUS_DROPOFF, WAIT_DROPOFF, TYPE, ENTER }
     private final Context context;
     private final Listener listener;
     private final String address;
     private final JarvisPhoneModeManager.Lease lease;
     private final Runnable tick=this::pollSafely;
-    private Stage stage=Stage.OPEN_APP;
+    private Stage stage=Stage.COORD_RIDES;
     private long started=SystemClock.elapsedRealtime();
     private final long flowStarted=started;
     private boolean finished;
@@ -77,7 +77,7 @@ public final class BoltTaxiController {
         }
         BoltTaxiController job=new BoltTaxiController(context,listener,address,lease);
         synchronized(BoltTaxiController.class){active=job;}
-        listener.onProgress("Відкриваю Bolt. Чекаю появи «Рушаймо»...");
+        listener.onProgress("Відкриваю Bolt. Використовую збережені координати, без читання екрана...");
         HANDLER.postDelayed(job.tick,POLL_MS);
     }
     private void move(Stage next,String info){
@@ -133,6 +133,11 @@ public final class BoltTaxiController {
             finish(false,"Керування екраном вимкнулося.");return;
         }
         long age=SystemClock.elapsedRealtime()-started;
+        if(stage==Stage.COORD_RIDES || stage==Stage.COORD_DROPOFF ||
+           stage==Stage.COORD_TYPE) {
+            pollCoordinates();
+            return;
+        }
         if(SystemClock.elapsedRealtime()-flowStarted>=TOTAL_TIMEOUT_MS){
             finish(false,"Bolt не показав потрібний екран за 45 секунд. Нічого навмання не натискав.");
             return;
@@ -255,6 +260,91 @@ public final class BoltTaxiController {
         }
         if(!finished)HANDLER.postDelayed(tick,POLL_MS);
     }
+    /**
+     * Coordinate-only Bolt flow configured by the device owner:
+     * home «Рушаймо» (333,645), 2s later «Місце висадки» (450,520).
+     * Each coordinate is tapped once. If the destination editor belongs to
+     * Bolt, Android's Accessibility InputMethod enters the spoken address.
+     * No UI text reads, auto-retries on unknown pages, or ride confirmation.
+     */
+    private void pollCoordinates() {
+        if(finished)return;
+        long elapsed=SystemClock.elapsedRealtime()-started;
+        if(SystemClock.elapsedRealtime()-flowStarted>=TOTAL_TIMEOUT_MS) {
+            finish(false,"Bolt не завершив послідовність за 45 секунд. Поїздку не замовлено.");
+            return;
+        }
+        if(!JarvisPhoneScreenGuard.available(context) ||
+           !ScreenControlAccessibilityService.isSessionActive()) {
+            finish(false,"Розблокуй телефон і ввімкни керування екраном Джарвіса.");
+            return;
+        }
+        switch(stage) {
+            case COORD_RIDES:
+                // Preserve the existing 4s app-load grace period. Never tap
+                // merely because a timer elapsed: require Bolt foreground too.
+                if(elapsed<BoltUiLabels.RIDES_TAP_DELAY_MS) {
+                    HANDLER.postDelayed(tick,POLL_MS);return;
+                }
+                if(!ScreenControlAccessibilityService.boltCoordinateReady()) {
+                    if(elapsed>12000L) {
+                        finish(false,"Не вдалося підтвердити, що відкритий Bolt. Натискання зупинено.");
+                    } else HANDLER.postDelayed(tick,POLL_MS);
+                    return;
+                }
+                ScreenControlAccessibilityService.boltTapCalibrated(333,645,
+                    (ok,detail)->{
+                        if(finished)return;
+                        if(!ok) {
+                            finish(false,"Кнопка «Рушаймо»: "+detail);return;
+                        }
+                        move(Stage.COORD_DROPOFF,
+                            "«Рушаймо» натиснуто. Через 2 секунди відкрию «Місце висадки».");
+                        HANDLER.postDelayed(tick,2000L);
+                    });
+                return;
+            case COORD_DROPOFF:
+                if(elapsed<2000L) {
+                    HANDLER.postDelayed(tick,2000L-elapsed);return;
+                }
+                if(!ScreenControlAccessibilityService.boltCoordinateReady()) {
+                    finish(false,"Bolt не підтверджено перед натисканням «Місце висадки».");
+                    return;
+                }
+                ScreenControlAccessibilityService.boltTapCalibrated(450,520,
+                    (ok,detail)->{
+                        if(finished)return;
+                        if(!ok) {
+                            finish(false,"«Місце висадки»: "+detail);return;
+                        }
+                        if(address.isEmpty()) {
+                            finish(true,"Відкрив «Місце висадки». Назви адресу призначення.");
+                            return;
+                        }
+                        move(Stage.COORD_TYPE,"Шукаю активне поле Bolt для введення адреси...");
+                        HANDLER.postDelayed(tick,800L);
+                    });
+                return;
+            case COORD_TYPE:
+                if(elapsed>8000L) {
+                    finish(false,"Поле введення Bolt не активувалося. Адресу не вводив.");
+                    return;
+                }
+                ScreenControlAccessibilityService.BoltStep typed=
+                    ScreenControlAccessibilityService.boltTypeViaInputMethod(address);
+                if(typed==ScreenControlAccessibilityService.BoltStep.ENTERED) {
+                    finish(true,"Надіслав адресу в поле Bolt: "+address+
+                        ". Перевір текст і вибери правильний результат. Поїздку не замовляв.");
+                } else if(typed==ScreenControlAccessibilityService.BoltStep.BLOCKED) {
+                    finish(false,"Android не дозволив введення в поле Bolt. "+
+                        "Перевір, чи відкрилося поле адреси.");
+                } else HANDLER.postDelayed(tick,POLL_MS);
+                return;
+            default:
+                finish(false,"Невідома стадія введення адреси Bolt.");
+        }
+    }
+
     private void finish(boolean ok,String info){
         if(finished)return;
         finished=true;HANDLER.removeCallbacks(tick);
