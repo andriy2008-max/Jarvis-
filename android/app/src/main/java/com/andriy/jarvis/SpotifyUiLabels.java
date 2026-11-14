@@ -91,6 +91,35 @@ public final class SpotifyUiLabels {
             (t+b)/2f<rootT+rh*.62f;
     }
 
+    /** Last-resort Play tap calibrated from the user's Spotify playlist
+     * screenshot (684×1536), x≈616,y≈369. Only use after identifying a
+     * PLAYLIST page in Spotify; never on library/search/mini-player screens. */
+    public static int[] screenshotPlaylistPlayPoint(int width,int height) {
+        if(width<360 || height<width*2.05f || height>width*2.45f)return null;
+        int x=Math.round(width*(616f/684f));
+        int y=Math.round(height*(369f/1536f));
+        return safePlaylistPlayPoint(x,y,0,0,width,height)
+            ? new int[]{x,y} : null;
+    }
+
+    public static boolean safePlaylistPlayPoint(int x,int y,int left,int top,
+                                                 int right,int bottom) {
+        int width=right-left,height=bottom-top;
+        return width>0 && height>0 &&
+            x>left+width*.84f && x<left+width*.98f &&
+            y>top+height*.12f && y<top+height*.48f;
+    }
+
+    /** A title in the upper main-page header is different from a lower
+     * library row. This is required before emulating an unlabeled Play. */
+    public static boolean headerRegion(int x,int y,int w,int h,
+                                       int left,int top,int right,int bottom) {
+        int pageW=right-left,pageH=bottom-top;
+        return pageW>=240 && pageH>=400 && w>=22 && h>=15 &&
+            x>left+pageW*.05f && x<left+pageW*.70f &&
+            y>top+pageH*.08f && y<top+pageH*.43f;
+    }
+
     /** The correct Shuffle button is immediately left of the big playlist
      * Play. A far-left green DOWNLOAD arrow cannot satisfy this geometry. */
     public static boolean toolbarPair(int sl,int st,int sr,int sb,
