@@ -1,6 +1,9 @@
 package com.andriy.jarvis;
 
 import android.app.KeyguardManager;
+import android.app.AlarmManager;
+import android.app.PendingIntent;
+import android.content.Intent;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Point;
@@ -31,6 +34,7 @@ public final class JarvisRemoteUnlock {
         "увімкнути експериментальний root-режим розблокування з Watch7.";
     private static final String PREFS = "jarvis_root_unlock_v1";
     private static final String ENABLED = "owner_opt_in";
+    private static final int RELOCK_ALARM_ID = 81749;
     private static final long EXPIRES_MS = 60000L;
     private static final long AUTO_RELOCK_MS = 120000L;
     private static final int MAX_ATTEMPTS = 3;
@@ -151,6 +155,8 @@ public final class JarvisRemoteUnlock {
                     return;
                 }
                 pending=null;
+                // OS-managed fallback survives ordinary app process death.
+                scheduleSystemRelock(context);
                 final boolean[] completed={false};
                 final Runnable[] failSafe={null};
                 failSafe[0]=() -> {
@@ -185,6 +191,7 @@ public final class JarvisRemoteUnlock {
         MAIN.postDelayed(() -> {
             KeyguardManager keyguard=context.getSystemService(KeyguardManager.class);
             if (keyguard!=null && keyguard.isDeviceLocked()) {
+                cancelSystemRelock(context);
                 completion.done(commandOk,result+" Pixel повторно заблоковано.");
                 return;
             }
@@ -194,12 +201,41 @@ public final class JarvisRemoteUnlock {
             MAIN.postDelayed(() -> {
                 KeyguardManager actual=context.getSystemService(KeyguardManager.class);
                 boolean locked=actual!=null && actual.isDeviceLocked();
+                if (locked) cancelSystemRelock(context);
                 completion.done(commandOk && locked,result+" "+
                     (locked?"Pixel повторно заблоковано.":
                         "УВАГА: автоматичне блокування Pixel не підтверджено. " +
                         "Заблокуй телефон вручну."));
             },500L);
         },600L);
+    }
+
+    private static PendingIntent lockAlarm(Context context) {
+        Intent intent=new Intent(context,JarvisRelockReceiver.class);
+        return PendingIntent.getBroadcast(context,RELOCK_ALARM_ID,intent,
+            PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+    }
+
+    private static void scheduleSystemRelock(Context context) {
+        AlarmManager alarm=context.getSystemService(AlarmManager.class);
+        if (alarm == null) return;
+        try {
+            alarm.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                SystemClock.elapsedRealtime()+AUTO_RELOCK_MS,lockAlarm(context));
+        } catch (RuntimeException ignored) {
+            // The in-process fail-safe still attempts a lock.
+        }
+    }
+
+    private static void cancelSystemRelock(Context context) {
+        AlarmManager alarm=context.getSystemService(AlarmManager.class);
+        if(alarm!=null)alarm.cancel(lockAlarm(context));
+    }
+
+    /** Called by a system alarm after process loss; no credentials required. */
+    public static void fallbackRelock(Context context) {
+        KeyguardManager keyguard=context.getSystemService(KeyguardManager.class);
+        if(keyguard==null || !keyguard.isDeviceLocked()) relock(context);
     }
 
     private static String randomChallenge() {
