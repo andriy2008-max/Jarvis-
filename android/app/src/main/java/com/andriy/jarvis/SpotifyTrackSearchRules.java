@@ -8,6 +8,9 @@ public final class SpotifyTrackSearchRules {
 
     public static String normal(String text) {
         return text == null ? "" : text.toLowerCase(Locale.ROOT)
+            // Russian speech recognizers and music catalogs may disagree
+            // about ё vs е. This is orthographic folding, not translation.
+            .replace('ё','е')
             .replaceAll("[^\\p{L}\\p{N}]+"," ").replaceAll("\\s+"," ").trim();
     }
 
