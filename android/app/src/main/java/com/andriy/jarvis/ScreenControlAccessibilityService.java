@@ -899,6 +899,50 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         }
     }
 
+    /** Submit the dictated destination with the keyboard's Enter/Search,
+     * only when Bolt still owns the foreground and its text input connection.
+     * No booking, payment or UI confirmation button is ever pressed. */
+    public static BoltStep boltSubmitDestinationSearch() {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null || !s.sessionActive || !s.boltWindowTrusted())
+            return BoltStep.BLOCKED;
+        if(android.os.Build.VERSION.SDK_INT<33)return BoltStep.BLOCKED;
+        try {
+            android.accessibilityservice.InputMethod input=s.getInputMethod();
+            if(input==null || !input.getCurrentInputStarted())return BoltStep.WAIT;
+            android.view.inputmethod.EditorInfo editor=input.getCurrentInputEditorInfo();
+            android.accessibilityservice.InputMethod.AccessibilityInputConnection conn=
+                input.getCurrentInputConnection();
+            if(editor==null || conn==null)return BoltStep.WAIT;
+            if(!"ee.mtakso.client".equals(editor.packageName))
+                return BoltStep.BLOCKED;
+            int type=editor.inputType;
+            int variation=type & InputType.TYPE_MASK_VARIATION;
+            if((type & InputType.TYPE_MASK_CLASS)!=InputType.TYPE_CLASS_TEXT ||
+               variation==InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+               variation==InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
+               variation==InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD)
+                return BoltStep.BLOCKED;
+            int action=editor.imeOptions &
+                android.view.inputmethod.EditorInfo.IME_MASK_ACTION;
+            if(action==android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH ||
+               action==android.view.inputmethod.EditorInfo.IME_ACTION_GO ||
+               action==android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                conn.performEditorAction(action);
+            } else {
+                // An editor with no Search/Go/Done exposes the conventional
+                // Enter key. Send one down/up pair, never a global click.
+                conn.sendKeyEvent(new android.view.KeyEvent(
+                    android.view.KeyEvent.ACTION_DOWN,android.view.KeyEvent.KEYCODE_ENTER));
+                conn.sendKeyEvent(new android.view.KeyEvent(
+                    android.view.KeyEvent.ACTION_UP,android.view.KeyEvent.KEYCODE_ENTER));
+            }
+            return BoltStep.SUBMITTED;
+        }catch(RuntimeException denied){
+            return BoltStep.BLOCKED;
+        }
+    }
+
     /** Wait for visible «Рушаймо» rather than tapping a four-second guess. */
     public static BoltStep boltLetsGo() {
         ScreenControlAccessibilityService service=connected.get();
