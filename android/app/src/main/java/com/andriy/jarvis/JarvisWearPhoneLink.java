@@ -78,6 +78,15 @@ public final class JarvisWearPhoneLink {
         send(JarvisWearProtocol.TAXI, voice, callback);
     }
 
+    /** Voice and external integrations are handled on the phone. */
+    public void assistant(String voice, Callback callback) {
+        if (!JarvisWearProtocol.validCommand(voice)) {
+            callback.finished(false,"Команда занадто довга або порожня.");
+            return;
+        }
+        send(JarvisWearProtocol.ASSISTANT,voice,callback);
+    }
+
     public void spotify(String voice, Callback callback) {
         if (!JarvisWearProtocol.validCommand(voice) ||
             SpotifyMusicCommands.parse(voice) == null) {
@@ -187,7 +196,8 @@ public final class JarvisWearPhoneLink {
                     pendingCallback = cb;
                     if (JarvisWearProtocol.COMMAND.equals(type) ||
                         JarvisWearProtocol.SPOTIFY.equals(type) ||
-                        JarvisWearProtocol.TAXI.equals(type))
+                        JarvisWearProtocol.TAXI.equals(type) ||
+                        JarvisWearProtocol.ASSISTANT.equals(type))
                         feedback = JarvisControlFeedback.begin();
                     if (data.length > JarvisWearProtocol.MAX_BYTES)
                         throw new IllegalArgumentException("Payload too large");
@@ -197,6 +207,8 @@ public final class JarvisWearPhoneLink {
                             JarvisWearProtocol.SPOTIFY_ACK_TIMEOUT_MS :
                         JarvisWearProtocol.TAXI.equals(type) ?
                             JarvisWearProtocol.TAXI_ACK_TIMEOUT_MS :
+                        JarvisWearProtocol.ASSISTANT.equals(type) ?
+                            JarvisWearProtocol.ASSISTANT_ACK_TIMEOUT_MS :
                             JarvisWearProtocol.ACK_TIMEOUT_MS);
                     if (JarvisWearProtocol.SPOTIFY.equals(type) ||
                         JarvisWearProtocol.TAXI.equals(type))
