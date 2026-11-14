@@ -229,6 +229,13 @@ public final class JarvisWearPhoneAssistant {
             return;
         }
 
+        if (normalized.equals("стан підключень") ||
+            normalized.equals("перевір підключення") ||
+            normalized.equals("статус підключень")) {
+            completion.finished(true,phoneConnectionReport(phone));
+            return;
+        }
+
         if (normalized.equals("перевір підключення ші") ||
             normalized.equals("стан ші") ||
             normalized.equals("статус ші")) {
@@ -317,6 +324,40 @@ public final class JarvisWearPhoneAssistant {
         } catch (JSONException problem) {
             return "Не зміг прочитати нотатки телефона. Відкрий Джарвіса для перевірки.";
         }
+    }
+
+    /** Status only. Never send a token, API key or credential value to Wear OS. */
+    private static String phoneConnectionReport(Context phone) {
+        if (ai == null) ai = new AiChatClient(phone);
+        boolean aiReady = ai.isConfigured();
+        boolean telegramKeySaved = TelegramApiSecrets.load(phone) != null;
+        boolean telegramAuthorized = telegramKeySaved &&
+            TelegramTdClient.get(phone).isAuthorized();
+        boolean spotifyConfigured = !SpotifyDirectSettings.clientId(phone).isEmpty();
+        boolean spotifyInstalled = installed(phone,"com.spotify.music");
+        boolean financeInstalled = installed(phone,"com.freeman.moneymanager");
+        boolean boltInstalled = installed(phone,"ee.mtakso.client");
+        boolean shazamInstalled = installed(phone,"com.shazam.android");
+        boolean screenAllowed = ScreenControlAccessibilityService.isConnected();
+        return "Підключення Джарвіса на телефоні:\n" +
+            "ШІ: " + (aiReady ? "налаштовано" : "потрібен сервер і код") + ".\n" +
+            "Telegram: " + (telegramAuthorized ? "авторизовано" :
+                telegramKeySaved ? "API збережено, вхід не підтверджено" :
+                "API не налаштовано") + ".\n" +
+            "Spotify: " + (spotifyInstalled ? "встановлено" : "не встановлено") +
+                (spotifyConfigured ? ", App Remote налаштовано" :
+                    ", прямий API не налаштовано") + ".\n" +
+            "Менеджер фінансів: " + (financeInstalled ? "встановлено" :
+                "не встановлено") + ".\n" +
+            "Bolt: " + (boltInstalled ? "встановлено" : "не встановлено") +
+                "; Shazam: " + (shazamInstalled ? "встановлено" : "не встановлено") +
+                ".\nКерування екраном: " + (screenAllowed ? "дозволено" :
+                "немає дозволу") + ".\n" +
+            "Це локальний стан, не перевірка онлайн-серверів.";
+    }
+
+    private static boolean installed(Context phone,String packageName) {
+        return phone.getPackageManager().getLaunchIntentForPackage(packageName) != null;
     }
 
     private static boolean looksLikeFinanceCommand(String normalized) {
