@@ -1,9 +1,17 @@
 package com.andriy.jarvis;
 
+import android.Manifest;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
+import java.lang.ref.WeakReference;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.util.Base64;
 import com.google.android.gms.wearable.Asset;
 import com.google.android.gms.wearable.PutDataMapRequest;
 import com.google.android.gms.wearable.Wearable;
@@ -32,6 +40,8 @@ public final class JarvisWearImageBridge {
     private static final LinkedHashMap<String,Entry> images=new LinkedHashMap<>();
     private static AiChatClient generator;
     private static boolean generating;
+    private static WeakReference<MainActivity> phoneUi=new WeakReference<>(null);
+    public static final String EXTRA_WEAR_IMAGE_ID="com.andriy.jarvis.WEAR_IMAGE_ID";
 
     private static final class Entry {
         final String watchNode,id;
@@ -43,6 +53,93 @@ public final class JarvisWearImageBridge {
     }
 
     private JarvisWearImageBridge(){}
+
+    /** Only a foreground Pixel Activity receives the large original image UI. */
+    public static synchronized void attachPhone(MainActivity activity) {
+        phoneUi=new WeakReference<>(activity);
+    }
+
+    public static synchronized void detachPhone(MainActivity activity) {
+        if(phoneUi.get()==activity)phoneUi=new WeakReference<>(null);
+    }
+
+    /** Last image is private to Pixel. Read from cache on a worker thread. */
+    public static void readOnPixel(Context context,String imageId,
+                                   java.util.function.Consumer<byte[]> callback) {
+        if(callback==null)return;
+        final Entry item;
+        synchronized(JarvisWearImageBridge.class) {
+            purgeExpired();
+            item=images.get(imageId);
+        }
+        if(item==null) {
+            callback.accept(null);
+            return;
+        }
+        new Thread(()->{
+            byte[] bytes=null;
+            try {
+                int length=(int)item.file.length();
+                if(length>0 && length<=MAX_BYTES) {
+                    bytes=new byte[length];
+                    try(FileInputStream stream=new FileInputStream(item.file)){
+                        int n=0;
+                        while(n<length){
+                            int read=stream.read(bytes,n,length-n);
+                            if(read<0)throw new java.io.IOException("Invalid image");
+                            n+=read;
+                        }
+                    }
+                }
+            }catch(Exception ignored){bytes=null;}
+            final byte[] result=bytes;
+            new android.os.Handler(android.os.Looper.getMainLooper())
+                .post(()->callback.accept(result));
+        },"jarvis-image-for-pixel").start();
+    }
+
+    private static void presentOnPixel(Context context,String imageId) {
+        MainActivity current;
+        synchronized(JarvisWearImageBridge.class){current=phoneUi.get();}
+        if(current!=null && !current.isFinishing() && !current.isDestroyed()) {
+            readOnPixel(context,imageId,bytes->{
+                if(bytes!=null && !current.isFinishing() && !current.isDestroyed())
+                    current.showGeneratedImageFromWatch(bytes);
+            });
+            return;
+        }
+        // Background Activity launches are restricted by Android. Show a
+        // notification; the user explicitly opens Pixel to see the original.
+        if(Build.VERSION.SDK_INT>=33 &&
+           context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=
+                PackageManager.PERMISSION_GRANTED)return;
+        NotificationManager manager=(NotificationManager)
+            context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if(manager==null)return;
+        final String channel="jarvis_images_from_watch_v1";
+        if(Build.VERSION.SDK_INT>=26) {
+            NotificationChannel setup=new NotificationChannel(channel,
+                "Джарвіс — зображення з годинника",
+                NotificationManager.IMPORTANCE_DEFAULT);
+            manager.createNotificationChannel(setup);
+        }
+        Intent launch=new Intent(context,MainActivity.class);
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|
+            Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        launch.putExtra(EXTRA_WEAR_IMAGE_ID,imageId);
+        PendingIntent action=PendingIntent.getActivity(context,19030,launch,
+            PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+        Notification notification=new Notification.Builder(context,channel)
+            .setSmallIcon(R.drawable.ic_launcher)
+            .setContentTitle("Джарвіс створив зображення")
+            .setContentText("Торкнись, щоб переглянути його на Pixel")
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setAutoCancel(true)
+            .setContentIntent(action).build();
+        try{manager.notify(19030,notification);}catch(SecurityException ignored){}
+    }
+
+
 
     /** Only one expensive image request at a time. Never send API credentials to Wear. */
     public static synchronized void generate(Context context,String watchNode,
@@ -140,8 +237,10 @@ public final class JarvisWearImageBridge {
             request.getDataMap().putAsset("preview",Asset.createFromBytes(preview));
             request.getDataMap().putLong("created",System.currentTimeMillis());
             Wearable.getDataClient(app).putDataItem(request.asPutDataRequest().setUrgent())
-                .addOnSuccessListener(item-> cb.finished(true,
-                    "Зображення створено. Відкриваю на Watch7.",id))
+                .addOnSuccessListener(item-> {
+                    presentOnPixel(app,id);
+                    cb.finished(true,"Зображення створено. Відкриваю на Watch7.",id);
+                })
                 .addOnFailureListener(error->cb.finished(false,
                     "Зображення створено на Pixel, але прев’ю не передалося на Watch7.",""));
         }catch(Exception e) {
