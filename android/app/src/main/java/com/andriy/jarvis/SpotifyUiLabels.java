@@ -120,6 +120,16 @@ public final class SpotifyUiLabels {
             y>top+pageH*.08f && y<top+pageH*.43f;
     }
 
+    /** If the large playlist button already says Pause, that specific
+     * playlist is playing; never tap it a second time and stop the music. */
+    public static boolean largePause(String raw) {
+        String s=normalize(raw);
+        return s.equals("pause") || s.equals("pause button") ||
+            s.equals("пауза") || s.equals("призупинити") ||
+            s.equals("зупинити відтворення") || s.equals("приостановить") ||
+            s.equals("пауза воспроизведения");
+    }
+
     /** The correct Shuffle button is immediately left of the big playlist
      * Play. A far-left green DOWNLOAD arrow cannot satisfy this geometry. */
     public static boolean toolbarPair(int sl,int st,int sr,int sb,
