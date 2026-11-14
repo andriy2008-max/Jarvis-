@@ -2281,6 +2281,96 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         }) ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
     }
 
+    /** Confirm a detail-page action area, not an ordinary library row.
+     * Spotify Compose sometimes exposes the playlist title as a 22dp
+     * clickable text node. Its toolbar Play/Pause button is the independent
+     * evidence that this is the opened playlist screen. */
+    private boolean spotifyPlaylistToolbarVisible(AccessibilityNodeInfo root) {
+        Rect page=new Rect();root.getBoundsInScreen(page);
+        float density=getResources().getDisplayMetrics().density;
+        ArrayDeque<AccessibilityNodeInfo> q=new ArrayDeque<>();q.add(root);
+        int scanned=0;
+        while(!q.isEmpty() && ++scanned<=MAX_SCAN) {
+            AccessibilityNodeInfo n=q.removeFirst();
+            if(!n.isVisibleToUser() || !n.isEnabled() || n.isPassword())continue;
+            AccessibilityNodeInfo action=clickable(n);
+            if(action!=null) {
+                Rect hit=new Rect();action.getBoundsInScreen(hit);
+                boolean explicit=SpotifyUiLabels.matches(SpotifyUiLabels.Target.PLAY,
+                    asString(n.getText())) ||
+                    SpotifyUiLabels.matches(SpotifyUiLabels.Target.PLAY,
+                        asString(n.getContentDescription())) ||
+                    SpotifyUiLabels.largePause(asString(n.getText())) ||
+                    SpotifyUiLabels.largePause(asString(n.getContentDescription()));
+                if(explicit && SpotifyUiLabels.playlistPlayAt(hit.left,hit.top,
+                    hit.right,hit.bottom,page.left,page.top,page.right,
+                    page.bottom,density))return true;
+                if(n.isClickable() && SpotifyUiLabels.unlabelledPlaylistPlayCircle(
+                    hit.left,hit.top,hit.right,hit.bottom,page.left,page.top,
+                    page.right,page.bottom,density))return true;
+            }
+            for(int i=0;i<n.getChildCount();i++) {
+                AccessibilityNodeInfo child=n.getChild(i);
+                if(child!=null)q.addLast(child);
+            }
+        }
+        return false;
+    }
+
+    /** Retry a failed ACTION_CLICK only if the *same* playlist page still
+     * exposes an actual labelled Play control. Never blindly tap an
+     * unlabeled control again: it may have turned into Pause. */
+    public static SpotifyStep spotifyRetryExplicitPlaylistPlay(
+            SpotifyUiLabels.Target playlist,String named) {
+        ScreenControlAccessibilityService service=connected.get();
+        if(service==null || !service.sessionActive)return SpotifyStep.BLOCKED;
+        AccessibilityNodeInfo root=service.currentSpotifyRoot();
+        if(root==null || !service.spotifyPlaylistHeaderVisible(root,playlist,named))
+            return SpotifyStep.WAIT;
+        if(service.spotifyLargePauseVisible(root))return SpotifyStep.ALREADY;
+        Rect page=new Rect();root.getBoundsInScreen(page);
+        float density=service.getResources().getDisplayMetrics().density;
+        ArrayDeque<AccessibilityNodeInfo> nodes=new ArrayDeque<>();
+        nodes.add(root);
+        Rect found=null;
+        int scanned=0;
+        while(!nodes.isEmpty() && ++scanned<=MAX_SCAN) {
+            AccessibilityNodeInfo node=nodes.removeFirst();
+            if(!node.isVisibleToUser() || !node.isEnabled() || node.isPassword())continue;
+            if(SpotifyUiLabels.matches(SpotifyUiLabels.Target.PLAY,
+                asString(node.getText())) ||
+                SpotifyUiLabels.matches(SpotifyUiLabels.Target.PLAY,
+                    asString(node.getContentDescription()))) {
+                AccessibilityNodeInfo target=clickable(node);
+                if(target!=null) {
+                    Rect r=new Rect();target.getBoundsInScreen(r);
+                    if(SpotifyUiLabels.playlistPlayAt(r.left,r.top,
+                        r.right,r.bottom,page.left,page.top,page.right,
+                        page.bottom,density)) {
+                        if(found!=null && !found.equals(r))return SpotifyStep.WAIT;
+                        found=r;
+                    }
+                }
+            }
+            for(int i=0;i<node.getChildCount();i++) {
+                AccessibilityNodeInfo child=node.getChild(i);
+                if(child!=null)nodes.addLast(child);
+            }
+        }
+        if(scanned>MAX_SCAN || found==null ||
+           service.currentSpotifyRoot()==null)return SpotifyStep.WAIT;
+        FloatingJarvisService.avoidControl(found);
+        Path path=new Path();
+        path.moveTo(found.exactCenterX(),found.exactCenterY());
+        GestureDescription gesture=new GestureDescription.Builder()
+            .addStroke(new GestureDescription.StrokeDescription(path,0,95))
+            .build();
+        return service.dispatchTrackedGesture(gesture,(ok,detail)->{
+            if(!ok && service.sessionActive)
+                service.toast("Spotify: повторне натискання Play не вдалося: "+detail);
+        }) ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
+    }
+
     /** Only accept an exact playlist title displayed in its large upper
      * header. A small row in My Library is not enough to tap the Play area. */
     private boolean spotifyPlaylistHeaderVisible(AccessibilityNodeInfo root,
@@ -2288,7 +2378,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                                                   String named) {
         Rect frame=new Rect();root.getBoundsInScreen(frame);
         ArrayDeque<AccessibilityNodeInfo> q=new ArrayDeque<>();q.add(root);
-        boolean title=false,libraryTop=false;int scanned=0;
+        boolean title=false,smallClickableTitle=false,libraryTop=false;int scanned=0;
         while(!q.isEmpty() && ++scanned<=MAX_SCAN){
             AccessibilityNodeInfo n=q.removeFirst();
             if(!n.isVisibleToUser())continue;
@@ -2309,6 +2399,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                 float density=getResources().getDisplayMetrics().density;
                 if(row==null || rect.height()>=27*density)
                     title=true;
+                else smallClickableTitle=true;
             }
             String folded=SpotifyUiLabels.normalize(text);
             if((folded.equals("your library") || folded.equals("моя бібліотека") ||
@@ -2320,7 +2411,8 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                 if(child!=null)q.addLast(child);
             }
         }
-        return scanned<=MAX_SCAN && title && !libraryTop;
+        return scanned<=MAX_SCAN && !libraryTop &&
+            (title || (smallClickableTitle && spotifyPlaylistToolbarVisible(root)));
     }
 
     /** A playlist page can be ready even when Spotify's green Play is
