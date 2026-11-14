@@ -5261,11 +5261,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
             JarvisControlFeedback.Phase feedback = JarvisControlFeedback.phase(now);
             // Wear ear/hand animation is a real-mic indicator. Transcript
             // activity and pending recognizer restarts must never spoof it.
-            boolean hearing = isWatchDevice
-                ? foreground && watchMicReady && recognizerSessionActive &&
-                  listening && !"speaking".equals(expression)
-                : !"speaking".equals(expression) &&
-                  (transcribing || "listening".equals(expression));
+            boolean hearing=JarvisWatchMicVisualRules.hearing(
+                isWatchDevice,foreground,watchMicReady,
+                recognizerSessionActive,listening,manualCapture,
+                "speaking".equals(expression),transcribing,
+                "listening".equals(expression));
             if (JarvisPhoneMode.isActive() || feedback != JarvisControlFeedback.Phase.IDLE) {
                 boolean hasWords = transcriptVisible() && !recognizedText.isEmpty() &&
                     !"speaking".equals(expression);
