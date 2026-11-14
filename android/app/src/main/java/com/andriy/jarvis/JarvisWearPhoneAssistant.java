@@ -23,6 +23,7 @@ public final class JarvisWearPhoneAssistant {
     private static boolean aiBusy;
     private static JarvisSequenceExecutor sequences;
     private static DeviceActions deviceActions;
+    private static SpotifyPlaybackController musicController;
 
     private JarvisWearPhoneAssistant() {}
 
@@ -94,6 +95,22 @@ public final class JarvisWearPhoneAssistant {
             if (!started.startsWith("Відкриваю Shazam")) {
                 completion.finished(false,started);
             }
+            return;
+        }
+
+        // Watch7 can send music through the general assistant path when
+        // a voice transcription bypasses the watch-side Spotify shortcut.
+        // Handle explicit Spotify intent locally BEFORE conversational AI.
+        // The Spotify controller itself checks installed app and permission.
+        SpotifyMusicCommands.Kind songCommand=SpotifyMusicCommands.parse(raw);
+        if(songCommand!=null) {
+            if(musicController==null)musicController=new SpotifyPlaybackController(phone);
+            musicController.start(songCommand,raw,new SpotifyPlaybackController.Listener(){
+                @Override public void onProgress(String progress) { }
+                @Override public void onFinished(boolean success,String detail) {
+                    completion.finished(success,detail);
+                }
+            });
             return;
         }
 
