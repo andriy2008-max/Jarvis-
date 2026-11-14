@@ -3941,9 +3941,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     if (!ok && voiceEnabled) speakReply(detail);
                 });
             } else {
+                // Keep the watch microphone idle until the phone has either
+                // executed the request or reported a real transport/API error.
+                processing = true;
                 face.setState("thinking");
                 setStatus("Передаю команду Джарвісу на телефоні...");
                 watchPhoneLink.assistant(raw,(ok,detail) -> {
+                    processing = false;
                     if (isFinishing() || isDestroyed()) return;
                     if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                     appendDialogue("Джарвіс",detail);
