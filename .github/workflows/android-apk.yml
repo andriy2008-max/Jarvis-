@@ -52,6 +52,7 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/TimerRules.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisWearProtocol.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisWearReplyPages.java \
+            android/app/src/main/java/com/andriy/jarvis/JarvisWearImageCommands.java \
             android/app/src/main/java/com/andriy/jarvis/VoiceRanking.java \
             android/app/src/main/java/com/andriy/jarvis/NeuralSpeechPolicy.java \
             android/app/src/main/java/com/andriy/jarvis/OfflineVoicePackRules.java \
@@ -63,10 +64,11 @@ jobs:
             android/app/src/test/java/com/andriy/jarvis/WakeConversationTest.java \
             android/app/src/test/java/com/andriy/jarvis/TimerRulesTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisWearReplyPagesTest.java \
+            android/app/src/test/java/com/andriy/jarvis/JarvisWearImageCommandsTest.java \
             android/app/src/test/java/com/andriy/jarvis/VoiceRankingTest.java \
             android/app/src/test/java/com/andriy/jarvis/NeuralSpeechPolicyTest.java \
             android/app/src/test/java/com/andriy/jarvis/OfflineVoicePackRulesTest.java
-          for test in CommandPatternsTest AssistantIntentsTest AppNameMatcherTest DeviceCommandsTest AiChatPolicyTest WakeConversationTest TimerRulesTest JarvisWearReplyPagesTest VoiceRankingTest NeuralSpeechPolicyTest OfflineVoicePackRulesTest; do
+          for test in CommandPatternsTest AssistantIntentsTest AppNameMatcherTest DeviceCommandsTest AiChatPolicyTest WakeConversationTest TimerRulesTest JarvisWearReplyPagesTest JarvisWearImageCommandsTest VoiceRankingTest NeuralSpeechPolicyTest OfflineVoicePackRulesTest; do
             java -cp android/build/parser-tests "com.andriy.jarvis.$test"
           done
       - name: Restore stable signing keystore (stable only)
