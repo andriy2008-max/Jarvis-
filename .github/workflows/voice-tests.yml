@@ -61,6 +61,7 @@ on:
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisWearPhoneSession.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisWearPhoneAssistant.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisRemoteUnlock.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisRelockReceiver.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisCompanionService.java'
       - 'android/app/src/main/java/com/andriy/jarvis/TimerRestoreReceiver.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisWearMessageReceiver.java'
