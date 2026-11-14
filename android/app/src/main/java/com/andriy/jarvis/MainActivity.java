@@ -335,7 +335,6 @@ public final class MainActivity extends Activity implements RecognitionListener 
             // Never interrupt TTS or a pending phone ACK just to re-arm.
             // A single loop polls until the reply/voice stops, then listens.
             phoneListening = true;
-            getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             wakeHandler.removeCallbacks(phoneListenAgain);
             wakeHandler.postDelayed(phoneListenAgain, 200L);
             return;
@@ -364,7 +363,6 @@ public final class MainActivity extends Activity implements RecognitionListener 
             listening = false;
             processing = false;
         }
-        if (isWatchDevice) getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         wakeHandler.removeCallbacks(phoneListenAgain);
         wakeHandler.post(phoneListenAgain);
     }
@@ -372,7 +370,6 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private void stopPhoneListening() {
         phoneListening = false;
         wakeHandler.removeCallbacks(phoneListenAgain);
-        if (isWatchDevice) getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
     private final Runnable phoneModeListener = () -> runOnUiThread(() -> {
         if (isFinishing() || isDestroyed()) return;
@@ -630,6 +627,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
     protected void onResume() {
         super.onResume();
         foreground = true;
+        // Keep the watch awake for the whole visible Jarvis session, including
+        // idle, replies and microphone recovery, independently of listening mode.
+        if (isWatchDevice)
+            getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         if(!isWatchDevice)JarvisWearImageBridge.attachPhone(this);
         if (isWatchDevice && JarvisPhoneMode.isActive())
             ensureWatchPhoneListening();
@@ -659,6 +660,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     protected void onPause() {
+        if (isWatchDevice)
+            getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         if (launcherMicrophoneStart != null) {
             wakeHandler.removeCallbacks(launcherMicrophoneStart);
             launcherMicrophoneStart = null;
