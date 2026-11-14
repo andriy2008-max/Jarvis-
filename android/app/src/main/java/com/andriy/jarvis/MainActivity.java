@@ -59,6 +59,7 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import org.json.JSONArray;
@@ -188,6 +189,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
     };
     private JarvisWearPhoneLink watchPhoneLink;
+    private android.graphics.Bitmap lastWatchImagePreview;
+    private String lastWatchImageId="";
+    private String lastWatchImagePhoneNode="";
+    private AlertDialog watchGeneratedImageDialog;
+
     private AlertDialog watchReadingDialog;
     private ScrollView watchReadingScroll;
     private TextView watchReadingText;
@@ -2064,6 +2070,112 @@ public final class MainActivity extends Activity implements RecognitionListener 
             normalized.contains("прочитай нотатки") ||
             JarvisSearchRouting.query(raw)!=null ||
             WorldNewsCommands.requestsWorldNews(normalized);
+    }
+
+    /** Watch preview stays on Watch7; saving the original happens on Pixel. */
+    private void showWatchGeneratedImage(Bitmap preview,String imageId,String phoneNode) {
+        if(!isWatchDevice || preview==null ||
+           !JarvisWearProtocol.validId(imageId))return;
+        lastWatchImagePreview=preview;
+        lastWatchImageId=imageId;
+        lastWatchImagePhoneNode=phoneNode;
+        if(watchGeneratedImageDialog!=null && watchGeneratedImageDialog.isShowing())
+            watchGeneratedImageDialog.dismiss();
+        LinearLayout body=new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(14),dp(6),dp(14),dp(10));
+        ImageView picture=new ImageView(this);
+        picture.setImageBitmap(preview);
+        picture.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        picture.setAdjustViewBounds(true);
+        picture.setContentDescription(
+            "Згенероване зображення. Натисни, щоб збільшити.");
+        body.addView(picture,new LinearLayout.LayoutParams(-1,dp(205)));
+        TextView hint=makeText("Натисни на зображення для перегляду. "+
+            "Оригінал зберігається тільки на Pixel.",12,MUTED,
+            Gravity.CENTER,false);
+        body.addView(hint,new LinearLayout.LayoutParams(-1,-2));
+        ScrollView scroll=new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.addView(body);
+        AlertDialog dialog=new AlertDialog.Builder(this)
+            .setTitle("🎨 Зображення готове")
+            .setView(scroll)
+            .setPositiveButton("💾 Зберегти на Pixel",null)
+            .setNegativeButton("Закрити",null)
+            .create();
+        watchGeneratedImageDialog=dialog;
+        picture.setOnClickListener(v->showWatchImageFullScreen(preview));
+        dialog.setOnShowListener(ignored->{
+            android.widget.Button save=dialog.getButton(
+                AlertDialog.BUTTON_POSITIVE);
+            save.setOnClickListener(v->{
+                if(watchPhoneLink==null || watchPhoneLink.busy()) {
+                    setStatus("Телефон ще виконує попередню команду.");
+                    return;
+                }
+                save.setEnabled(false);
+                watchPhoneLink.saveGeneratedImage(imageId,(ok,detail)->{
+                    if(isFinishing() || isDestroyed())return;
+                    save.setEnabled(true);
+                    setStatus(detail);
+                    android.widget.Toast.makeText(this,detail,
+                        android.widget.Toast.LENGTH_LONG).show();
+                    if(ok)save.setText("✓ Збережено");
+                });
+            });
+        });
+        showDialogWithoutWake(dialog);
+    }
+
+    private void showWatchImageFullScreen(Bitmap preview) {
+        if(!isWatchDevice || preview==null)return;
+        ImageView picture=new ImageView(this);
+        picture.setImageBitmap(preview);
+        picture.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        picture.setAdjustViewBounds(true);
+        picture.setPadding(dp(8),dp(10),dp(8),dp(10));
+        AlertDialog larger=new AlertDialog.Builder(this)
+            .setTitle("Зображення Джарвіса")
+            .setView(picture)
+            .setPositiveButton("Назад",null).create();
+        showDialogWithoutWake(larger);
+    }
+
+    private void runWatchImageGeneration(String raw) {
+        if(watchPhoneLink==null) {
+            setStatus("Немає зв’язку з Pixel для створення зображення.");
+            return;
+        }
+        processing=true;
+        face.setState("thinking");
+        setStatus("Створюю зображення на Pixel...");
+        watchPhoneLink.generateImage(raw,(ok,detail,imageId,phoneNode)->{
+            if(isFinishing() || isDestroyed())return;
+            if(!ok || imageId.isEmpty() || phoneNode.isEmpty()) {
+                processing=false;
+                setStatus(detail);
+                if(voiceEnabled)speakReply(detail);
+                else face.setState("idle");
+                return;
+            }
+            setStatus("Зображення готове. Отримую прев’ю на годинник...");
+            watchPhoneLink.loadImagePreview(phoneNode,imageId,(received,preview,message)->{
+                if(isFinishing() || isDestroyed())return;
+                processing=false;
+                if(received && preview!=null) {
+                    showWatchGeneratedImage(preview,imageId,phoneNode);
+                    setStatus("Зображення готове. Його можна зберегти на Pixel.");
+                    if(voiceEnabled)speakReply(
+                        "Зображення готове. Натисни зберегти на телефон.");
+                    else face.setState("idle");
+                } else {
+                    setStatus(message);
+                    if(voiceEnabled)speakReply(message);
+                    else face.setState("idle");
+                }
+            });
+        });
     }
 
     private void showWatchTextInput() {
@@ -4013,8 +4125,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 setStatus("Телефон не підключений. ШІ налаштовується на телефоні.");
                 return;
             }
-            if (chosenFile != null || "image".equals(mode)) {
-                setStatus("Файли й зображення для ШІ обирай на телефоні.");
+            if ("image".equals(mode) && chosenFile==null) {
+                runWatchImageGeneration("створи зображення "+question);
+                return;
+            }
+            if (chosenFile != null) {
+                setStatus("Файли для редагування ШІ обирай на телефоні.");
                 return;
             }
             processing = true;
@@ -4338,6 +4454,19 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (modeTransition == JarvisPhoneMode.Transition.EXIT &&
                 JarvisPhoneMode.isActive()) {
                 exitPhoneMode();
+                return;
+            }
+            // Image requests from the watch are handled on Pixel, not by
+            // a watch-side HTTP client or by sending binary in MessageClient.
+            if(JarvisWearImageCommands.lastImage(raw)) {
+                if(lastWatchImagePreview==null || lastWatchImageId.isEmpty())
+                    setStatus("Немає останнього зображення в пам’яті годинника.");
+                else showWatchGeneratedImage(lastWatchImagePreview,
+                    lastWatchImageId,lastWatchImagePhoneNode);
+                return;
+            }
+            if(JarvisWearImageCommands.prompt(raw)!=null) {
+                runWatchImageGeneration(raw);
                 return;
             }
             SpotifyMusicCommands.Kind watchMusic = SpotifyMusicCommands.parse(raw);
