@@ -297,8 +297,12 @@ public final class JarvisWearPhoneAssistant {
         try {
             JSONArray array = new JSONArray(prefs.getString("notes","[]"));
             if (add) {
-                String content = normalized.replaceFirst(
-                    "^(?:запиши|занотуй|нотатка)\\s+","").trim();
+                // Preserve the user's original text, including case and
+                // punctuation, rather than storing a normalized command.
+                String content = raw.trim()
+                    .replaceFirst("(?iu)^(?:джарвіс|джарвис|jarvis)[,\\s:—-]*","")
+                    .replaceFirst("(?iu)^(?:запиши|занотуй|нотатка)\\s+","")
+                    .trim();
                 if (content.isEmpty()) return "Назви, що записати.";
                 if (content.length() > 800) return "Нотатка занадто довга.";
                 array.put(content);
