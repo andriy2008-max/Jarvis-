@@ -2116,7 +2116,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         AlertDialog dialog=new AlertDialog.Builder(this)
             .setTitle("🎨 Зображення готове")
             .setView(scroll)
-            .setPositiveButton("💾 Зберегти на Pixel",null)
+            .setPositiveButton("💾 Зберегти",null)
             .setNegativeButton("Закрити",null)
             .create();
         watchGeneratedImageDialog=dialog;
@@ -2275,7 +2275,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 (shakeEnabled ? "увімкнено" : "вимкнено"),
             "🗣 Розпізнавання: " + JarvisSpeechLanguages.label(
                 getPreferences(MODE_PRIVATE).getString(
-                    JarvisSpeechLanguages.PREF,JarvisSpeechLanguages.AUTO))
+                    JarvisSpeechLanguages.PREF,JarvisSpeechLanguages.AUTO)),
+            "🖼 Останнє зображення"
         };
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("Налаштування Джарвіса")
@@ -2346,6 +2347,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         break;
                     }
                     case 13: showSpeechRecognitionLanguageSettings(); break;
+                    case 14: processCommand("покажи останнє зображення"); break;
                     case 12:
                         shakeEnabled = !shakeEnabled;
                         getPreferences(MODE_PRIVATE).edit()
