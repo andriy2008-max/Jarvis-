@@ -71,7 +71,6 @@ public final class BoltTaxiController {
     }
     private void move(Stage next,String info){
         stage=next;started=SystemClock.elapsedRealtime();
-        transientScreenFailures=0;
         listener.onProgress(info);
     }
     /**
