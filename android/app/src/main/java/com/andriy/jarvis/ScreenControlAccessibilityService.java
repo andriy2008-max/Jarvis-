@@ -1904,8 +1904,94 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if(action==SpotifyUiLabels.Target.SHUFFLE)
             return service.tapSpotifyRightShuffle(root,null,name,shuffleEnabled);
         if(action==SpotifyUiLabels.Target.PLAY)
-            return service.tapSpotifyControl(SpotifyUiLabels.Target.PLAY,null);
+            return service.tapSpotifyPlaylistPlay(null,name);
+
         return SpotifyStep.BLOCKED;
+    }
+
+    /** Play a confirmed RAP/Liked-Songs or Ukrainian playlist, never a
+     * generic global MediaPlay that might resume a different audio app. */
+    public static SpotifyStep spotifyPlaylistPlay(SpotifyUiLabels.Target playlist) {
+        ScreenControlAccessibilityService service=connected.get();
+        if(service==null || !service.sessionActive || playlist==null)
+            return SpotifyStep.BLOCKED;
+        return service.tapSpotifyPlaylistPlay(playlist,null);
+    }
+
+    /** Preferred: an explicitly labelled Spotify Play button. If Spotify
+     * renders an unlabeled green button, emulate its calibrated touchscreen
+     * tap ONLY after the exact playlist header is seen on the phone. */
+    private SpotifyStep tapSpotifyPlaylistPlay(SpotifyUiLabels.Target playlist,
+                                               String named) {
+        AccessibilityNodeInfo root=currentSpotifyRoot();
+        if(root==null)return SpotifyStep.WAIT;
+        if(playlist==null && (named==null || named.isEmpty()))
+            return SpotifyStep.BLOCKED;
+        if(!spotifyPlaylistHeaderVisible(root,playlist,named))
+            return SpotifyStep.WAIT;
+        SpotifyStep accessible=tapSpotifyControl(SpotifyUiLabels.Target.PLAY,
+            playlist);
+        if(accessible!=SpotifyStep.WAIT)return accessible;
+        // A Spotify build may draw a green circle without exposing its
+        // accessibility label; use the known toolbar geometry only on this
+        // verified page, not search results, library rows or the mini-player.
+        Rect bounds=new Rect(); root.getBoundsInScreen(bounds);
+        android.graphics.Point physical=new android.graphics.Point();
+        android.view.Display display=getDisplay();
+        if(display==null){
+            WindowManager window=(WindowManager)getSystemService(Context.WINDOW_SERVICE);
+            if(window!=null)display=window.getDefaultDisplay();
+        }
+        if(display==null)return SpotifyStep.WAIT;
+        display.getRealSize(physical);
+        int[] point=SpotifyUiLabels.screenshotPlaylistPlayPoint(physical.x,physical.y);
+        if(point==null || !bounds.contains(point[0],point[1]) ||
+           !sessionActive || currentSpotifyRoot()==null)
+            return SpotifyStep.WAIT;
+        Path path=new Path();
+        path.moveTo(point[0],point[1]);
+        GestureDescription gesture=new GestureDescription.Builder()
+            .addStroke(new GestureDescription.StrokeDescription(path,0,85))
+            .build();
+        return dispatchTrackedGesture(gesture,(ok,detail)->{
+            if(!ok && sessionActive)
+                toast("Spotify не натиснув Play: "+detail);
+        }) ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
+    }
+
+    /** Only accept an exact playlist title displayed in its large upper
+     * header. A small row in My Library is not enough to tap the Play area. */
+    private boolean spotifyPlaylistHeaderVisible(AccessibilityNodeInfo root,
+                                                  SpotifyUiLabels.Target playlist,
+                                                  String named) {
+        Rect frame=new Rect();root.getBoundsInScreen(frame);
+        ArrayDeque<AccessibilityNodeInfo> q=new ArrayDeque<>();q.add(root);
+        boolean title=false,libraryTop=false;int scanned=0;
+        while(!q.isEmpty() && ++scanned<=MAX_SCAN){
+            AccessibilityNodeInfo n=q.removeFirst();
+            if(!n.isVisibleToUser())continue;
+            String text=asString(n.getText());
+            String description=asString(n.getContentDescription());
+            Rect rect=new Rect();n.getBoundsInScreen(rect);
+            boolean matches= named!=null
+                ? SpotifyUiLabels.namedPlaylist(named,text) ||
+                  SpotifyUiLabels.namedPlaylist(named,description)
+                : SpotifyUiLabels.matches(playlist,text) ||
+                  SpotifyUiLabels.matches(playlist,description);
+            if(matches && SpotifyUiLabels.headerRegion(rect.centerX(),rect.centerY(),
+                rect.width(),rect.height(),frame.left,frame.top,
+                frame.right,frame.bottom))title=true;
+            String folded=SpotifyUiLabels.normalize(text);
+            if((folded.equals("your library") || folded.equals("моя бібліотека") ||
+                folded.equals("моя медіатека") || folded.equals("бібліотека")) &&
+                rect.centerY() < frame.top+frame.height()*.16f)
+                libraryTop=true;
+            for(int i=0;i<n.getChildCount();i++){
+                AccessibilityNodeInfo child=n.getChild(i);
+                if(child!=null)q.addLast(child);
+            }
+        }
+        return scanned<=MAX_SCAN && title && !libraryTop;
     }
 
     /** Verify the actual playlist header AND its top-right Play button after
