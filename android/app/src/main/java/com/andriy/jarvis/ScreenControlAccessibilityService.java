@@ -2411,8 +2411,10 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                 if(child!=null)q.addLast(child);
             }
         }
-        return scanned<=MAX_SCAN && !libraryTop &&
-            (title || (smallClickableTitle && spotifyPlaylistToolbarVisible(root)));
+        return SpotifyUiLabels.playlistDetailEvidence(
+            title,smallClickableTitle,
+            smallClickableTitle && spotifyPlaylistToolbarVisible(root),
+            libraryTop,scanned<=MAX_SCAN);
     }
 
     /** A playlist page can be ready even when Spotify's green Play is
