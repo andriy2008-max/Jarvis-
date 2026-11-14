@@ -296,7 +296,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
         pendingLauncherMicrophone = state == null && isPhoneLauncherIntent(getIntent());
         if (isWatchDevice) watchPhoneLink = new JarvisWearPhoneLink(this);
         isCompact = getResources().getConfiguration().smallestScreenWidthDp < 360;
-        shakeEnabled = getPreferences(MODE_PRIVATE).getBoolean(SHAKE_PREF, true);
+        // Wrist motion control is explicitly opt-in on Wear OS. Existing
+        // phone shake preference keeps its current default behavior.
+        shakeEnabled = getPreferences(MODE_PRIVATE).getBoolean(SHAKE_PREF, !isWatchDevice);
         shakeSensors = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         accelerometer = shakeSensors == null ? null :
             shakeSensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
