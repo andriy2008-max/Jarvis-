@@ -117,7 +117,7 @@ public final class SpotifyUiLabels {
         int pageW=right-left,pageH=bottom-top;
         return pageW>=240 && pageH>=400 && w>=22 && h>=15 &&
             x>left+pageW*.05f && x<left+pageW*.70f &&
-            y>top+pageH*.08f && y<top+pageH*.43f;
+            y>top+pageH*.08f && y<top+pageH*.60f;
     }
 
     /** If the large playlist button already says Pause, that specific
