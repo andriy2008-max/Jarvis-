@@ -162,6 +162,62 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (face != null) face.showTranscript(words, active, untilMs);
         };
     private boolean listening = false;
+    // Wear OS: the ear/hand animation must reflect an actual ready
+    // SpeechRecognizer session, NOT merely the user's capture intention.
+    private boolean watchMicReady;
+    private Runnable watchMicReadyWatchdog;
+    private static final long WATCH_MIC_READY_TIMEOUT_MS = 6500L;
+
+    private void stopWatchMicIndicator() {
+        if(!isWatchDevice)return;
+        watchMicReady=false;
+        if(watchMicReadyWatchdog!=null)
+            wakeHandler.removeCallbacks(watchMicReadyWatchdog);
+        watchMicReadyWatchdog=null;
+    }
+
+    private void confirmWatchMicReady() {
+        if(!isWatchDevice || !foreground || !manualCapture ||
+           !recognizerSessionActive || !listening || manualStopRequested)return;
+        stopWatchMicIndicator();
+        watchMicReady=true;
+        if(face!=null)face.setState("listening");
+    }
+
+    /** If Android silently never starts microphone capture, cancel that
+     * recognizer and retry a bounded number of times. Old listeners are
+     * discarded by ownedRecognizerListener's instance identity check. */
+    private void armWatchMicReadyWatchdog(SpeechRecognizer started) {
+        if(!isWatchDevice || !manualCapture || started==null)return;
+        stopWatchMicIndicator();
+        watchMicReadyWatchdog=()->{
+            watchMicReadyWatchdog=null;
+            if(!foreground || !manualCapture || manualStopRequested ||
+               !recognizerSessionActive || watchMicReady || recognizer!=started)
+                return;
+            android.util.Log.w("JARVIS_WATCH_MIC",
+                "SpeechRecognizer did not report readiness");
+            recognizer=null;
+            recognizerSessionActive=false;
+            listening=false;
+            autoWakeListening=false;
+            try{started.cancel();started.destroy();}
+            catch(RuntimeException ignored){}
+            if(manualCycleFailures++<2){
+                if(face!=null)face.setState("thinking");
+                setStatus("Мікрофон Watch7 не відповідає. Перепідключаю...");
+                scheduleManualRestart(750L);
+            }else{
+                manualCapture=false;
+                manualStopRequested=false;
+                stopPhoneListening();
+                resetListening("Мікрофон Watch7 не запустився після трьох спроб. "+
+                    "Перевір дозвіл мікрофона й службу голосового вводу.");
+            }
+        };
+        wakeHandler.postDelayed(watchMicReadyWatchdog,WATCH_MIC_READY_TIMEOUT_MS);
+    }
+
     private boolean processing = false;
     private boolean speaking = false;
     private boolean isCompact = false;
@@ -577,6 +633,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         cancelManualRestart();
         cancelSilenceCheck();
         if (recognizer != null && recognizerSessionActive) recognizer.cancel();
+        stopWatchMicIndicator();
         recognizerSessionActive = false;
         listening = false;
         processing = false;
@@ -1390,6 +1447,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             listening = false;
             recognizerSessionActive = false;
             autoWakeListening = false;
+            stopWatchMicIndicator();
             // Invalidate listener generation so cancel callbacks cannot restart
             // recognition, replace the answer, or clear processing during TTS.
             retireDisconnectedRecognizer();
@@ -2869,6 +2927,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
      * error 11 from the old binder. Always discard it before retrying.
      */
     private void retireDisconnectedRecognizer() {
+        stopWatchMicIndicator();
         SpeechRecognizer previous = recognizer;
         recognizer = null;
         recognizerSessionActive = false;
@@ -3148,6 +3207,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private void finishManualCapture() {
+        stopWatchMicIndicator();
         clearInstantCommand();
         if (phoneListening) retireDisconnectedRecognizer();
         if (headsetRoute != null) headsetRoute.end();
@@ -3294,14 +3354,17 @@ public final class MainActivity extends Activity implements RecognitionListener 
         autoWakeListening = !manualCapture;
         recognizerSessionActive = true;
         listening = true;
+        stopWatchMicIndicator();
         microphone.setText(manualCapture ? "■ Завершити та надіслати" :
             isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Джарвісом");
-        face.setState("listening");
-        setStatus(manualCapture ? (speechPause.armed()
-            ? "Слухаю. Пауза після слова: " + speechPauseSeconds() + " с."
-            : "Чекаю першого розпізнаного слова...") :
-            wakeConversation.isActive(SystemClock.elapsedRealtime()) ? "Продовжуй розмову..." :
-                "Очікую «Джарвіс»");
+        face.setState(isWatchDevice ? "thinking" : "listening");
+        setStatus(isWatchDevice && manualCapture
+            ? "Підключаю мікрофон Watch7..."
+            : manualCapture ? (speechPause.armed()
+                ? "Слухаю. Пауза після слова: " + speechPauseSeconds() + " с."
+                : "Чекаю першого розпізнаного слова...")
+            : wakeConversation.isActive(SystemClock.elapsedRealtime())
+                ? "Продовжуй розмову..." : "Очікую «Джарвіс»");
         if (headsetRoute != null && !headsetRoute.begin()) {
             recognizerSessionActive=false;
             listening=false;
@@ -3318,7 +3381,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
         try {
             recognizer.startListening(intent);
+            armWatchMicReadyWatchdog(recognizer);
         } catch (Exception error) {
+            stopWatchMicIndicator();
             recognizerSessionActive = false;
             listening = false;
             autoWakeListening = false;
@@ -3336,6 +3401,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private void resetListening(String message) {
+        stopWatchMicIndicator();
         listening = false;
         processing = false;
         microphone.setText(isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Джарвісом");
@@ -3371,11 +3437,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     @Override public void onReadyForSpeech(Bundle params) {
+        confirmWatchMicReady();
         if (manualCapture) setStatus("Слухаю — говори...");
         else setStatus(wakeConversation.isActive(SystemClock.elapsedRealtime())
             ? "Продовжуй розмову..." : "Очікую «Джарвіс»");
     }
     @Override public void onBeginningOfSpeech() {
+        confirmWatchMicReady();
         if (!manualCapture) JarvisLiveTranscript.begin(TRANSCRIPT_OWNER);
         setStatus(manualCapture ? "Розпізнаю голос..." : "Слухаю фразу...");
     }
@@ -3388,14 +3456,16 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     public void onEndOfSpeech() {
+        stopWatchMicIndicator();
         listening = false;
+        if (isWatchDevice && face!=null)face.setState("thinking");
         if (manualCapture) {
             // SpeechRecognizer stops automatically on pauses. Keep the *user's*
             // manual recording active and restart once results arrive.
             setStatus(manualStopRequested ? "Завершую запис..." :
                 speechPause.armed()
-                    ? "Слухаю. Надсилання після " + speechPauseSeconds() + " с тиші."
-                    : "Чекаю першого розпізнаного слова...");
+                    ? "Розпізнаю слова. Надсилання після " + speechPauseSeconds() + " с тиші."
+                    : "Android завершив фрагмент. Відновлюю мікрофон...");
             return;
         }
         processing = true;
@@ -3406,6 +3476,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     public void onError(int error) {
+        stopWatchMicIndicator();
         recognizerSessionActive = false;
         listening = false;
         boolean wasManual = manualCapture;
@@ -3486,12 +3557,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 JarvisLiveTranscript.update(TRANSCRIPT_OWNER,
                     manualTranscript.toString(), false, SystemClock.uptimeMillis());
             microphone.setText("■ Завершити та надіслати");
-            face.setState("listening");
+            face.setState(isWatchDevice ? "thinking" : "listening");
             setStatus(error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED
                 ? "Відновлюю підключення до служби розпізнавання Android (11)..."
                 : speechPause.armed()
                     ? "Чекаю " + speechPauseSeconds() + " с тиші після слова."
-                    : "Чекаю першого слова...");
+                    : "Відновлюю мікрофон. Чекаю першого слова...");
             scheduleManualRestart(JarvisSpeechErrorPolicy.backoffMs(error, manualCycleFailures));
             return;
         }
@@ -3516,6 +3587,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     public void onResults(Bundle results) {
+        stopWatchMicIndicator();
         ArrayList<String> matches = results == null ? null :
             results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
         recognizerSessionActive = false;
@@ -3560,10 +3632,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 JarvisLiveTranscript.update(TRANSCRIPT_OWNER,
                     manualTranscript.toString(), false, SystemClock.uptimeMillis());
                 microphone.setText("■ Завершити та надіслати");
-                face.setState("listening");
+                face.setState(isWatchDevice ? "thinking" : "listening");
                 setStatus(speechPause.armed()
                     ? "Пауза після слова: " + speechPauseSeconds() + " с."
-                    : "Чекаю першого слова...");
+                    : "Відновлюю мікрофон після фрагмента...");
                 scheduleManualRestart(350L);
             }
             return;
@@ -5135,8 +5207,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
             paint.setStyle(Paint.Style.FILL);
             long now = SystemClock.uptimeMillis();
             JarvisControlFeedback.Phase feedback = JarvisControlFeedback.phase(now);
-            boolean hearing = !"speaking".equals(expression) &&
-                (transcribing || "listening".equals(expression));
+            // Wear ear/hand animation is a real-mic indicator. Transcript
+            // activity and pending recognizer restarts must never spoof it.
+            boolean hearing = isWatchDevice
+                ? foreground && watchMicReady && recognizerSessionActive &&
+                  listening && !"speaking".equals(expression)
+                : !"speaking".equals(expression) &&
+                  (transcribing || "listening".equals(expression));
             if (JarvisPhoneMode.isActive() || feedback != JarvisControlFeedback.Phase.IDLE) {
                 boolean hasWords = transcriptVisible() && !recognizedText.isEmpty() &&
                     !"speaking".equals(expression);
