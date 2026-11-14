@@ -52,6 +52,7 @@ public final class SpotifyPlaybackController {
     private boolean playlistRowRetried;
     private boolean coordinateTrackSearch;
     private boolean coordinatePlaylistPlayUsed;
+    private boolean spotifyLaunchFallbackTried;
 
     public SpotifyPlaybackController(Context context) {
         this.context = context;
@@ -162,6 +163,7 @@ public final class SpotifyPlaybackController {
         playlistRowRetried = false;
         coordinateTrackSearch = false;
         coordinatePlaylistPlayUsed = false;
+        spotifyLaunchFallbackTried = false;
         listener = callback;
         active = true;
         move(Stage.WAIT_APP, "Режим «Телефон»: очікую відкриття Spotify...");
@@ -217,7 +219,12 @@ public final class SpotifyPlaybackController {
             String reason;
             switch (stage) {
                 case WAIT_APP:
-                    reason = "Spotify не відкрився або екран заблокований.";
+                    reason = requested == SpotifyMusicCommands.Kind.TRACK
+                        ? "Spotify не підтверджено на передньому плані. " +
+                          "Android не дозволив відкрити екран застосунку або " +
+                          "служба спеціальних можливостей не бачить його вікно. " +
+                          "Відкрий Spotify на Pixel і повтори команду."
+                        : "Spotify не відкрився або екран заблокований.";
                     break;
                 case OPEN_LIBRARY:
                     reason = "Не знайшов вкладку «Моя бібліотека» у Spotify.";
@@ -280,6 +287,18 @@ public final class SpotifyPlaybackController {
             !coordinateTyping && !selectedAfterCoordinates &&
             !((coordinateNavigation || playlistLibraryNavigation) &&
               ScreenControlAccessibilityService.spotifyCoordinateReady())) {
+            // Some Android builds silently deny a background launch of
+            // Spotify even though startActivity() did not throw. Retry ONCE
+            // with Spotify's own explicit search URI. No touch is attempted
+            // until Android Accessibility confirms the Spotify window.
+            if(requested==SpotifyMusicCommands.Kind.TRACK &&
+               stage==Stage.WAIT_APP && age>=4000L &&
+               !spotifyLaunchFallbackTried) {
+                spotifyLaunchFallbackTried=true;
+                if(openDirectSpotifySearch(namedTrack) && listener!=null)
+                    listener.onProgress(
+                        "Повторно відкриваю Spotify через посилання на пошук пісні...");
+            }
             handler.postDelayed(poll, POLL_MS);
             return;
         }
@@ -624,6 +643,7 @@ public final class SpotifyPlaybackController {
         namedTrack = null;
         coordinateTrackSearch = false;
         coordinatePlaylistPlayUsed = false;
+        spotifyLaunchFallbackTried = false;
         JarvisPhoneModeManager.Lease lease = temporaryControl;
         temporaryControl = null;
         // Always restore Jarvis' normal face, even on errors/cancellation.
