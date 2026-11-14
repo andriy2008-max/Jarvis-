@@ -6,6 +6,18 @@ public final class BoltUiLabelsTest {
         yes(BoltUiLabels.rides("Поїздки"));
         yes(BoltUiLabels.rides("Rides"));
         yes(BoltUiLabels.rides("Поїздки • Рушаймо!"));
+        // New taxi path waits for THIS exact visible CTA, never a timer.
+        yes(BoltUiLabels.letsGo("Рушаймо!"));
+        yes(BoltUiLabels.letsGo("Поїздки • Рушаймо!"));
+        yes(BoltUiLabels.letsGo("Поїздки\\nРушаймо!"));
+        yes(BoltUiLabels.letsGo("Let's go!"));
+        yes(!BoltUiLabels.letsGo("Поїздки"));
+        yes(!BoltUiLabels.letsGo("Рушаймо до оплати"));
+        yes(!BoltUiLabels.letsGo("Підтвердити поїздку"));
+        yes(!BoltUiLabels.letsGo("Рушаймо в інше місто"));
+        yes(BoltUiLabels.letsGoRegion(160,489,0,0,684,1536));
+        yes(!BoltUiLabels.letsGoRegion(620,489,0,0,684,1536));
+        yes(!BoltUiLabels.letsGoRegion(160,1300,0,0,684,1536));
         yes(BoltUiLabels.rides("Поїздки\nРушаймо!"));
         yes(!BoltUiLabels.rides("Поїздки завтра"));
         yes(!BoltUiLabels.rides("Мої поїздки"));
