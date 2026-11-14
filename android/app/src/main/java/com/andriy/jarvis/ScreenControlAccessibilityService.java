@@ -678,6 +678,13 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         return service != null && service.sessionActive && service.currentBoltRoot() != null;
     }
 
+    /** Wait for visible «Рушаймо» rather than tapping a four-second guess. */
+    public static BoltStep boltLetsGo() {
+        ScreenControlAccessibilityService service=connected.get();
+        return service==null || !service.sessionActive ? BoltStep.BLOCKED :
+            service.tapBoltLetsGo();
+    }
+
     public static BoltStep boltRides() {
         ScreenControlAccessibilityService service = connected.get();
         return service == null || !service.sessionActive ? BoltStep.BLOCKED :
@@ -938,6 +945,68 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             }
         }
         return null;
+    }
+
+    /** Only click a visible «Рушаймо» label within Bolt's HOME rides tile.
+     * The text might be a child of the combined «Поїздки · Рушаймо» card.
+     * Neither a timeout nor opening Bolt alone authorizes any coordinates. */
+    private BoltStep tapBoltLetsGo() {
+        AccessibilityNodeInfo root=currentBoltRoot();
+        if (root==null) return BoltStep.WAIT;
+        if (isBoltDestinationFocused() || findBoltDropoffTarget(root)!=null)
+            return BoltStep.READY;
+        Rect frame=new Rect();
+        root.getBoundsInScreen(frame);
+        ArrayDeque<AccessibilityNodeInfo> nodes=new ArrayDeque<>();
+        nodes.add(root);
+        Rect chosen=null;
+        int bestScore=-1,scanned=0;
+        boolean heading=false,hasRides=false,food=false,plan=false,send=false;
+        boolean unsafe=false,routeScreen=false;
+        while(!nodes.isEmpty() && ++scanned<=MAX_SCAN){
+            AccessibilityNodeInfo n=nodes.removeFirst();
+            if(!n.isVisibleToUser() || n.isPassword()) continue;
+            String text=asString(n.getText());
+            String description=asString(n.getContentDescription());
+            String combined=(text+" "+description).toLowerCase(Locale.ROOT);
+            if(BoltUiLabels.ridesHomeHeading(text) ||
+               BoltUiLabels.ridesHomeHeading(description)) heading=true;
+            if(BoltUiLabels.rides(text) || BoltUiLabels.rides(description))
+                hasRides=true;
+            if(combined.contains("bolt food"))food=true;
+            if(combined.contains("запланувати") || combined.contains("schedule"))plan=true;
+            if(combined.contains("bolt send"))send=true;
+            if(BoltUiLabels.routeTitle(text) || BoltUiLabels.routeTitle(description))
+                routeScreen=true;
+            if(BoltUiLabels.unsafeForTimedRidesTap(text) ||
+               BoltUiLabels.unsafeForTimedRidesTap(description)) unsafe=true;
+            if(n.isEnabled() && (BoltUiLabels.letsGo(text) ||
+               BoltUiLabels.letsGo(description))) {
+                Rect box=new Rect();n.getBoundsInScreen(box);
+                if(!box.isEmpty() && BoltUiLabels.letsGoRegion(box.centerX(),
+                    box.centerY(),frame.left,frame.top,frame.right,frame.bottom)) {
+                    int score=(BoltUiLabels.rides(text) ||
+                        BoltUiLabels.rides(description))?3:2;
+                    if(n.isClickable())score++;
+                    if(score>bestScore) {
+                        chosen=box;
+                        bestScore=score;
+                    } else if(score==bestScore && chosen!=null &&
+                              !chosen.contains(box) && !box.contains(chosen))
+                        return BoltStep.WAIT;
+                }
+            }
+            for(int i=0;i<n.getChildCount();i++){
+                AccessibilityNodeInfo child=n.getChild(i);
+                if(child!=null)nodes.addLast(child);
+            }
+        }
+        if(scanned>MAX_SCAN || unsafe || routeScreen) return BoltStep.BLOCKED;
+        // Require the explicit label AND independent evidence of Bolt home.
+        if(chosen==null || !(heading || (hasRides && (food || plan || send))))
+            return BoltStep.WAIT;
+        return gestureTapBolt(root,chosen.exactCenterX(),chosen.exactCenterY(),
+            "Рушаймо");
     }
 
     /** Physical tap in the verified rides tile; don't tap while it's loading. */
