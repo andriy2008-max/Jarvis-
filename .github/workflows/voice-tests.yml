@@ -59,6 +59,7 @@ on:
       - 'android/app/src/test/java/com/andriy/jarvis/JarvisShakePatternTest.java'
       - 'android/app/src/test/java/com/andriy/jarvis/JarvisShakeGateTest.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisWearPhoneSession.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisWearPhoneAssistant.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisWearMessageReceiver.java'
       - 'android/app/src/test/java/com/andriy/jarvis/JarvisWearProtocolTest.java'
       - 'android/app/src/test/java/com/andriy/jarvis/JarvisPhoneModeTest.java'
