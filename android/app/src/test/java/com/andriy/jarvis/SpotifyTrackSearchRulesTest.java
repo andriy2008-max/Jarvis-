@@ -7,6 +7,24 @@ public final class SpotifyTrackSearchRulesTest {
 
     public static void main(String[] args) {
         ok(SpotifyTrackSearchRules.searchTab("Пошук"),"Ukrainian Search tab");
+        // Spotify's nav button can be a Compose label without ACTION_CLICK.
+        // Fallback may tap only a real visible search label near the bottom.
+        ok(SpotifyTrackSearchRules.bottomSearchTabRegion(265,1450,95,48,
+            0,0,684,1536),"bottom search label");
+        ok(!SpotifyTrackSearchRules.bottomSearchTabRegion(265,450,95,48,
+            0,0,684,1536),"do not tap a search word in content");
+        ok(!SpotifyTrackSearchRules.bottomSearchTabRegion(265,1450,684,1536,
+            0,0,684,1536),"do not tap Spotify entire window");
+        ok(SpotifyTrackSearchRules.queryHeaderRegion(280,145,245,62,
+            0,0,684,1536),"verify deep-link upper query");
+        ok(!SpotifyTrackSearchRules.queryHeaderRegion(280,470,245,62,
+            0,0,684,1536),"a song-result title is not a search query");
+        ok(!SpotifyTrackSearchRules.queryHeaderRegion(280,1420,245,62,
+            0,0,684,1536),"not the bottom mini-player");
+        ok(SpotifyTrackSearchRules.exactSong("морозы","Морозы"),
+            "user's reported Russian song must be a valid exact title");
+        ok(!SpotifyTrackSearchRules.exactSong("морозы","Мороз"),
+            "do not guess a different title");
         ok(SpotifyTrackSearchRules.searchTab("Search"),"English Search tab");
         ok(!SpotifyTrackSearchRules.searchTab("Моя бібліотека"),"not library");
         ok(SpotifyTrackSearchRules.searchField("Що хочеш послухати?"),"search input");
