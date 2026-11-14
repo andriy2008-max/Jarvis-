@@ -193,22 +193,16 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if(visited>MAX_SCAN) {
             cb.onComplete(false,"Екран надто складний для безпечного натискання."); return;
         }
-        // Hide the floating Jarvis orb before hit testing. Wait until WindowManager
-        // applies NOT_TOUCHABLE, verify app identity once more, then tap exactly once.
-        // The floating Jarvis face is completely hidden while a calibrated
-        // tap is dispatched. Moving the overlay first is unnecessary for Bolt
-        // and previously allowed a WindowManager exception to abort COORD_RIDES
-        // without ever sending the gesture or its callback.
+        // Hide Jarvis's floating orb before this explicitly approved macro
+        // tap, and reject the gesture if the WindowManager cannot hide it.
         final Runnable restore;
         try {
-            if(!bolt)FloatingJarvisService.avoidControl(
-                new Rect(x-24,y-24,x+24,y+24));
+            FloatingJarvisService.avoidControl(new Rect(x-24,y-24,x+24,y+24));
             restore=FloatingJarvisService.hideForGesture();
         }catch(RuntimeException overlayFailure) {
-            android.util.Log.w("JARVIS_COORDINATES",
-                "Cannot prepare hidden overlay for "+packageName,overlayFailure);
-            cb.finished(false,"Не вдалося підготувати екран до натискання (OVERLAY). "+
-                "Вимкни плаваюче обличчя Джарвіса й повтори команду.");
+            android.util.Log.w("JARVIS_MACRO_TAP",
+                "Cannot hide overlay for macro tap",overlayFailure);
+            cb.onComplete(false,"Не вдалося приховати обличчя Джарвіса.");
             return;
         }
         final java.util.concurrent.atomic.AtomicBoolean completed=
@@ -801,8 +795,20 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             cb.finished(false,"Невідповідна орієнтація або координати екрана.");
             return;
         }
-        FloatingJarvisService.avoidControl(new Rect(x-24,y-24,x+24,y+24));
-        final Runnable restore=FloatingJarvisService.hideForGesture();
+        // Bolt needs no overlay relocation: it is hidden during the touch.
+        // Relocating before hiding could throw and abort COORD_RIDES before
+        // dispatchGesture. Never tap if hiding failed.
+        final Runnable restore;
+        try {
+            if(!bolt)FloatingJarvisService.avoidControl(
+                new Rect(x-24,y-24,x+24,y+24));
+            restore=FloatingJarvisService.hideForGesture();
+        }catch(RuntimeException overlayFailure) {
+            android.util.Log.w("JARVIS_COORDINATES",
+                "Cannot hide overlay for calibrated gesture",overlayFailure);
+            cb.finished(false,"Не вдалося приховати плаваюче обличчя Джарвіса (OVERLAY).");
+            return;
+        }
         final java.util.concurrent.atomic.AtomicBoolean once=
             new java.util.concurrent.atomic.AtomicBoolean(false);
         final Completion finishTap=(ok,detail)->{
