@@ -68,8 +68,19 @@ public final class FloatingJarvisService extends Service {
     private final Runnable overlayLayoutTick = new Runnable() {
         @Override public void run() {
             if (closing || face == null) return;
-            refreshOverlayLayout();
-            ui.postDelayed(this,250L);
+            try {
+                refreshOverlayLayout();
+            } catch(RuntimeException failure) {
+                // The window can disappear when Android switches to Spotify
+                // or invalidates an overlay. Never crash the Jarvis process.
+                android.util.Log.w("JARVIS_FLOATING",
+                    "Overlay layout update was rejected",failure);
+                if (failure instanceof SecurityException) {
+                    stopSelf();
+                    return;
+                }
+            }
+            if(!closing)ui.postDelayed(this,250L);
         }
     };
 
@@ -150,7 +161,14 @@ public final class FloatingJarvisService extends Service {
         faceParams.x=right ? rightLimit() : leftLimit();
         faceParams.y=JarvisOrbPlacement.clamp(centerY-diameter/2,topLimit(),bottomLimit());
         try { windows.updateViewLayout(face,faceParams); }
-        catch (IllegalArgumentException ignored) { }
+        catch (IllegalArgumentException ignored) {
+            // Window was already removed; a stale frame is not a process crash.
+        }
+        catch (SecurityException denied) {
+            android.util.Log.w("JARVIS_FLOATING",
+                "Overlay permission lost while switching external apps",denied);
+            stopSelf();
+        }
     }
 
     private final Handler ui = new Handler(Looper.getMainLooper());
