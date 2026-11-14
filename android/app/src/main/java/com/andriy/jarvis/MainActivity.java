@@ -1873,7 +1873,20 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     case 6: processCommand("покажи нотатки"); break;
                     case 7: processCommand("новий діалог"); break;
                     case 8: processCommand("що ти вмієш"); break;
-                    case 9: processCommand("стан підключень"); break;
+                    case 9:
+                        if (watchPhoneLink == null) {
+                            setStatus("Немає з'єднання з телефоном.");
+                            break;
+                        }
+                        watchPhoneLink.assistant("стан підключень",(ok,detail) -> {
+                            if (isFinishing() || isDestroyed()) return;
+                            AlertDialog statusDialog = new AlertDialog.Builder(this)
+                                .setTitle("Підключення на телефоні")
+                                .setMessage(detail)
+                                .setPositiveButton("Закрити",null).create();
+                            showDialogWithoutWake(statusDialog);
+                        });
+                        break;
                     default: break;
                 }
             })
