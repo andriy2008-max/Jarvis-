@@ -1838,7 +1838,18 @@ public final class MainActivity extends Activity implements RecognitionListener 
                             : "Голосові відповіді вимкнено.");
                         break;
                     case 2: showSpeechPauseSettings(); break;
-                    case 3: showAiSettings(); break;
+                    case 3: {
+                        AlertDialog info = new AlertDialog.Builder(this)
+                            .setTitle("ШІ та API працюють на телефоні")
+                            .setMessage("Налаштуй «ШІ — підключення» один раз у Джарвісі " +
+                                "на телефоні. На годиннику не потрібні ні OpenAI API-ключ, " +
+                                "ні код доступу Cloudflare. Голосові запити, Telegram, " +
+                                "Spotify та інші підтримувані команди передаються " +
+                                "на телефон через Wear OS.")
+                            .setPositiveButton("Зрозуміло", null).create();
+                        showDialogWithoutWake(info);
+                        break;
+                    }
                     case 4: {
                         boolean active = watchPhoneLink != null && watchPhoneLink.active();
                         AlertDialog linkInfo = new AlertDialog.Builder(this)
@@ -1852,7 +1863,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     }
                     case 5: showWatchTextInput(); break;
                     case 6: processCommand("покажи нотатки"); break;
-                    case 7: clearAiConversation(); break;
+                    case 7: processCommand("новий діалог"); break;
                     case 8: processCommand("що ти вмієш"); break;
                     default: break;
                 }
@@ -3570,6 +3581,28 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private void askAiDetailed(String question, String mode, Uri chosenFile) {
+        if (isWatchDevice) {
+            if (watchPhoneLink == null) {
+                setStatus("Телефон не підключений. ШІ налаштовується на телефоні.");
+                return;
+            }
+            if (chosenFile != null || "image".equals(mode)) {
+                setStatus("Файли й зображення для ШІ обирай на телефоні.");
+                return;
+            }
+            processing = true;
+            face.setState("thinking");
+            setStatus("Телефон обробляє запит через ШІ...");
+            watchPhoneLink.assistant(question,(ok,detail) -> {
+                processing = false;
+                if (isFinishing() || isDestroyed()) return;
+                appendDialogue("Джарвіс",detail);
+                setStatus(detail);
+                if (voiceEnabled) speakReply(detail);
+                else face.setState("idle");
+            });
+            return;
+        }
         if (aiChatClient == null || !aiChatClient.isConfigured()) {
             appendDialogue("Джарвіс", "Спочатку підключи особистий ШІ-сервер.");
             showAiSettings();
