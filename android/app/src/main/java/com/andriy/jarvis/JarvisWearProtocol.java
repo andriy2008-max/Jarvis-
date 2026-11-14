@@ -15,6 +15,8 @@ public final class JarvisWearProtocol {
     public static final String TAXI = "taxi";
     /** General voice request evaluated on the phone, with no secrets on Wear OS. */
     public static final String ASSISTANT = "assistant";
+    /** Ephemeral user-entered lock-screen PIN (only when root unlock opted in). */
+    public static final String UNLOCK = "unlock";
     public static final String SPOTIFY = "spotify";
     public static final String CANCEL_SPOTIFY = "cancel_spotify";
     public static final int SPOTIFY_ACK_TIMEOUT_MS = 145000;
@@ -38,7 +40,7 @@ public final class JarvisWearProtocol {
 
     public static boolean validAction(String action) {
         return SYNC.equals(action) || ENTER.equals(action) || EXIT.equals(action) || COMMAND.equals(action) ||
-            TAXI.equals(action) || ASSISTANT.equals(action) ||
+            TAXI.equals(action) || ASSISTANT.equals(action) || UNLOCK.equals(action) ||
             SPOTIFY.equals(action) || CANCEL_SPOTIFY.equals(action);
     }
 
