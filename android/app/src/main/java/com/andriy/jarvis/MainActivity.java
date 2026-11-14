@@ -3800,10 +3800,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 PackageManager.PERMISSION_GRANTED &&
              (nm==null || nm.areNotificationsEnabled()));
         String info="Для будильників із Galaxy Watch7 Джарвіс використовує "+
-            "власний планувальник на Pixel. Це не Google Годинник.\\n\\n"+
+            "власний планувальник на Pixel. Це не Google Годинник.\n\n"+
             "Точні будильники: "+(exact?"✅ дозволено":"❌ немає дозволу")+
-            "\\nСповіщення: "+(notifications?"✅ дозволено":"❌ немає дозволу")+
-            "\\n\\nПісля надання дозволів повтори команду з годинника.";
+            "\nСповіщення: "+(notifications?"✅ дозволено":"❌ немає дозволу")+
+            "\n\nПісля надання дозволів повтори команду з годинника.";
         new AlertDialog.Builder(this)
             .setTitle("⏰ Будильники з Watch7")
             .setMessage(info)
