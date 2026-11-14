@@ -2276,7 +2276,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "🗣 Розпізнавання: " + JarvisSpeechLanguages.label(
                 getPreferences(MODE_PRIVATE).getString(
                     JarvisSpeechLanguages.PREF,JarvisSpeechLanguages.AUTO)),
-            "🖼 Останнє зображення"
+            "🖼 Останнє зображення",
+            "⏰ Поставити будильник"
         };
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("Налаштування Джарвіса")
@@ -2348,6 +2349,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     }
                     case 13: showSpeechRecognitionLanguageSettings(); break;
                     case 14: processCommand("покажи останнє зображення"); break;
+                    case 15: showAlarmPicker(); break;
                     case 12:
                         shakeEnabled = !shakeEnabled;
                         getPreferences(MODE_PRIVATE).edit()
