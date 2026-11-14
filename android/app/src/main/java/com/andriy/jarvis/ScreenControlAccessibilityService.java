@@ -2231,7 +2231,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                    !lowered.contains("download") && !lowered.contains("завантаж") &&
                    !lowered.contains("скачать") && !lowered.contains("more") &&
                    !lowered.contains("menu") && !lowered.contains("ще") &&
-                   SpotifyUiLabels.unlabeledPlaylistPlayAt(
+                   SpotifyUiLabels.unlabelledPlaylistPlayCircle(
                        b.left,b.top,b.right,b.bottom,page.left,page.top,
                        page.right,page.bottom,density)) {
                     int size=Math.min(b.width(),b.height());
