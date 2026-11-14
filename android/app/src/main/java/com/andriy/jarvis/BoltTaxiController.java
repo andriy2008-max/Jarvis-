@@ -34,6 +34,10 @@ public final class BoltTaxiController {
     private boolean finished;
     private int ridesRetries;
     private int dropoffRetries;
+    // Accessibility nodes from Bolt can expire during a UI transition.
+    // Retry a few times *only* during safe home/route verification,
+    // without additional taps when the snapshot itself is invalid.
+    private int transientScreenFailures;
 
     private BoltTaxiController(Context context,Listener listener,String address,JarvisPhoneModeManager.Lease lease){
         this.context=context.getApplicationContext();
@@ -78,6 +82,7 @@ public final class BoltTaxiController {
     }
     private void move(Stage next,String info){
         stage=next;started=SystemClock.elapsedRealtime();
+        transientScreenFailures=0;
         listener.onProgress(info);
     }
     /** Recover from unexpected Bolt/Accessibility runtime failures without
@@ -88,11 +93,23 @@ public final class BoltTaxiController {
         try {
             poll();
         } catch (RuntimeException error) {
-            android.util.Log.e("JARVIS_TAXI",
-                "Bolt automation error at stage="+stage.name(),error);
+            android.util.Log.w("JARVIS_TAXI",
+                "Bolt Accessibility snapshot failed at stage="+stage.name()+
+                ", retry="+transientScreenFailures,error);
+            // Loading Bolt and switching to its rides screen can invalidate
+            // an AccessibilityNodeInfo while traversing the tree. A single
+            // exception is NOT proof the app failed to open. Re-acquire a fresh
+            // root on the next tick. Do not retry data entry or booking stages.
+            if ((stage==Stage.OPEN_APP || stage==Stage.VERIFY_RIDES) &&
+                ++transientScreenFailures<=4 &&
+                SystemClock.elapsedRealtime()-flowStarted<TOTAL_TIMEOUT_MS) {
+                HANDLER.postDelayed(tick,Math.max(850L,POLL_MS));
+                return;
+            }
             try {
-                finish(false,"Bolt повернув помилку під час кроку «"+stage.name()+
-                    "». Джарвіс припинив автоматизацію, поїздку не замовляв.");
+                finish(false,"Bolt не дозволив прочитати екран під час «"+stage.name()+
+                    "» після повторних спроб. Перевір дозвіл керування екраном "+
+                    "і чи Bolt відкритий. Поїздку не замовляв.");
             } catch (RuntimeException cleanupError) {
                 android.util.Log.e("JARVIS_TAXI","Taxi cleanup failed",cleanupError);
                 finished=true;
