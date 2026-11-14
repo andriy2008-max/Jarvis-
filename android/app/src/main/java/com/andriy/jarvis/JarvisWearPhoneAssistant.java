@@ -380,12 +380,18 @@ public final class JarvisWearPhoneAssistant {
             }
             if (list) {
                 if (array.length() == 0) return "На телефоні ще немає нотаток.";
-                StringBuilder result = new StringBuilder("Нотатки телефона: ");
-                for (int i=0;i<Math.min(array.length(),12);i++) {
-                    if (i>0) result.append("; ");
-                    result.append(i+1).append(". ").append(array.optString(i));
+                StringBuilder result = new StringBuilder("Мої нотатки (")
+                    .append(array.length()).append("):\n\n");
+                // The watch reader requests additional pages on demand, so
+                // notes no longer need to be truncated to the first 12.
+                for (int i=0;i<array.length();i++) {
+                    result.append(i+1).append(". ")
+                        .append(array.optString(i)).append("\n\n");
+                    if(result.length()>62000) {
+                        result.append("Інші нотатки доступні на телефоні.");
+                        break;
+                    }
                 }
-                if (array.length()>12) result.append("; та інші.");
                 return result.toString();
             }
             if (array.length()==0) return "На телефоні немає нотаток.";
