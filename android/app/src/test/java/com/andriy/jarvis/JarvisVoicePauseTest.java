@@ -34,14 +34,25 @@ public final class JarvisVoicePauseTest {
             "Corrected baseline must not begin a timer");
         check(pause.sawWords("Привіт ще", 11000L), "Replacement word arms");
         check(pause.expired(14000L, 2), "Replacement word deadline");
-        // A slow recognizer can keep the same partial while the user still speaks.
+        // Regression: in continuous PHONE mode, RMS above threshold can
+        // continue forever from fan noise, music, or an open car window.
+        // It must NOT extend two-second command dispatch after the last word.
         pause.reset("");
         pause.sawVoice(9000L);
         check(!pause.armed(), "Noise without recognized words cannot submit a command");
         pause.sawWords("відкрий", 10000L);
-        pause.sawVoice(11500L);
-        check(!pause.expired(13499L,2) && pause.expired(13500L,2),
-            "Wait two full seconds after speech, not after an old partial");
+        for (long ms = 10100L; ms <= 14000L; ms += 100L)
+            pause.sawVoice(ms);
+        check(!pause.expired(11999L, 2) && pause.expired(12000L, 2),
+            "High mic RMS must never keep phone mode listening indefinitely");
+        check(!pause.sawWords("ВІДКРИЙ!", 12050L),
+            "Identical partial must not move the timeout");
+        check(pause.expired(12050L, 2),
+            "Timer remains expired despite noisy mic and repeated partial");
+        check(pause.sawWords("відкрий ютуб", 12500L),
+            "New recognized word renews countdown");
+        check(!pause.expired(14499L, 2) && pause.expired(14500L, 2),
+            "New word has a fresh two-second interval");
         pause.reset("");
         check(!pause.expired(90000L,2), "Next command may wait indefinitely for first word");
         pause.sawWords("назад",90000L);
