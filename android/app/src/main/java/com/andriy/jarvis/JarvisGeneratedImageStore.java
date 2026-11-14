@@ -12,7 +12,7 @@ import java.io.OutputStream;
 import java.util.UUID;
 
 /**
- * Persists an AI-created PNG only after the user taps Save.
+ * Persists an AI-created PNG or JPEG only after the user taps Save.
  * Android 10+ MediaStore makes it visible in Gallery without storage permissions;
  * older devices use app-specific external Pictures storage.
  */
@@ -22,14 +22,19 @@ public final class JarvisGeneratedImageStore {
     public static String save(Context context, byte[] png) throws Exception {
         if (png == null || png.length < 8 || png.length > 9 * 1024 * 1024)
             throw new Exception("Невірний формат або розмір зображення.");
-        if (!(png[0] == (byte)137 && png[1] == 80 &&
-              png[2] == 78 && png[3] == 71))
-            throw new Exception("Очікувалося зображення у форматі PNG.");
-        String filename = "JARVIS-" + System.currentTimeMillis() + ".png";
+        boolean isPng = png[0] == (byte)137 && png[1] == 80 &&
+            png[2] == 78 && png[3] == 71;
+        boolean isJpeg = png[0] == (byte)0xFF &&
+            png[1] == (byte)0xD8 && png[2] == (byte)0xFF;
+        if (!isPng && !isJpeg)
+            throw new Exception("Очікувалося зображення PNG або JPEG.");
+        String mime = isPng ? "image/png" : "image/jpeg";
+        String filename = "JARVIS-" + System.currentTimeMillis() +
+            (isPng ? ".png" : ".jpg");
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ContentValues meta = new ContentValues();
             meta.put(MediaStore.Images.Media.DISPLAY_NAME, filename);
-            meta.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+            meta.put(MediaStore.Images.Media.MIME_TYPE, mime);
             meta.put(MediaStore.Images.Media.RELATIVE_PATH,
                 Environment.DIRECTORY_PICTURES + "/Jarvis");
             meta.put(MediaStore.Images.Media.IS_PENDING, 1);
