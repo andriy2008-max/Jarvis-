@@ -11,6 +11,12 @@ public final class JarvisWearProtocolTest {
         yes(JarvisWearProtocol.validAction("enter"),"enter");
         yes(JarvisWearProtocol.validAction("exit"),"exit");
         yes(JarvisWearProtocol.validAction("command"),"command");
+        yes(JarvisWearProtocol.validAction(JarvisWearProtocol.TAXI),
+            "watch taxi must be a local phone action, not conversational AI");
+        yes(JarvisWearProtocol.TAXI_ACK_TIMEOUT_MS > 45000,
+            "watch waits for Bolt UI outcome rather than only message delivery");
+        yes(JarvisWearProtocol.TAXI_ACK_TIMEOUT_MS < JarvisWearProtocol.SPOTIFY_ACK_TIMEOUT_MS,
+            "taxi round trip is bounded");
         yes(JarvisWearProtocol.validAction("spotify"),"temporary spotify control");
         yes(JarvisWearProtocol.validAction("cancel_spotify"),"watch can cancel Spotify");
         yes(JarvisWearProtocol.SPOTIFY_ACK_TIMEOUT_MS > 6*20000,
