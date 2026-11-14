@@ -30,6 +30,16 @@ public final class SpotifyMusicCommandsTest {
         is("Увімкни пісню Весна прийде",SpotifyMusicCommands.Kind.TRACK);
         is("Увімкни пісню Shape of You",SpotifyMusicCommands.Kind.TRACK);
         is("Умімкни пісню Shape of You",SpotifyMusicCommands.Kind.TRACK);
+        // Real Pixel STT screenshot: recognized «увімкнм пісню я хочу».
+        // This MUST run Spotify, not the conversational AI model.
+        is("увімкнм пісню я хочу",SpotifyMusicCommands.Kind.TRACK);
+        is("увимкни пісню Морозы",SpotifyMusicCommands.Kind.TRACK);
+        is("увімкні пісню Shape of You",SpotifyMusicCommands.Kind.TRACK);
+        if (!"я хочу".equals(SpotifyMusicCommands.namedTrack("увімкнм пісню я хочу")) ||
+            !"морозы".equals(SpotifyMusicCommands.namedTrack("увимкни пісню Морозы")))
+            throw new AssertionError("Screenshot transcription must preserve actual song title");
+        is("увімкнм плейлист Рок",SpotifyMusicCommands.Kind.PLAYLIST);
+        is("увімкнм музику",SpotifyMusicCommands.Kind.OPEN);
         is("Увімкни пісню Billie Jean",SpotifyMusicCommands.Kind.TRACK);
         is("Увімкни пісню Bohemian Rhapsody",SpotifyMusicCommands.Kind.TRACK);
         is("Увімкни пісню Метель",SpotifyMusicCommands.Kind.TRACK);
@@ -52,6 +62,10 @@ public final class SpotifyMusicCommandsTest {
             throw new AssertionError("Preserve Ukrainian and Russian dictated titles");
         is("увімкни пісню",null);
         is("виключи пісню Океан",null);
+        is("вимкни пісню Морозы",null);
+        is("виключи музику",null);
+        is("увімкнм ліхтарик",null);
+        is("увімкні телефон",null);
         if(!"океан".equals(SpotifyMusicCommands.namedTrack("увімкни пісню Океан")))
             throw new AssertionError("saved song alias parser");
         is("включи плейлист Рок без перемішування",SpotifyMusicCommands.Kind.PLAYLIST);
