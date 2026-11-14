@@ -9,7 +9,7 @@ public final class BoltUiLabelsTest {
         // New taxi path waits for THIS exact visible CTA, never a timer.
         yes(BoltUiLabels.letsGo("Рушаймо!"));
         yes(BoltUiLabels.letsGo("Поїздки • Рушаймо!"));
-        yes(BoltUiLabels.letsGo("Поїздки\\nРушаймо!"));
+        yes(BoltUiLabels.letsGo("Поїздки\nРушаймо!"));
         yes(BoltUiLabels.letsGo("Let's go!"));
         yes(!BoltUiLabels.letsGo("Поїздки"));
         yes(!BoltUiLabels.letsGo("Рушаймо до оплати"));
