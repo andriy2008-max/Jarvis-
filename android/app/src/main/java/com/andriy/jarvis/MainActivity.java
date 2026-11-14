@@ -443,6 +443,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
     protected void onResume() {
         super.onResume();
         foreground = true;
+        // Phone companion survives closing this Activity; the microphone
+        // stays off and Watch7 commands arrive through WearableListenerService.
+        if (!isWatchDevice) JarvisCompanionService.startIfEnabled(this);
         JarvisLiveTranscript.subscribe(transcriptListener);
         JarvisLiveTranscript.setCorrectionHandler(TRANSCRIPT_OWNER, this::undoHeardWord);
         autoWakePausedForErrors = false;
@@ -739,6 +742,28 @@ public final class MainActivity extends Activity implements RecognitionListener 
             LinearLayout.LayoutParams micOptionParams = new LinearLayout.LayoutParams(-1,-2);
             micOptionParams.topMargin = dp(6);
             hero.addView(launchMicToggle,micOptionParams);
+
+            CheckBox backgroundToggle = new CheckBox(this);
+            backgroundToggle.setText("📱 Джарвіс завжди активний для команд із годинника (у фоні)");
+            backgroundToggle.setTextColor(MUTED);
+            backgroundToggle.setTextSize(TypedValue.COMPLEX_UNIT_SP,isCompact ? 11 : 12);
+            backgroundToggle.setButtonTintList(ColorStateList.valueOf(CYAN));
+            backgroundToggle.setChecked(JarvisCompanionService.enabled(this));
+            backgroundToggle.setOnCheckedChangeListener((control,enabled) -> {
+                boolean accepted = JarvisCompanionService.setEnabled(this,enabled);
+                setStatus(enabled
+                    ? accepted ? "Фоновий Джарвіс увімкнено. Залишається після закриття екрана."
+                        : "Android не дозволив запустити фон. Перевір обмеження батареї."
+                    : "Фонову службу вимкнено. Запити Wear OS ще може приймати системний слухач.");
+            });
+            LinearLayout.LayoutParams bgParams = new LinearLayout.LayoutParams(-1,-2);
+            bgParams.topMargin = dp(6);
+            hero.addView(backgroundToggle,bgParams);
+            TextView backgroundInfo = makeText(
+                "Постійне сповіщення, без постійного запису мікрофона. " +
+                "Android може обмежити автозапуск після примусової зупинки.",
+                11,MUTED,Gravity.START,false);
+            hero.addView(backgroundInfo);
         }
 
         wakeToggle = makeWakeToggle();
