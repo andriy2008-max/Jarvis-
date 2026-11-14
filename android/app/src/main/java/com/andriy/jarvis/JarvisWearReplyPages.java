@@ -9,7 +9,7 @@ import java.util.Map;
  * Every page is requested by the same authenticated Wear node that created it.
  */
 public final class JarvisWearReplyPages {
-    public static final int PAGE_CHARS = 850; // fits 4096-byte Wear JSON even with emoji
+    public static final int PAGE_CHARS = 600; // conservative UTF-8/JSON envelope under 4096 bytes
     private static final int MAX_CHARS = 64000;
     private static final int MAX_DOCUMENTS = 8;
     private static final long TTL_MS = 15L * 60L * 1000L;
