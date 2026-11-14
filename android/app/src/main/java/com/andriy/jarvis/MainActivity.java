@@ -166,7 +166,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
     // SpeechRecognizer session, NOT merely the user's capture intention.
     private boolean watchMicReady;
     private Runnable watchMicReadyWatchdog;
+    private Runnable watchMicResultWatchdog;
     private static final long WATCH_MIC_READY_TIMEOUT_MS = 6500L;
+    private static final long WATCH_MIC_RESULT_TIMEOUT_MS = 3500L;
 
     private void stopWatchMicIndicator() {
         if(!isWatchDevice)return;
@@ -174,6 +176,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if(watchMicReadyWatchdog!=null)
             wakeHandler.removeCallbacks(watchMicReadyWatchdog);
         watchMicReadyWatchdog=null;
+        if(watchMicResultWatchdog!=null)
+            wakeHandler.removeCallbacks(watchMicResultWatchdog);
+        watchMicResultWatchdog=null;
     }
 
     private void confirmWatchMicReady() {
@@ -188,7 +193,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
      * recognizer and retry a bounded number of times. Old listeners are
      * discarded by ownedRecognizerListener's instance identity check. */
     private void armWatchMicReadyWatchdog(SpeechRecognizer started) {
-        if(!isWatchDevice || !manualCapture || started==null)return;
+        if(!isWatchDevice || !manualCapture || started==null || watchMicReady)return;
         stopWatchMicIndicator();
         watchMicReadyWatchdog=()->{
             watchMicReadyWatchdog=null;
@@ -256,6 +261,51 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private TextView watchReadingText;
     private JarvisWearPhoneLink.Document watchReadingPage;
     private String watchReadingTitle = "Відповідь Джарвіса";
+    /** Some Wear recognition services emit onEndOfSpeech but never deliver
+     * onResults/onError. Recover the partial transcript and restart rather
+     * than remain forever in manualCapture with no live microphone. */
+    private void armWatchMicResultWatchdog(SpeechRecognizer ended) {
+        if(!isWatchDevice || !manualCapture || ended==null)return;
+        if(watchMicResultWatchdog!=null)
+            wakeHandler.removeCallbacks(watchMicResultWatchdog);
+        watchMicResultWatchdog=()->{
+            watchMicResultWatchdog=null;
+            if(!foreground || !manualCapture || !recognizerSessionActive ||
+               recognizer!=ended)return;
+            android.util.Log.w("JARVIS_WATCH_MIC",
+                "SpeechRecognizer ended without final result");
+            recognizer=null;
+            recognizerSessionActive=false;
+            listening=false;
+            autoWakeListening=false;
+            try{ended.cancel();ended.destroy();}catch(RuntimeException ignored){}
+            if(!manualHypothesis.isEmpty()){
+                if(manualTranscript.length()>0)manualTranscript.append(' ');
+                manualTranscript.append(manualHypothesis);
+                manualHypothesis="";
+                observedManualWords(manualTranscript.toString());
+            }
+            if(manualStopRequested){
+                finishManualCapture();
+                return;
+            }
+            if(manualCycleFailures++>=2){
+                stopPhoneListening();
+                if(manualTranscript.length()>0)finishManualCapture();
+                else{
+                    manualCapture=false;
+                    resetListening("Розпізнавання Watch7 не відповідає. "+
+                        "Перевір службу голосового вводу.");
+                }
+                return;
+            }
+            if(face!=null)face.setState("thinking");
+            setStatus("Android не надіслав текст. Перепідключаю мікрофон...");
+            scheduleManualRestart(550L);
+        };
+        wakeHandler.postDelayed(watchMicResultWatchdog,WATCH_MIC_RESULT_TIMEOUT_MS);
+    }
+
     private boolean phoneListening;
     // Watch phone mode must re-arm automatically after EVERY phone reply.
     // It is independent of launching/closing the main Activity on Pixel.
@@ -3459,6 +3509,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         stopWatchMicIndicator();
         listening = false;
         if (isWatchDevice && face!=null)face.setState("thinking");
+        if(isWatchDevice && manualCapture)
+            armWatchMicResultWatchdog(recognizer);
         if (manualCapture) {
             // SpeechRecognizer stops automatically on pauses. Keep the *user's*
             // manual recording active and restart once results arrive.
