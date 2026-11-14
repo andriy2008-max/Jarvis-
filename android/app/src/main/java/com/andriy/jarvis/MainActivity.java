@@ -165,6 +165,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private boolean isCompact = false;
     private boolean isWatchDevice = false;
     private static final String SHAKE_PREF = "shake_to_wake_enabled";
+    private static final String WATCH_LAUNCH_GESTURE_PREF = "watch_launch_starts_microphone";
+    private boolean watchLauncherVoicePending;
+    private long lastWatchWristGestureMs;
     private SensorManager shakeSensors;
     private Sensor accelerometer;
     private final JarvisShakePattern shakePattern = new JarvisShakePattern();
@@ -287,6 +290,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
         getWindow().setNavigationBarColor(BG);
         if (state != null) pendingTimerSeconds = state.getInt("pending_timer_seconds", 0);
         isWatchDevice = getPackageManager().hasSystemFeature(PackageManager.FEATURE_WATCH);
+        // Samsung "Knock knock → Open an app → Jarvis" arrives as a normal
+        // launcher intent. There is no public Samsung double-pinch callback.
+        watchLauncherVoicePending = isWatchLauncherIntent(getIntent());
         pendingLauncherMicrophone = state == null && isPhoneLauncherIntent(getIntent());
         if (isWatchDevice) watchPhoneLink = new JarvisWearPhoneLink(this);
         isCompact = getResources().getConfiguration().smallestScreenWidthDp < 360;
@@ -388,10 +394,41 @@ public final class MainActivity extends Activity implements RecognitionListener 
         super.onNewIntent(intent);
         setIntent(intent);
         acceptImageIntent(intent);
+        if (isWatchLauncherIntent(intent)) {
+            watchLauncherVoicePending = true;
+            if (foreground) scheduleWatchLauncherVoice();
+        }
         if (isPhoneLauncherIntent(intent)) {
             pendingLauncherMicrophone = true;
             if (foreground) scheduleLauncherMicrophone();
         }
+    }
+
+    private boolean isWatchLauncherIntent(Intent intent) {
+        if (!isWatchDevice || intent == null ||
+            !Intent.ACTION_MAIN.equals(intent.getAction())) return false;
+        java.util.Set<String> categories = intent.getCategories();
+        return categories == null || categories.contains(Intent.CATEGORY_LAUNCHER);
+    }
+
+    /** Listen on a user-configured Samsung "Knock knock" launch.
+     * No sensors or privileged Samsung gesture service are required.
+     * Ordinary resumes after TTS/settings do NOT open a second microphone. */
+    private void scheduleWatchLauncherVoice() {
+        if (!isWatchDevice || !foreground || !watchLauncherVoicePending) return;
+        watchLauncherVoicePending = false;
+        if (!getPreferences(MODE_PRIVATE).getBoolean(WATCH_LAUNCH_GESTURE_PREF,false))
+            return;
+        wakeHandler.postDelayed(() -> {
+            if (!foreground || isFinishing() || isDestroyed() ||
+                visibleDialogs != 0 || manualCapture || processing || speaking ||
+                (watchPhoneLink != null && watchPhoneLink.busy())) return;
+            if (JarvisPhoneMode.isActive()) {
+                ensureWatchPhoneListening();
+            } else {
+                startManualListening();
+            }
+        },550L);
     }
 
     private boolean isPhoneLauncherIntent(Intent intent) {
@@ -463,6 +500,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         foreground = true;
         if (isWatchDevice && JarvisPhoneMode.isActive())
             ensureWatchPhoneListening();
+        if (isWatchDevice) scheduleWatchLauncherVoice();
         // Phone companion survives closing this Activity; the microphone
         // stays off and Watch7 commands arrive through WearableListenerService.
         if (!isWatchDevice) JarvisCompanionService.startIfEnabled(this);
@@ -1971,7 +2009,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "🗒 Показати нотатки",
             "🧹 Новий діалог",
             "❔ Що ти вмієш?",
-            "🔌 Стан підключень телефона"
+            "🔌 Стан підключень телефона",
+            "✊ Knock knock → мікрофон: " +
+                (getPreferences(MODE_PRIVATE)
+                    .getBoolean(WATCH_LAUNCH_GESTURE_PREF,false) ? "увімкнено" : "вимкнено"),
+            "⌚ Струс зап'ястя → мікрофон: " +
+                (shakeEnabled ? "увімкнено" : "вимкнено")
         };
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("Налаштування Джарвіса")
@@ -2026,6 +2069,26 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     case 6: processCommand("покажи нотатки"); break;
                     case 7: processCommand("новий діалог"); break;
                     case 8: processCommand("що ти вмієш"); break;
+                    case 10: {
+                        boolean enabled = !getPreferences(MODE_PRIVATE)
+                            .getBoolean(WATCH_LAUNCH_GESTURE_PREF,false);
+                        getPreferences(MODE_PRIVATE).edit()
+                            .putBoolean(WATCH_LAUNCH_GESTURE_PREF,enabled).apply();
+                        setStatus(enabled
+                            ? "На годиннику признач «Knock knock» → «Відкрити програму» → «Джарвіс». При запуску почну слухати."
+                            : "Автоматичний мікрофон при запуску вимкнено.");
+                        break;
+                    }
+                    case 11:
+                        shakeEnabled = !shakeEnabled;
+                        getPreferences(MODE_PRIVATE).edit()
+                            .putBoolean(SHAKE_PREF,shakeEnabled).apply();
+                        if (shakeEnabled && accelerometer != null) registerShakeSensor();
+                        else unregisterShakeSensor();
+                        setStatus(shakeEnabled
+                            ? "Струс зап'ястя в Джарвісі: перший — слухати, другий — надіслати. Можливі випадкові спрацювання."
+                            : "Керування струсом зап'ястя вимкнено.");
+                        break;
                     case 9:
                         if (watchPhoneLink == null) {
                             setStatus("Немає з'єднання з телефоном.");
@@ -2325,9 +2388,19 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private void onShakeDetected() {
-        if (isWatchDevice && foreground && shakeEnabled && JarvisPhoneMode.isActive() &&
-            visibleDialogs == 0) {
-            startPhoneListening();
+        if (isWatchDevice) {
+            if (!foreground || !shakeEnabled || visibleDialogs != 0) return;
+            long now = SystemClock.elapsedRealtime();
+            // Avoid motion-trigger storms, especially after the wrist goes
+            // back into its resting position; never generate a phone command.
+            if (now - lastWatchWristGestureMs < 1800L) return;
+            lastWatchWristGestureMs = now;
+            if (manualCapture) {
+                toggleListening(); // Second gesture submits the phrase.
+            } else if (!processing && !aiBusy && !speaking &&
+                (watchPhoneLink == null || !watchPhoneLink.busy())) {
+                toggleListening(); // First gesture activates watch mic.
+            }
             return;
         }
         if (!foreground || !shakeEnabled || accelerometer == null ||
