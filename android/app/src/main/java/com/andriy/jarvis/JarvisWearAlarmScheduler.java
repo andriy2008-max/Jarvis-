@@ -63,6 +63,17 @@ public final class JarvisWearAlarmScheduler {
             c.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
                 ==PackageManager.PERMISSION_GRANTED;
     }
+    /** Read-only diagnostics shown to the owner on Watch7. */
+    public static String permissionStatus(Context c) {
+        boolean exact=TimerScheduler.canScheduleExact(c);
+        boolean notifications=notificationsAllowed(c);
+        return "Будильники із Watch7: точні будильники "+
+            (exact?"дозволено":"НЕ ДОЗВОЛЕНО")+
+            "; сповіщення "+(notifications?"дозволено":"НЕ ДОЗВОЛЕНО")+
+            (exact && notifications?".":". На Pixel відкрий у Джарвісі "+
+                "«Дозволи будильників Watch7».");
+    }
+
     private static String fmt(long time) {
         return DateFormat.getDateTimeInstance(DateFormat.MEDIUM,DateFormat.SHORT,
             new Locale("uk","UA")).format(new Date(time));
