@@ -875,6 +875,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
             new LinearLayout.LayoutParams(-1,dp(46));
         financeApiParams.topMargin=dp(7);
         content.addView(financeApiTab,financeApiParams);
+        if(!isWatchDevice) {
+            Button alarmPermissions=secondaryButton("⏰ Дозволи будильників Watch7",
+                this::showWatchAlarmPermissions);
+            LinearLayout.LayoutParams alarmParams=
+                new LinearLayout.LayoutParams(-1,dp(46));
+            alarmParams.topMargin=dp(7);
+            content.addView(alarmPermissions,alarmParams);
+        }
 
         LinearLayout hero = new LinearLayout(this);
         hero.setOrientation(LinearLayout.VERTICAL);
@@ -3778,6 +3786,50 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private String openUrl(String url, String label) {
         return launchIntent(new Intent(Intent.ACTION_VIEW, Uri.parse(url)), label);
+    }
+
+    /** The phone's Clock app works without this permission; Jarvis's
+     * background alarms requested by Watch7 cannot. Explain the difference. */
+    private void showWatchAlarmPermissions() {
+        if(isWatchDevice)return;
+        boolean exact=TimerScheduler.canScheduleExact(this);
+        android.app.NotificationManager nm=(android.app.NotificationManager)
+            getSystemService(NOTIFICATION_SERVICE);
+        boolean notifications=Build.VERSION.SDK_INT<33 ||
+            (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==
+                PackageManager.PERMISSION_GRANTED &&
+             (nm==null || nm.areNotificationsEnabled()));
+        String info="Для будильників із Galaxy Watch7 Джарвіс використовує "+
+            "власний планувальник на Pixel. Це не Google Годинник.\\n\\n"+
+            "Точні будильники: "+(exact?"✅ дозволено":"❌ немає дозволу")+
+            "\\nСповіщення: "+(notifications?"✅ дозволено":"❌ немає дозволу")+
+            "\\n\\nПісля надання дозволів повтори команду з годинника.";
+        new AlertDialog.Builder(this)
+            .setTitle("⏰ Будильники з Watch7")
+            .setMessage(info)
+            .setPositiveButton("Дозвіл будильників",(dialog,which)->{
+                try {
+                    Intent intent=new Intent(
+                        Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                        Uri.parse("package:"+getPackageName()));
+                    startActivity(intent);
+                }catch(RuntimeException e) {
+                    startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:"+getPackageName())));
+                }
+            })
+            .setNeutralButton("Сповіщення",(dialog,which)->{
+                try {
+                    Intent settings=new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+                    settings.putExtra(Settings.EXTRA_APP_PACKAGE,getPackageName());
+                    startActivity(settings);
+                }catch(RuntimeException e) {
+                    startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:"+getPackageName())));
+                }
+            })
+            .setNegativeButton("Закрити",null)
+            .show();
     }
 
     /** Pixel schedules the alarm; Wear never creates a local watch alarm. */
