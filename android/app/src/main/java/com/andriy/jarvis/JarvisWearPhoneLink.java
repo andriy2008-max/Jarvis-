@@ -101,6 +101,22 @@ public final class JarvisWearPhoneLink {
         send(JarvisWearProtocol.ASSISTANT,voice,callback);
     }
 
+    /** PIN entered for this single command; never persisted or sent to AI. */
+    public void unlockPin(String challenge,String pin,Callback callback) {
+        if (challenge == null || !challenge.matches("[0-9a-f]{32}") ||
+            pin == null || !pin.matches("[0-9]{4,12}")) {
+            callback.finished(false,"Введи числовий PIN Pixel (4–12 цифр).");
+            return;
+        }
+        android.app.KeyguardManager watchLock =
+            context.getSystemService(android.app.KeyguardManager.class);
+        if (watchLock == null || !watchLock.isDeviceSecure() || watchLock.isDeviceLocked()) {
+            callback.finished(false,"Спочатку ввімкни захист PIN на годиннику й розблокуй Watch7.");
+            return;
+        }
+        send(JarvisWearProtocol.UNLOCK,challenge + ":" + pin,callback);
+    }
+
     public void spotify(String voice, Callback callback) {
         if (!JarvisWearProtocol.validCommand(voice) ||
             SpotifyMusicCommands.parse(voice) == null) {
