@@ -2021,7 +2021,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
         watchReadingPage=page;
         watchReadingDialog.setTitle(watchReadingTitle+
             (page.pageCount>1 ? "  "+(page.pageIndex+1)+"/"+page.pageCount : ""));
-        if(watchReadingText!=null)watchReadingText.setText(page.text);
+        if(watchReadingText!=null) {
+            watchReadingText.setText(page.text);
+            android.text.util.Linkify.addLinks(watchReadingText,
+                android.text.util.Linkify.WEB_URLS);
+            watchReadingText.setMovementMethod(
+                android.text.method.LinkMovementMethod.getInstance());
+        }
         if(watchReadingScroll!=null)watchReadingScroll.post(()->{
             if(watchReadingScroll!=null)watchReadingScroll.scrollTo(0,0);
         });
