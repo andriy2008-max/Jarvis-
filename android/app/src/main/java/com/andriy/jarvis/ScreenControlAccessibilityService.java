@@ -694,13 +694,35 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         return s!=null && s.sessionActive && s.boltWindowTrusted();
     }
 
-    private boolean boltWindowTrusted() {
+    private boolean trustedExternalApp(String packageName) {
         if(!JarvisPhoneScreenGuard.available(this)) return false;
         try {
-            if(currentBoltRoot()!=null) return true;
-        } catch(RuntimeException ignored) { /* Bolt may block the tree. */ }
-        return "ee.mtakso.client".equals(foregroundWindowPackage) &&
+            AccessibilityNodeInfo root=currentExternalRoot();
+            if(root!=null && root.getPackageName()!=null &&
+                packageName.contentEquals(root.getPackageName()))return true;
+        } catch(RuntimeException ignored) { /* App hides its view tree. */ }
+        // Window identity comes from Android AccessibilityEvent, not screen text.
+        return packageName.equals(foregroundWindowPackage) &&
             android.os.SystemClock.elapsedRealtime()-foregroundWindowAt<15000L;
+    }
+
+    private boolean boltWindowTrusted() {
+        return trustedExternalApp("ee.mtakso.client");
+    }
+
+    public static boolean spotifyCoordinateReady() {
+        ScreenControlAccessibilityService s=connected.get();
+        return s!=null && s.sessionActive &&
+            s.trustedExternalApp("com.spotify.music");
+    }
+
+    public static void spotifyTapCalibrated(int x,int y,Completion cb) {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null || !s.sessionActive || cb==null) {
+            if(cb!=null)cb.finished(false,"Служба керування екраном не активна.");
+            return;
+        }
+        s.tapCalibratedForApp("com.spotify.music",x,y,cb);
     }
 
     public static void boltTapCalibrated(int x,int y,Completion cb) {
@@ -709,14 +731,21 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             if(cb!=null)cb.finished(false,"Служба керування екраном не активна.");
             return;
         }
-        s.tapBoltCalibrated(x,y,cb);
+        s.tapCalibratedForApp("ee.mtakso.client",x,y,cb);
     }
 
-    private void tapBoltCalibrated(int x,int y,Completion cb) {
-        // Exact coordinates measured on this Pixel, never scaled heuristically.
-        if(!((x==333 && y==645) || (x==450 && y==520)) ||
-            !boltWindowTrusted()) {
-            cb.finished(false,"Bolt не підтверджено на передньому плані.");
+    /**
+     * Allow only the two owner-calibrated Bolt points and the explicitly
+     * requested Spotify Search point. Do not infer coordinates on new devices.
+     * Callback fires only after Android has completed or cancelled a gesture.
+     */
+    private void tapCalibratedForApp(String packageName,int x,int y,Completion cb) {
+        boolean bolt="ee.mtakso.client".equals(packageName);
+        boolean spotify="com.spotify.music".equals(packageName);
+        boolean allowed=bolt ? ((x==333 && y==645) || (x==450 && y==520)) :
+            (spotify && x==403 && y==2211);
+        if(!allowed || !sessionActive || !trustedExternalApp(packageName)) {
+            cb.finished(false,"Програма не підтверджена на передньому плані.");
             return;
         }
         android.graphics.Point size=new android.graphics.Point();
@@ -744,8 +773,8 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             cb.finished(ok,detail);
         };
         main.postDelayed(()->{
-            if(!sessionActive || !boltWindowTrusted()) {
-                finishTap.finished(false,"Bolt перестав бути активним до натискання.");
+            if(!sessionActive || !trustedExternalApp(packageName)) {
+                finishTap.finished(false,"Активна програма змінилася до натискання.");
                 return;
             }
             Path path=new Path();
@@ -769,6 +798,43 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                 finishTap.finished(false,"Не вдалося натиснути координати.");
             }
         },80L);
+    }
+
+    /**
+     * Coordinates open Spotify's keyboard, then Android's InputMethod bridge
+     * inserts the spoken title in the focused Spotify editor. Never touches
+     * passwords or editors belonging to another package.
+     */
+    public static SpotifyStep spotifyTypeViaInputMethod(String title) {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null || !s.sessionActive || !JarvisPhoneScreenGuard.available(s) ||
+            title==null || title.trim().isEmpty() || title.length()>100)
+            return SpotifyStep.BLOCKED;
+        if(android.os.Build.VERSION.SDK_INT<33)return SpotifyStep.BLOCKED;
+        try {
+            android.accessibilityservice.InputMethod input=s.getInputMethod();
+            if(input==null || !input.getCurrentInputStarted())return SpotifyStep.WAIT;
+            android.view.inputmethod.EditorInfo editor=input.getCurrentInputEditorInfo();
+            android.accessibilityservice.InputMethod.AccessibilityInputConnection conn=
+                input.getCurrentInputConnection();
+            if(editor==null || conn==null)return SpotifyStep.WAIT;
+            if(!"com.spotify.music".equals(editor.packageName))
+                return SpotifyStep.BLOCKED;
+            int type=editor.inputType;
+            int variation=type & InputType.TYPE_MASK_VARIATION;
+            if((type & InputType.TYPE_MASK_CLASS)!=InputType.TYPE_CLASS_TEXT ||
+               variation==InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+               variation==InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
+               variation==InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD)
+                return SpotifyStep.BLOCKED;
+            // Replace the previous query rather than append to it.
+            // No repeated commit if the UI takes time to update.
+            conn.performContextMenuAction(android.R.id.selectAll);
+            conn.commitText(title,1,null);
+            return SpotifyStep.CLICKED;
+        } catch(RuntimeException rejected) {
+            return SpotifyStep.BLOCKED;
+        }
     }
 
     /**
