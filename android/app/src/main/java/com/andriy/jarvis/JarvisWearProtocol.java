@@ -34,6 +34,7 @@ public final class JarvisWearProtocol {
         if (SPOTIFY.equals(action)) return SPOTIFY_ACK_TIMEOUT_MS;
         if (TAXI.equals(action)) return TAXI_ACK_TIMEOUT_MS;
         if (ASSISTANT.equals(action)) return ASSISTANT_ACK_TIMEOUT_MS;
+        if (UNLOCK.equals(action)) return UNLOCK_ACK_TIMEOUT_MS;
         if (COMMAND.equals(action)) return COMMAND_ACK_TIMEOUT_MS;
         return ACK_TIMEOUT_MS;
     }
