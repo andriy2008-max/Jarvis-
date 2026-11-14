@@ -765,6 +765,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         boolean playlistPlay=spotify && x==977 && y==1291;
         boolean allowed=bolt ? ((x==333 && y==645) || (x==450 && y==520)) :
             (spotify && ((x==403 && y==2211) || (x==490 && y==550) ||
+                (x==665 && y==2224) ||
                 (playlistPlay && verifiedPlaylistName!=null)));
         if(!allowed || !sessionActive || !trustedExternalApp(packageName) ||
            (playlistPlay && !verifiedNamedPlaylistReady(verifiedPlaylistName))) {
