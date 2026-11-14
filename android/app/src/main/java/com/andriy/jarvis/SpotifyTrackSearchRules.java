@@ -14,8 +14,11 @@ public final class SpotifyTrackSearchRules {
     public static boolean searchTab(String label) {
         String s=normal(label);
         return s.equals("search") || s.equals("search tab") ||
-            s.equals("пошук") || s.equals("вкладка пошук") ||
-            s.equals("поиск") || s.equals("вкладка поиск");
+            s.equals("search tab selected") || s.equals("search selected") ||
+            s.equals("пошук") || s.equals("пошук вибрано") ||
+            s.equals("вкладка пошук") || s.equals("вкладка пошук вибрано") ||
+            s.equals("поиск") || s.equals("поиск выбрано") ||
+            s.equals("вкладка поиск");
     }
 
     public static boolean searchField(String label) {
@@ -27,6 +30,8 @@ public final class SpotifyTrackSearchRules {
             s.equals("що хочеш послухати") ||
             s.equals("що ти хочеш послухати") ||
             s.equals("знайти") || s.equals("пошук музики") ||
+            s.equals("search for songs") || s.equals("search for songs or podcasts") ||
+            s.equals("пошук пісень") ||
             s.equals("поиск") || s.equals("что хочешь послушать");
     }
 
