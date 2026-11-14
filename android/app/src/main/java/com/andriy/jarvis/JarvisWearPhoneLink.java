@@ -22,6 +22,17 @@ import java.util.UUID;
  */
 public final class JarvisWearPhoneLink {
     public interface Callback { void finished(boolean ok, String message); }
+    public interface DocumentCallback { void finished(boolean ok, Document page); }
+
+    /** Paginated answer; the document ID remains on watch only while readable. */
+    public static final class Document {
+        public final String text,documentId;
+        public final int pageIndex,pageCount;
+        Document(String text,String id,int index,int count) {
+            this.text=text;documentId=id;pageIndex=index;pageCount=count;
+        }
+        public boolean hasMore(){return !documentId.isEmpty() && pageIndex+1<pageCount;}
+    }
 
     private final Context context;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -42,6 +53,7 @@ public final class JarvisWearPhoneLink {
     private String pendingNode;
     private String pendingType;
     private Callback pendingCallback;
+    private Document pendingDocument;
     private Runnable timeout;
     private long feedback;
     private final Runnable sync = new Runnable() {
@@ -99,6 +111,30 @@ public final class JarvisWearPhoneLink {
             if (previous != null) previous.finished(false,"Очікую зупинку макросу на телефоні.");
         }
         send(JarvisWearProtocol.ASSISTANT,voice,callback);
+    }
+
+    /** Same phone assistant request, with all pages available in a watch reader. */
+    public void assistantDocument(String voice,DocumentCallback cb) {
+        if(cb==null)return;
+        pendingDocument=null;
+        assistant(voice,(ok,detail)->{
+            Document page=pendingDocument;
+            cb.finished(ok,page!=null ? page : new Document(detail,"",0,1));
+        });
+    }
+
+    /** Read one cached result page; no network AI request or screen capture. */
+    public void readPage(String documentId,int index,DocumentCallback cb) {
+        if(cb==null)return;
+        if(!JarvisWearProtocol.validId(documentId) || index<0 || index>200) {
+            cb.finished(false,new Document("Невірна сторінка.","",0,1));
+            return;
+        }
+        pendingDocument=null;
+        send(JarvisWearProtocol.READ_PAGE,documentId+":"+index,(ok,detail)->{
+            Document page=pendingDocument;
+            cb.finished(ok,page!=null?page:new Document(detail,"",0,1));
+        });
     }
 
     /** PIN entered for this single command; never persisted or sent to AI. */
@@ -284,6 +320,11 @@ public final class JarvisWearPhoneLink {
             final Callback cb = pendingCallback;
             final boolean ok = data.optBoolean("ok",false);
             final String detail = data.optString("detail","Телефон не повернув результат.");
+            final String documentId=data.optString("document_id","");
+            if(JarvisWearProtocol.validId(documentId)) {
+                pendingDocument=new Document(detail,documentId,
+                    data.optInt("page_index",0),data.optInt("page_count",1));
+            } else pendingDocument=null;
             if (JarvisWearProtocol.ENTER.equals(type) && ok) {
                 String token = data.optString("session","");
                 if (!JarvisWearProtocol.validId(token)) {
@@ -339,6 +380,8 @@ public final class JarvisWearPhoneLink {
         pendingNode = null;
         pendingType = null;
         pendingCallback = null;
+        // The current document is consumed by the completion callback before
+        // the following request begins; callers keep their own copy.
     }
 
     public void close() {
