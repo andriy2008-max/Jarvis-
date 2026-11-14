@@ -1817,7 +1817,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "⌨ Написати команду",
             "🗒 Показати нотатки",
             "🧹 Новий діалог",
-            "❔ Що ти вмієш?"
+            "❔ Що ти вмієш?",
+            "🔌 Стан підключень телефона"
         };
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("Налаштування Джарвіса")
@@ -1872,6 +1873,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     case 6: processCommand("покажи нотатки"); break;
                     case 7: processCommand("новий діалог"); break;
                     case 8: processCommand("що ти вмієш"); break;
+                    case 9: processCommand("стан підключень"); break;
                     default: break;
                 }
             })
