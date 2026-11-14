@@ -29,7 +29,10 @@ public final class JarvisPhoneMode {
             normalized.equals("джарвіс телефон") ||
             normalized.equals("джарвис телефон") ||
             normalized.equals("jarvis phone")) return Transition.ENTER;
-        if (normalized.equals("джарвіс") || normalized.equals("джарвис") ||
+        // Four voice aliases for returning to the normal watch face:
+        // «Годинник», «Джарвіс», «Jarvis», «Джарвис».
+        if (normalized.equals("годинник") ||
+            normalized.equals("джарвіс") || normalized.equals("джарвис") ||
             normalized.equals("jarvis") || normalized.equals("вийди з режиму телефон") ||
             normalized.equals("вийди з режиму телефона")) return Transition.EXIT;
         ScreenControlCommands.Action screen = ScreenControlCommands.parse(normalized);
