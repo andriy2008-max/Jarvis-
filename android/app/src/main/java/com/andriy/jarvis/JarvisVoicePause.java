@@ -35,8 +35,11 @@ public final class JarvisVoicePause {
         return true;
     }
 
+    /** Microphone loudness is not proof of another spoken word. In phone mode,
+     * background music, traffic or a noisy mic must NEVER postpone dispatch. */
+    @Deprecated
     public void sawVoice(long timeMs) {
-        if (armed()) lastWordAtMs = Math.max(lastWordAtMs, timeMs);
+        // Deliberately ignored. Only a NEW recognized word renews the deadline.
     }
 
     public boolean armed() { return lastWordAtMs >= 0; }
