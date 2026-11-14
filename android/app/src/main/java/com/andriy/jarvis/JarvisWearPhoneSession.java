@@ -199,6 +199,19 @@ public final class JarvisWearPhoneSession {
             });
             return;
         }
+        if (JarvisWearProtocol.SET_ALARM.equals(action)) {
+            // The phone is the only alarm owner. A watch sends HH:mm, never
+            // an Android Intent or arbitrary command to execute.
+            AssistantIntents.ClockTime selected=JarvisWatchAlarmRequest.decode(command);
+            if(selected==null) {
+                out.reply(false,"Некоректний час із годинника. Вибери години та хвилини.","",false);
+                return;
+            }
+            String result=JarvisWearAlarmScheduler.setAlarm(context,selected);
+            out.reply(result.startsWith("Будильник встановлено") ||
+                result.startsWith("Будильник уже встановлено"),result,"",false);
+            return;
+        }
         if (JarvisWearProtocol.ASSISTANT.equals(action)) {
             // Independent of manual Accessibility sessions and their 2-minute
             // idle expiry. The paired phone owns every API credential.
