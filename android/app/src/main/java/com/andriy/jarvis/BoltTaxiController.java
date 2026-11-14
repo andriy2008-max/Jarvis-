@@ -22,7 +22,7 @@ public final class BoltTaxiController {
         void onProgress(String status);
         void onFinished(boolean ok,String status);
     }
-    private enum Stage { COORD_RIDES, COORD_DROPOFF, COORD_TYPE, OPEN_APP, VERIFY_RIDES, DELAY, FOCUS_DROPOFF, WAIT_DROPOFF, TYPE, ENTER }
+    private enum Stage { COORD_RIDES, COORD_DROPOFF, COORD_TYPE }
     private final Context context;
     private final Listener listener;
     private final String address;
@@ -32,13 +32,6 @@ public final class BoltTaxiController {
     private long started=SystemClock.elapsedRealtime();
     private final long flowStarted=started;
     private boolean finished;
-    private int ridesRetries;
-    private int dropoffRetries;
-    // Accessibility nodes from Bolt can expire during a UI transition.
-    // Retry a few times *only* during safe home/route verification,
-    // without additional taps when the snapshot itself is invalid.
-    private int transientScreenFailures;
-
     private BoltTaxiController(Context context,Listener listener,String address,JarvisPhoneModeManager.Lease lease){
         this.context=context.getApplicationContext();
         this.listener=listener;this.address=address;this.lease=lease;
@@ -85,181 +78,27 @@ public final class BoltTaxiController {
         transientScreenFailures=0;
         listener.onProgress(info);
     }
-    /** Recover from unexpected Bolt/Accessibility runtime failures without
-     * letting a stale node exception crash all of Jarvis. Log only the stage,
-     * never the dictated destination or a screenshot. */
+    /**
+     * The only supported flow is the owner's fixed-coordinate Bolt sequence.
+     * Never fall back to stale OPEN_APP/Accessibility-tree navigation:
+     * those stages depend on brittle Bolt labels and are not recoverable
+     * when Android hides the window hierarchy.
+     *
+     * An unexpected error stops the command without repeating a tap.
+     */
     private void pollSafely() {
         if(finished)return;
         try {
-            poll();
-        } catch (RuntimeException error) {
+            pollCoordinates();
+        } catch(RuntimeException error) {
             android.util.Log.w("JARVIS_TAXI",
-                "Bolt Accessibility snapshot failed at stage="+stage.name()+
-                ", retry="+transientScreenFailures,error);
-            // Loading Bolt and switching to its rides screen can invalidate
-            // an AccessibilityNodeInfo while traversing the tree. A single
-            // exception is NOT proof the app failed to open. Re-acquire a fresh
-            // root on the next tick. Do not retry data entry or booking stages.
-            if ((stage==Stage.OPEN_APP || stage==Stage.VERIFY_RIDES ||
-                 stage==Stage.FOCUS_DROPOFF || stage==Stage.WAIT_DROPOFF) &&
-                ++transientScreenFailures<=4 &&
-                SystemClock.elapsedRealtime()-flowStarted<TOTAL_TIMEOUT_MS) {
-                HANDLER.postDelayed(tick,Math.max(850L,POLL_MS));
-                return;
-            }
-            try {
-                finish(false,"Bolt не дозволив прочитати екран під час «"+stage.name()+
-                    "» після повторних спроб. Перевір дозвіл керування екраном "+
-                    "і чи Bolt відкритий. Поїздку не замовляв.");
-            } catch (RuntimeException cleanupError) {
-                android.util.Log.e("JARVIS_TAXI","Taxi cleanup failed",cleanupError);
-                finished=true;
-                HANDLER.removeCallbacks(tick);
-                synchronized(BoltTaxiController.class) {
-                    if(active==this)active=null;
-                }
-                try { JarvisPhoneModeManager.releaseForCommand(lease,false); }
-                catch(RuntimeException ignored) { }
-            }
+                "Coordinate Bolt stage failed: "+stage.name(),error);
+            finish(false,"Bolt: помилка координатного керування на етапі "+
+                stage.name()+". Перевір, чи Bolt відкритий і чи ввімкнено "+
+                "спеціальні можливості Джарвіса. Поїздку не замовляв.");
         }
     }
 
-    private void poll(){
-        if(finished)return;
-        if(!JarvisPhoneScreenGuard.available(context)){
-            finish(false,JarvisPhoneScreenGuard.MESSAGE);return;
-        }
-        if(!ScreenControlAccessibilityService.isSessionActive()){
-            finish(false,"Керування екраном вимкнулося.");return;
-        }
-        long age=SystemClock.elapsedRealtime()-started;
-        if(stage==Stage.COORD_RIDES || stage==Stage.COORD_DROPOFF ||
-           stage==Stage.COORD_TYPE) {
-            pollCoordinates();
-            return;
-        }
-        if(SystemClock.elapsedRealtime()-flowStarted>=TOTAL_TIMEOUT_MS){
-            finish(false,"Bolt не показав потрібний екран за 45 секунд. Нічого навмання не натискав.");
-            return;
-        }
-        if(!ScreenControlAccessibilityService.boltVisible()){
-            if(age>=TIMEOUT_MS)finish(false,"Bolt не відкрився або екран заблоковано.");
-            else HANDLER.postDelayed(tick,POLL_MS);
-            return;
-        }
-        if(age>=TIMEOUT_MS){
-            finish(false,stage==Stage.OPEN_APP
-                ? "Не з'явився напис «Рушаймо» на головному екрані Bolt за 30 секунд."
-                : "Не знайшов «Місце висадки» або поле адреси Bolt за 30 секунд. Нічого навмання не натискав.");
-            return;
-        }
-        switch(stage){
-            case OPEN_APP: {
-                // Bolt may load in 1s or 12s; NEVER click from a fixed timer.
-                // Observe exact «Рушаймо» on the verified passenger HOME tile.
-                ScreenControlAccessibilityService.BoltStep result=
-                    ScreenControlAccessibilityService.boltLetsGo();
-                if(result==ScreenControlAccessibilityService.BoltStep.READY) {
-                    move(Stage.DELAY,"Маршрут Bolt уже відкритий. Шукаю «Місце висадки»...");
-                } else if(result==ScreenControlAccessibilityService.BoltStep.CLICKED) {
-                    move(Stage.VERIFY_RIDES,
-                        "Натиснув «Рушаймо». Чекаю появи «Місце висадки»...");
-                } else if(result==ScreenControlAccessibilityService.BoltStep.BLOCKED) {
-                    finish(false,"Bolt показав інший або небезпечний екран. «Рушаймо» не натискав.");
-                    return;
-                }
-                break;
-            }
-            case VERIFY_RIDES:
-                if(ScreenControlAccessibilityService.boltRidesReady()) {
-                    move(Stage.DELAY,"«Поїздки» відкрито. Шукаю «Місце висадки»...");
-                } else if(age>=RETAP_AFTER_MS && ridesRetries==0) {
-                    // At most ONE retry, only when «Рушаймо» is still
-                    // explicitly visible. Never tap another unknown screen.
-                    ScreenControlAccessibilityService.BoltStep again=
-                        ScreenControlAccessibilityService.boltLetsGo();
-                    if(again==ScreenControlAccessibilityService.BoltStep.READY) {
-                        move(Stage.DELAY,"Маршрут Bolt відкрито. Шукаю «Місце висадки»...");
-                    } else if(again==ScreenControlAccessibilityService.BoltStep.CLICKED) {
-                        ridesRetries=1;
-                        move(Stage.VERIFY_RIDES,"Повторив «Рушаймо». Перевіряю маршрут...");
-                    } else if(again==ScreenControlAccessibilityService.BoltStep.BLOCKED) {
-                        finish(false,"Bolt перейшов на інший екран; не натискатиму навмання.");
-                        return;
-                    }
-                } else if(age>=7000L) {
-                    finish(false,"Після «Рушаймо» не з'явився маршрут із «Місце висадки». Поїздку не замовляв.");
-                    return;
-                }
-                break;
-            case DELAY:
-                if(age>=1400L){
-                    if(address.isEmpty()){
-                        finish(true,"Відкрив Bolt → «Рушаймо». Назви місце висадки.");return;
-                    }
-                    // After «Поїздки», Bolt displays a two-row route form.
-                    // The destination row isn't editable until tapped.
-                    move(Stage.FOCUS_DROPOFF,"Натискаю «Місце висадки»...");
-                }
-                break;
-            case FOCUS_DROPOFF:{
-                ScreenControlAccessibilityService.BoltStep action=
-                    ScreenControlAccessibilityService.boltFocusDestination();
-                if(action==ScreenControlAccessibilityService.BoltStep.READY)
-                    move(Stage.TYPE,"Поле висадки активне. Вводжу адресу...");
-                else if(action==ScreenControlAccessibilityService.BoltStep.CLICKED)
-                    move(Stage.WAIT_DROPOFF,"Натиснув «Місце висадки». Очікую поле вводу...");
-                else if(action==ScreenControlAccessibilityService.BoltStep.BLOCKED){
-                    finish(false,"Не вдалося безпечно натиснути поле «Місце висадки».");return;
-                }
-                break;
-            }
-            case WAIT_DROPOFF:
-                if(ScreenControlAccessibilityService.boltDestinationFocused()){
-                    move(Stage.TYPE,"Поле висадки активне. Вводжу адресу...");
-                }else if(age>=2600L){
-                    if(dropoffRetries>=2){
-                        finish(false,"Bolt не відкрив поле введення після натискання «Місце висадки».");return;
-                    }
-                    dropoffRetries++;
-                    move(Stage.FOCUS_DROPOFF,"Повторно шукаю поле «Місце висадки»...");
-                }
-                break;
-            case TYPE:{
-                ScreenControlAccessibilityService.BoltStep result=
-                    ScreenControlAccessibilityService.boltTypeDestination(address);
-                if(result==ScreenControlAccessibilityService.BoltStep.ENTERED){
-                    // ACTION_SET_TEXT can finish before Bolt refreshes its editor.
-                    // Wait for the exact address to appear before pressing
-                    // the keyboard Enter/Search key, not a Bolt confirmation.
-                    move(Stage.ENTER,"Адресу введено. Натискаю Enter / Пошук...");
-                    break;
-                }
-                if(result==ScreenControlAccessibilityService.BoltStep.BLOCKED){
-                    finish(false,"Bolt не дозволив безпечно ввести адресу.");return;
-                }
-                break;
-            }
-            case ENTER:{
-                ScreenControlAccessibilityService.BoltStep result=
-                    ScreenControlAccessibilityService.boltPressDestinationEnter(address);
-                if(result==ScreenControlAccessibilityService.BoltStep.SUBMITTED){
-                    finish(true,"У Bolt введено: "+address+
-                        ". Натиснув Enter / Пошук. Обери потрібну адресу з результатів " +
-                        "і підтвердь поїздку вручну.");
-                    return;
-                }
-                if(result==ScreenControlAccessibilityService.BoltStep.BLOCKED){
-                    finish(false,"Адресу введено, але Android або Bolt не дозволив натиснути " +
-                        "Enter через Спеціальні можливості. Натисни Enter / Пошук " +
-                        "на клавіатурі вручну. Поїздку не підтверджував.");
-                    return;
-                }
-                break;
-            }
-        }
-        if(!finished)HANDLER.postDelayed(tick,POLL_MS);
-    }
     /**
      * Coordinate-only Bolt flow configured by the device owner:
      * home «Рушаймо» (333,645), 2s later «Місце висадки» (450,520).
