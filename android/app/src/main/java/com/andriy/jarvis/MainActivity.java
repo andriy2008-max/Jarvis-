@@ -3780,6 +3780,26 @@ public final class MainActivity extends Activity implements RecognitionListener 
         return launchIntent(new Intent(Intent.ACTION_VIEW, Uri.parse(url)), label);
     }
 
+    /** Pixel schedules the alarm; Wear never creates a local watch alarm. */
+    private void requestWatchAlarm(AssistantIntents.ClockTime time) {
+        if(!isWatchDevice)return;
+        if(watchPhoneLink==null) {
+            setStatus("Немає з'єднання з Pixel. Будильник не встановлено.");
+            return;
+        }
+        processing=true;
+        if(face!=null)face.setState("thinking");
+        setStatus("Передаю час будильника на Pixel...");
+        watchPhoneLink.setAlarm(time,(ok,detail)->{
+            processing=false;
+            if(isFinishing()||isDestroyed())return;
+            appendDialogue("Джарвіс",detail);
+            setStatus(detail);
+            if(voiceEnabled)speakReply(detail);
+            else if(face!=null)face.setState("idle");
+        });
+    }
+
     /** The shortcut chooses time instead of silently using a hardcoded 07:30. */
     private void showAlarmPicker() {
         Calendar now = Calendar.getInstance();
@@ -3790,18 +3810,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         setStatus("Немає зв’язку з Pixel для встановлення будильника.");
                         return;
                     }
-                    String command=String.format(Locale.ROOT,
-                        "постав будильник на %02d:%02d",hour,minute);
-                    setStatus("Встановлюю будильник на Pixel...");
-                    // No app launch on Wear: the phone creates an exact alarm
-                    // through its already user-approved AlarmManager.
-                    watchPhoneLink.assistant(command,(ok,detail)->{
-                        if(isFinishing() || isDestroyed())return;
-                        appendDialogue("Джарвіс",detail);
-                        setStatus(detail);
-                        if(voiceEnabled)speakReply(detail);
-                        else if(face!=null)face.setState("idle");
-                    });
+                    requestWatchAlarm(new AssistantIntents.ClockTime(hour,minute));
                     return;
                 }
                 String feedback = openAlarmClock(
@@ -4641,6 +4650,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if(AssistantIntents.alarmNeedsTime(
                 CommandPatterns.normalizeControlVerb(raw))) {
                 showAlarmPicker();
+                return;
+            }
+            // Dedicated path for a spoken time; route before screen mode
+            // or AI so Watch7 sets an alarm even when Phone mode is active.
+            AssistantIntents.ClockTime requestedWatchAlarm=AssistantIntents.alarmTime(
+                CommandPatterns.normalizeControlVerb(raw));
+            if(requestedWatchAlarm!=null) {
+                requestWatchAlarm(requestedWatchAlarm);
                 return;
             }
             // Image requests from the watch are handled on Pixel, not by
