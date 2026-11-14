@@ -23,6 +23,29 @@ public final class JarvisWearMessageReceiver extends WearableListenerService {
         if(node==null || node.isEmpty())return;
         String action=request.optString("action","");
 
+        if(JarvisWearProtocol.GENERATE_IMAGE.equals(action)) {
+            String command=request.optString("text","");
+            if(!JarvisWearProtocol.validCommand(command) ||
+               JarvisWearImageCommands.prompt(command)==null) {
+                sendReply(node,id,false,"Не розпізнав команду створення зображення.",
+                    "",false,null);
+                return;
+            }
+            JarvisWearImageBridge.generate(getApplicationContext(),node,command,
+                (ok,detail,imageId)->sendImageReply(node,id,ok,detail,imageId));
+            return;
+        }
+        if(JarvisWearProtocol.SAVE_IMAGE.equals(action)) {
+            String imageId=request.optString("text","");
+            if(!JarvisWearProtocol.validId(imageId)) {
+                sendReply(node,id,false,"Неправильний ідентифікатор зображення.",
+                    "",false,null);
+                return;
+            }
+            JarvisWearImageBridge.save(getApplicationContext(),node,imageId,
+                (ok,detail,storedId)->sendReply(node,id,ok,detail,"",false,null));
+            return;
+        }
         if(JarvisWearProtocol.READ_PAGE.equals(action)) {
             String locator=request.optString("text","");
             int colon=locator.lastIndexOf(':');
@@ -51,6 +74,24 @@ public final class JarvisWearMessageReceiver extends WearableListenerService {
                     ? JarvisWearReplyPages.save(node,id,description) : null;
             sendReply(node,id,ok,description,token,ended,page);
         });
+    }
+
+    private void sendImageReply(String node,String id,boolean ok,String detail,
+                                String imageId) {
+        try {
+            JSONObject response=new JSONObject();
+            response.put("id",id);
+            response.put("ok",ok);
+            response.put("detail",detail==null?"":detail);
+            response.put("session","");
+            response.put("session_ended",false);
+            if(ok && JarvisWearProtocol.validId(imageId))
+                response.put("image_id",imageId);
+            byte[] bytes=response.toString().getBytes(StandardCharsets.UTF_8);
+            if(bytes.length>JarvisWearProtocol.MAX_BYTES)return;
+            Wearable.getMessageClient(getApplicationContext()).sendMessage(
+                node,JarvisWearProtocol.REPLY,bytes);
+        }catch(Exception ignored){}
     }
 
     private void sendReply(String node,String id,boolean ok,String detail,
