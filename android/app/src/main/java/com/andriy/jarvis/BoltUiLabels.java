@@ -24,6 +24,24 @@ public final class BoltUiLabels {
             v.equals("rides")||v.equals("rides let s go")||
             v.equals("ride")||v.equals("таксі")||v.equals("taxi");
     }
+    /** The explicit ride-start button on Bolt home. Never match a substring
+     * in an unrelated story, booking confirmation or service description. */
+    public static boolean letsGo(String raw) {
+        String label=normal(raw);
+        return label.equals("рушаймо") || label.equals("поїздки рушаймо") ||
+            label.equals("поездки поехали") || label.equals("поехали") ||
+            label.equals("rides let s go") || label.equals("let s go") ||
+            label.equals("let s ride");
+    }
+
+    /** A «Рушаймо» button belongs to the top-left rides tile, never an
+     * arbitrary center-screen CTA. Physical pixels relative to root bounds. */
+    public static boolean letsGoRegion(int x,int y,int left,int top,int right,int bottom) {
+        int w=right-left,h=bottom-top;
+        return w>=240 && h>=450 && x>left+w*.035f && x<left+w*.62f &&
+            y>top+h*.13f && y<top+h*.66f;
+    }
+
     /** Visible on the passenger home screen above the four service tiles. */
     public static boolean ridesHomeHeading(String s) {
         String v=normal(s);
