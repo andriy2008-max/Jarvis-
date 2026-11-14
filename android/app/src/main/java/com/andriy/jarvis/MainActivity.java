@@ -4634,6 +4634,36 @@ public final class MainActivity extends Activity implements RecognitionListener 
         })) return;
         JarvisPhoneMode.Transition modeTransition = JarvisPhoneMode.transition(raw);
         if (isWatchDevice) {
+            // Say is a LOCAL spoken-output command on Watch7. It must never
+            // be sent to phone AI, screen mode or a conversational request.
+            // Preserve exact case and punctuation in the dictated phrase.
+            String watchWords=CommandPatterns.spokenText(raw);
+            if(watchWords!=null) {
+                String feedback;
+                if(watchWords.isEmpty()) {
+                    feedback="Назви слово або речення після «Скажи».";
+                } else if(watchWords.length()>1200) {
+                    feedback="Фраза задовга. Максимум 1200 символів.";
+                } else if(!voiceEnabled) {
+                    feedback="Увімкни голосові відповіді через меню ⋮ годинника.";
+                } else {
+                    // Keep the full-screen Activity in place and play directly
+                    // through the WATCH speaker or the connected audio route.
+                    appendDialogue("Ти",raw.trim());
+                    appendDialogue("Джарвіс",watchWords);
+                    setStatus("Озвучую фразу на Watch7...");
+                    if(face!=null)face.showTranscript(watchWords,false,
+                        SystemClock.uptimeMillis()+6500L);
+                    speakReply(watchWords);
+                    return;
+                }
+                appendDialogue("Джарвіс",feedback);
+                setStatus(feedback);
+                if(face!=null)face.showTranscript(feedback,false,
+                    SystemClock.uptimeMillis()+5500L);
+                if(voiceEnabled)speakReply(feedback);
+                return;
+            }
             // Automated Spotify tasks use a temporary watch/phone face, not
             // a persistent session. A new voice command cannot interrupt
             // the verified sequence except an explicit cancellation.
