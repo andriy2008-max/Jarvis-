@@ -1813,7 +1813,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "🔈 Голосові відповіді: " + (voiceEnabled ? "увімкнені" : "вимкнені"),
             "⏳ Пауза після слова: " + speechPauseSeconds() + " с",
             "🤖 ШІ — підключення",
-            "📱 Стан керування телефоном",
+            "📱 Зв'язок із телефоном",
             "⌨ Написати команду",
             "🗒 Показати нотатки",
             "🧹 Новий діалог",
@@ -1855,8 +1855,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         AlertDialog linkInfo = new AlertDialog.Builder(this)
                             .setTitle("Зв'язок із телефоном")
                             .setMessage(active
-                                ? "Сеанс керування телефоном підтверджено."
-                                : "Немає підтвердженого сеансу керування телефоном. Перевір з'єднання через Galaxy Wearable, Google Play services та наявність Джарвіса на обох пристроях.")
+                                ? "Ручний сеанс керування екраном телефона активний. " +
+                                  "ШІ та телефонні API використовують це саме з'єднання."
+                                : "Ручний сеанс керування екраном не активний. Це не означає " +
+                                  "відсутність зв'язку: ШІ, Telegram, Spotify та інші " +
+                                  "команди передаються на телефон без ручного режиму. " +
+                                  "Для перевірки скажи голосову команду. Перевір Galaxy " +
+                                  "Wearable та Google Play services на обох пристроях.")
                             .setPositiveButton("Закрити", null).create();
                         showDialogWithoutWake(linkInfo);
                         break;
