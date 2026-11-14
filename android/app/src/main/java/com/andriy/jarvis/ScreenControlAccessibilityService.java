@@ -195,8 +195,22 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         }
         // Hide the floating Jarvis orb before hit testing. Wait until WindowManager
         // applies NOT_TOUCHABLE, verify app identity once more, then tap exactly once.
-        FloatingJarvisService.avoidControl(new Rect(x-24,y-24,x+24,y+24));
-        final Runnable restore=FloatingJarvisService.hideForGesture();
+        // The floating Jarvis face is completely hidden while a calibrated
+        // tap is dispatched. Moving the overlay first is unnecessary for Bolt
+        // and previously allowed a WindowManager exception to abort COORD_RIDES
+        // without ever sending the gesture or its callback.
+        final Runnable restore;
+        try {
+            if(!bolt)FloatingJarvisService.avoidControl(
+                new Rect(x-24,y-24,x+24,y+24));
+            restore=FloatingJarvisService.hideForGesture();
+        }catch(RuntimeException overlayFailure) {
+            android.util.Log.w("JARVIS_COORDINATES",
+                "Cannot prepare hidden overlay for "+packageName,overlayFailure);
+            cb.finished(false,"Не вдалося підготувати екран до натискання (OVERLAY). "+
+                "Вимкни плаваюче обличчя Джарвіса й повтори команду.");
+            return;
+        }
         final java.util.concurrent.atomic.AtomicBoolean completed=
             new java.util.concurrent.atomic.AtomicBoolean(false);
         final java.util.function.BiConsumer<Boolean,String> finish=(ok,reason)->{
@@ -796,34 +810,46 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             try {restore.run();}catch(RuntimeException ignored){}
             cb.finished(ok,detail);
         };
-        main.postDelayed(()->{
-            if(!sessionActive || !trustedExternalApp(packageName) ||
-               (playlistPlay && !verifiedNamedPlaylistReady(verifiedPlaylistName))) {
-                finishTap.finished(false,
-                    "Програма або сторінка плейлиста змінилася до натискання.");
-                return;
-            }
-            Path path=new Path();
-            path.moveTo(x,y);
-            GestureDescription gesture=new GestureDescription.Builder()
-                .addStroke(new GestureDescription.StrokeDescription(path,0,90))
-                .build();
-            try {
-                boolean accepted=dispatchGesture(gesture,new GestureResultCallback(){
-                    @Override public void onCompleted(GestureDescription g) {
-                        finishTap.finished(true,"Точку натиснуто.");
+        try {
+            main.postDelayed(()->{
+                try {
+                    if(!sessionActive || !trustedExternalApp(packageName) ||
+                       (playlistPlay && !verifiedNamedPlaylistReady(verifiedPlaylistName))) {
+                        finishTap.finished(false,
+                            "Bolt або Spotify більше не на передньому плані.");
+                        return;
                     }
-                    @Override public void onCancelled(GestureDescription g) {
-                        finishTap.finished(false,"Android скасував натискання.");
-                    }
-                },main);
-                if(!accepted)finishTap.finished(false,"Android відхилив натискання.");
-                else main.postDelayed(()->finishTap.finished(false,
-                    "Час очікування натискання вичерпано."),5000L);
-            }catch(RuntimeException error){
-                finishTap.finished(false,"Не вдалося натиснути координати.");
-            }
-        },80L);
+                    Path path=new Path();
+                    path.moveTo(x,y);
+                    GestureDescription gesture=new GestureDescription.Builder()
+                        .addStroke(new GestureDescription.StrokeDescription(path,0,90))
+                        .build();
+                    boolean accepted=dispatchGesture(gesture,new GestureResultCallback(){
+                        @Override public void onCompleted(GestureDescription g) {
+                            finishTap.finished(true,"Точку натиснуто.");
+                        }
+                        @Override public void onCancelled(GestureDescription g) {
+                            finishTap.finished(false,"Android скасував натискання.");
+                        }
+                    },main);
+                    if(!accepted)finishTap.finished(false,
+                        "Android відхилив натискання (DISPATCH).");
+                    else main.postDelayed(()->finishTap.finished(false,
+                        "Час очікування натискання вичерпано (TIMEOUT)."),5000L);
+                }catch(RuntimeException gestureFailure) {
+                    android.util.Log.w("JARVIS_COORDINATES",
+                        "Calibrated gesture preparation failed",gestureFailure);
+                    finishTap.finished(false,
+                        "Не вдалося підготувати жест (GESTURE). Перевір "+
+                        "службу керування екраном Джарвіса.");
+                }
+            },80L);
+        }catch(RuntimeException scheduleFailure){
+            android.util.Log.w("JARVIS_COORDINATES",
+                "Cannot schedule calibrated tap",scheduleFailure);
+            finishTap.finished(false,
+                "Не вдалося запланувати натискання (SCHEDULE).");
+        }
     }
 
     /**
