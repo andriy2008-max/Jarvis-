@@ -2811,10 +2811,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         setStatus(manualCapture ? "Розпізнаю голос..." : "Слухаю фразу...");
     }
     @Override public void onRmsChanged(float rmsdB) {
-        if (phoneListening && manualCapture && !manualStopRequested && rmsdB > 2f) {
-            speechPause.sawVoice(SystemClock.uptimeMillis());
-            scheduleSilenceCheck();
-        }
+        // Audio energy is not a word. Noise must not extend the two-second
+        // deadline in phone mode; only a changed recognized transcript does.
     }
     @Override public void onBufferReceived(byte[] buffer) { }
 
@@ -2854,10 +2852,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (!manualHypothesis.isEmpty()) {
                 if (manualTranscript.length() > 0) manualTranscript.append(' ');
                 manualTranscript.append(manualHypothesis);
-                if (autoSilenceStop && !phoneListening)
-                    speechPause.sawWords(manualTranscript.toString(), SystemClock.uptimeMillis());
-                else
-                    observedManualWords(manualTranscript.toString());
+                // Once phone-mode silence expired, the final result must
+                // dispatch rather than restart its already-expired timer.
+                if (autoSilenceStop) {
+                    if (!phoneListening)
+                        speechPause.sawWords(manualTranscript.toString(), SystemClock.uptimeMillis());
+                } else observedManualWords(manualTranscript.toString());
                 manualHypothesis = "";
             }
             if (!manualStopRequested &&
@@ -2866,7 +2866,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 return;
             }
             if (manualStopRequested) {
-                if (autoSilenceStop && !speechPause.expired(
+                if (autoSilenceStop && !phoneListening && !speechPause.expired(
                     SystemClock.uptimeMillis(), speechPauseSeconds())) {
                     autoSilenceStop = false;
                     manualStopRequested = false;
@@ -2968,15 +2968,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 if (!segment.isEmpty()) {
                     if (manualTranscript.length() > 0) manualTranscript.append(' ');
                     manualTranscript.append(segment);
-                    if (autoSilenceStop)
-                        speechPause.sawWords(manualTranscript.toString(), SystemClock.uptimeMillis());
-                    else
-                        observedManualWords(manualTranscript.toString());
+                    if (autoSilenceStop) {
+                        if (!phoneListening)
+                            speechPause.sawWords(manualTranscript.toString(), SystemClock.uptimeMillis());
+                    } else observedManualWords(manualTranscript.toString());
                 }
             }
             // A late final result may include an additional word after an
             // earlier partial. It must extend the countdown, not get cut off.
-            if (autoSilenceStop && !speechPause.expired(
+            if (autoSilenceStop && !phoneListening && !speechPause.expired(
                 SystemClock.uptimeMillis(), speechPauseSeconds())) {
                 autoSilenceStop = false;
                 manualStopRequested = false;
