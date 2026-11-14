@@ -28,6 +28,10 @@ public final class BoltTaxiController {
     private long started=SystemClock.elapsedRealtime();
     private final long flowStarted=started;
     private boolean finished;
+    /** A non-sensitive marker for the exact operation that failed.
+     * Keep street addresses and recognition transcripts out of logs. */
+    private String operation="WAIT_BOLT";
+
     private BoltTaxiController(Context context,Listener listener,String address,JarvisPhoneModeManager.Lease lease){
         this.context=context.getApplicationContext();
         this.listener=listener;this.address=address;this.lease=lease;
@@ -87,10 +91,14 @@ public final class BoltTaxiController {
             pollCoordinates();
         } catch(RuntimeException error) {
             android.util.Log.w("JARVIS_TAXI",
-                "Coordinate Bolt stage failed: "+stage.name(),error);
-            finish(false,"Bolt: помилка координатного керування на етапі "+
-                stage.name()+". Перевір, чи Bolt відкритий і чи ввімкнено "+
-                "спеціальні можливості Джарвіса. Поїздку не замовляв.");
+                "Bolt operation "+operation+" failed in "+stage.name(),error);
+            // Do not report only COORD_RIDES: the operation code distinguishes
+            // foreground detection, overlay preparation and gesture dispatch.
+            // The exception class is safe to show (never its message/stack).
+            finish(false,"Bolt: збій на кроці "+operation+
+                " ("+error.getClass().getSimpleName()+"). "+
+                "Перевір службу спеціальних можливостей Джарвіса. "+
+                "Поїздку не замовляв.");
         }
     }
 
@@ -109,6 +117,7 @@ public final class BoltTaxiController {
             finish(false,"Bolt не завершив послідовність за 45 секунд. Поїздку не замовлено.");
             return;
         }
+        operation="CHECK_ACCESSIBILITY";
         if(!JarvisPhoneScreenGuard.available(context) ||
            !ScreenControlAccessibilityService.isSessionActive()) {
             finish(false,"Розблокуй телефон і ввімкни керування екраном Джарвіса.");
@@ -121,12 +130,14 @@ public final class BoltTaxiController {
                 if(elapsed<BoltUiLabels.RIDES_TAP_DELAY_MS) {
                     HANDLER.postDelayed(tick,POLL_MS);return;
                 }
+                operation="CHECK_BOLT_FOREGROUND";
                 if(!ScreenControlAccessibilityService.boltCoordinateReady()) {
                     if(elapsed>12000L) {
                         finish(false,"Не вдалося підтвердити, що відкритий Bolt. Натискання зупинено.");
                     } else HANDLER.postDelayed(tick,POLL_MS);
                     return;
                 }
+                operation="TAP_RUSHAYMO_PREP";
                 ScreenControlAccessibilityService.boltTapCalibrated(333,645,
                     (ok,detail)->{
                         if(finished)return;
@@ -146,6 +157,7 @@ public final class BoltTaxiController {
                     finish(false,"Bolt не підтверджено перед натисканням «Місце висадки».");
                     return;
                 }
+                operation="TAP_DROPOFF_PREP";
                 ScreenControlAccessibilityService.boltTapCalibrated(450,520,
                     (ok,detail)->{
                         if(finished)return;
@@ -165,6 +177,7 @@ public final class BoltTaxiController {
                     finish(false,"Поле введення Bolt не активувалося. Адресу не вводив.");
                     return;
                 }
+                operation="TYPE_BOLT_ADDRESS";
                 ScreenControlAccessibilityService.BoltStep typed=
                     ScreenControlAccessibilityService.boltTypeViaInputMethod(address);
                 if(typed==ScreenControlAccessibilityService.BoltStep.ENTERED) {
@@ -188,6 +201,7 @@ public final class BoltTaxiController {
                         "Адресу введено, але Enter не натискав. Поїздку не замовляв.");
                     return;
                 }
+                operation="SUBMIT_BOLT_ENTER";
                 ScreenControlAccessibilityService.BoltStep enter=
                     ScreenControlAccessibilityService.boltSubmitDestinationSearch();
                 if(enter==ScreenControlAccessibilityService.BoltStep.SUBMITTED) {
