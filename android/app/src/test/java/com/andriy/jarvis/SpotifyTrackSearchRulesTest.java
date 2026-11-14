@@ -20,6 +20,12 @@ public final class SpotifyTrackSearchRulesTest {
             "Russian е/ё orthography");
         ok(SpotifyTrackSearchRules.exactSong("Весна прийде","Весна прийде"),
             "Ukrainian song");
+        ok(SpotifyTrackSearchRules.exactSong("Shape of You","Shape of You"),
+            "English song");
+        ok(SpotifyTrackSearchRules.exactSong("Billie Jean","Billie Jean"),
+            "English song title from a Ukrainian command");
+        ok(!SpotifyTrackSearchRules.exactSong("Billie Jean","Billie Jean (Live)"),
+            "do not silently pick a different rendition");
         ok(!SpotifyTrackSearchRules.exactSong("Весна прийде","Весна придёт"),
             "do not silently translate or choose a similarly named recording");
         ok(SpotifyTrackSearchRules.exactSong("Без бою","Без бою!"),"punctuation");
