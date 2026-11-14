@@ -95,10 +95,13 @@ public final class JarvisWearAlarmScheduler {
                                            String type,String message) {
         Context c=context.getApplicationContext();
         if(!TimerScheduler.canScheduleExact(c))
-            return "Не вдалося встановити "+type.toLowerCase(new Locale("uk","UA"))+
-                ". На Pixel дозволь Джарвісу «Будильники й нагадування» в спеціальному доступі.";
+            return "Не встановлено будильник з Watch7: на Pixel відкрий Налаштування → "+
+                "Програми → Спеціальний доступ → Будильники й нагадування → "+
+                "Джарвіс → Дозволити. Звичайна команда на Pixel використовує "+
+                "Google Годинник і не перевіряє цей дозвіл.";
         if(!notificationsAllowed(c))
-            return "Не вдалося встановити сповіщення. На Pixel увімкни дозволи сповіщень Джарвіса.";
+            return "Не встановлено будильник з Watch7: на Pixel відкрий "+
+                "Налаштування → Сповіщення → Джарвіс і дозволь сповіщення.";
         if(when<=System.currentTimeMillis())
             return "Вказаний час уже минув.";
         SharedPreferences p=prefs(c);
@@ -109,6 +112,16 @@ public final class JarvisWearAlarmScheduler {
             for(int i=0;i<source.length();i++){
                 JSONObject row=source.optJSONObject(i);
                 if(row!=null && row.optLong("when")>now)rows.put(row);
+            }
+            if(type.equals("Будильник")) {
+                for(int i=0;i<rows.length();i++) {
+                    JSONObject old=rows.optJSONObject(i);
+                    if(old!=null && type.equals(old.optString("type")) &&
+                       Math.abs(old.optLong("when")-when)<1000L) {
+                        return "Будильник уже встановлено на Pixel: "+fmt(when)+
+                            ". Це будильник Джарвіса, а не запис у Google Годиннику.";
+                    }
+                }
             }
             if(rows.length()>=MAX_PENDING)return "Досягнуто ліміту 32 активних будильників і нагадувань.";
             int id=p.getInt(COUNTER,15030)+1;
@@ -128,9 +141,13 @@ public final class JarvisWearAlarmScheduler {
             }
             return type+" встановлено на Pixel: "+fmt(when)+
                 (type.equals("Нагадування")?". "+message:"")+
-                ". Сповіщення на Watch7 залежить від налаштувань Galaxy Wearable.";
+                (type.equals("Будильник")
+                    ? ". Це будильник Джарвіса, він не відображається у Google Годиннику."
+                    : "")+
+                " Сповіщення на Watch7 залежить від налаштувань Galaxy Wearable.";
         }catch(Exception failure){
-            return "Не вдалося зберегти нагадування. Спробуй ще раз.";
+            return "Не вдалося створити будильник/нагадування на Pixel. "+
+                "Перевір дозволи Джарвіса й повтори команду.";
         }
     }
 
