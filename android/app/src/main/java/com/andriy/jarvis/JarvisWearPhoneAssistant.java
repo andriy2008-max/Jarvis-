@@ -63,7 +63,9 @@ public final class JarvisWearPhoneAssistant {
                     completion::finished)) return;
         }
 
-        // Money Manager is an Accessibility-driven app, NOT an external API.
+        // Money Tracker supports a user-issued token. API writes are deliberately
+        // disabled until its provider's transaction schema is verified;
+        // existing Accessibility workflow remains available.
         // Never re-submit a financial record without explicit user speech.
         if (FinanceManagerController.isRunning()) {
             if (FinanceVoiceCommands.cancel(raw)) {
@@ -418,6 +420,7 @@ public final class JarvisWearPhoneAssistant {
         boolean spotifyConfigured = !SpotifyDirectSettings.clientId(phone).isEmpty();
         boolean spotifyInstalled = installed(phone,"com.spotify.music");
         boolean financeInstalled = installed(phone,"com.freeman.moneymanager");
+        boolean financeApiToken = FinanceApiSecrets.configured(phone);
         boolean boltInstalled = installed(phone,"ee.mtakso.client");
         boolean shazamInstalled = installed(phone,"com.shazam.android");
         boolean screenAllowed = ScreenControlAccessibilityService.isConnected();
@@ -430,7 +433,10 @@ public final class JarvisWearPhoneAssistant {
                 (spotifyConfigured ? ", App Remote налаштовано" :
                     ", прямий API не налаштовано") + ".\n" +
             "Менеджер фінансів: " + (financeInstalled ? "встановлено" :
-                "не встановлено") + ".\n" +
+                "не встановлено") +
+                (financeApiToken ? ", API-токен збережено на Pixel" :
+                    ", API-токен не налаштований") +
+                "; запис поки через екран.\n" +
             "Bolt: " + (boltInstalled ? "встановлено" : "не встановлено") +
                 "; Shazam: " + (shazamInstalled ? "встановлено" : "не встановлено") +
                 ".\nКерування екраном: " + (screenAllowed ? "дозволено" :
