@@ -24,13 +24,17 @@ public final class SpotifyPlaybackController {
     private static final int MAX_NAMED_SCROLLS = 16;
     private static final long NAMED_FIND_TIMEOUT_MS = 52000L;
 
-    private enum Stage { WAIT_APP, OPEN_LIBRARY, OPEN_COLLECTION, CHOOSE_RAP, PLAY }
+    private enum Stage {
+        WAIT_APP, OPEN_LIBRARY, OPEN_COLLECTION, CHOOSE_RAP, PLAY,
+        OPEN_SEARCH, FOCUS_SEARCH, TYPE_SEARCH, SELECT_TRACK
+    }
 
     private final Context context;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable poll = this::tick;
     private SpotifyMusicCommands.Kind requested;
     private String namedPlaylist;
+    private String namedTrack;
     private Listener listener;
     private Stage stage;
     private long stageStart;
@@ -88,12 +92,6 @@ public final class SpotifyPlaybackController {
         boolean resumeDirect=allowDirect &&
             kind==SpotifyMusicCommands.Kind.OPEN &&
             !SpotifyDirectSettings.clientId(context).isEmpty();
-        if(kind==SpotifyMusicCommands.Kind.TRACK && directUri==null) {
-            if(callback!=null)callback.onFinished(false,
-                "Пісню «"+namedTrack+"» ще не прив'язано до Spotify-посилання. " +
-                "Відкрий 🎵 Spotify · прямий запуск у Джарвісі.");
-            return;
-        }
         if(directUri!=null || resumeDirect) {
             active=true;
             listener=callback;
@@ -107,8 +105,6 @@ public final class SpotifyPlaybackController {
                     directBridge=null;
                     if(ok) {
                         finish(true,"Spotify прийняв команду прямого відтворення без натискання Play.");
-                    } else if(fallbackKind==SpotifyMusicCommands.Kind.TRACK) {
-                        finish(false,detail+" Пісню не запускав, інші кнопки не натискав.");
                     } else {
                         active=false;
                         listener=null;
@@ -151,6 +147,7 @@ public final class SpotifyPlaybackController {
         temporaryControl = lease;
         requested = kind;
         namedPlaylist = named == null ? null : named.name;
+        this.namedTrack = namedTrack;
         scrolled = 0;
         listener = callback;
         active = true;
@@ -180,7 +177,9 @@ public final class SpotifyPlaybackController {
         }
         long age = SystemClock.elapsedRealtime() - stageStart;
         long limit = requested == SpotifyMusicCommands.Kind.PLAYLIST &&
-            stage == Stage.OPEN_COLLECTION ? NAMED_FIND_TIMEOUT_MS : STAGE_TIMEOUT_MS;
+            stage == Stage.OPEN_COLLECTION ? NAMED_FIND_TIMEOUT_MS :
+            requested == SpotifyMusicCommands.Kind.TRACK &&
+            stage == Stage.SELECT_TRACK ? NAMED_FIND_TIMEOUT_MS : STAGE_TIMEOUT_MS;
         if (age > limit) {
             String reason;
             switch (stage) {
@@ -189,6 +188,17 @@ public final class SpotifyPlaybackController {
                     break;
                 case OPEN_LIBRARY:
                     reason = "Не знайшов вкладку «Моя бібліотека» у Spotify.";
+                    break;
+                case OPEN_SEARCH:
+                case FOCUS_SEARCH:
+                    reason = "Не вдалося відкрити пошук Spotify.";
+                    break;
+                case TYPE_SEARCH:
+                    reason = "Не вдалося ввести назву пісні в пошук Spotify.";
+                    break;
+                case SELECT_TRACK:
+                    reason = "Не знайшов точну назву пісні «"+namedTrack+
+                        "» у результатах Spotify. Спробуй додати виконавця.";
                     break;
                 case OPEN_COLLECTION:
                     reason = requested == SpotifyMusicCommands.Kind.RAP
@@ -213,7 +223,29 @@ public final class SpotifyPlaybackController {
         }
         switch (stage) {
             case WAIT_APP:
-                move(Stage.OPEN_LIBRARY, "Відкриваю «Моя бібліотека»...");
+                if(requested==SpotifyMusicCommands.Kind.TRACK)
+                    move(Stage.OPEN_SEARCH,"Відкриваю пошук Spotify для пісні «"+namedTrack+"»...");
+                else
+                    move(Stage.OPEN_LIBRARY,"Відкриваю «Моя бібліотека»...");
+                break;
+            case OPEN_SEARCH:
+                if(successful(ScreenControlAccessibilityService.spotifySearchTab()))
+                    move(Stage.FOCUS_SEARCH,"Відкриваю поле пошуку пісні...");
+                break;
+            case FOCUS_SEARCH:
+                if(successful(ScreenControlAccessibilityService.spotifyFocusSearch()))
+                    move(Stage.TYPE_SEARCH,"Вводжу назву пісні «"+namedTrack+"»...");
+                break;
+            case TYPE_SEARCH:
+                if(successful(ScreenControlAccessibilityService.spotifyTypeTrack(namedTrack)))
+                    move(Stage.SELECT_TRACK,"Пошук пісні «"+namedTrack+
+                        "». Очікую відповідний трек...");
+                break;
+            case SELECT_TRACK:
+                if(age>=1250L &&
+                    successful(ScreenControlAccessibilityService.spotifySelectTrack(namedTrack)))
+                    finish(true,"Натиснув пісню «"+namedTrack+
+                        "» у результатах Spotify на телефоні. Перевіряй відтворення.");
                 break;
             case OPEN_LIBRARY:
                 if (successful(ScreenControlAccessibilityService.spotifyControl(
@@ -306,6 +338,7 @@ public final class SpotifyPlaybackController {
         listener = null;
         stage = null;
         namedPlaylist = null;
+        namedTrack = null;
         JarvisPhoneModeManager.Lease lease = temporaryControl;
         temporaryControl = null;
         // Always restore Jarvis' normal face, even on errors/cancellation.
