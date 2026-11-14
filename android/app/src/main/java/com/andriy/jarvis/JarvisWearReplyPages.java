@@ -57,17 +57,15 @@ public final class JarvisWearReplyPages {
             return null;
         Document doc=documents.get(key(watchNode,documentId));
         if(doc==null)return null;
-        int count=Math.max(1,(doc.text.length()+PAGE_CHARS-1)/PAGE_CHARS);
+        int codepoints=doc.text.codePointCount(0,doc.text.length());
+        int count=Math.max(1,(codepoints+PAGE_CHARS-1)/PAGE_CHARS);
         if(index<0 || index>=count)return null;
-        int from=index*PAGE_CHARS;
-        int to=Math.min(doc.text.length(),from+PAGE_CHARS);
-        // Avoid splitting a surrogate pair at the chunk boundary.
-        if(to<doc.text.length() && to>from &&
-           Character.isHighSurrogate(doc.text.charAt(to-1))) to--;
-        String page=doc.text.substring(from,to);
-        // The next chunk's start must use stable boundaries: page boundaries
-        // are adjusted in the page calculation below.
-        return new Page(documentId,index,count,page);
+        // Code-point offsets ensure adjacent pages neither lose nor duplicate
+        // emoji/non-BMP characters, even at a page boundary.
+        int from=doc.text.offsetByCodePoints(0,index*PAGE_CHARS);
+        int size=Math.min(PAGE_CHARS,codepoints-index*PAGE_CHARS);
+        int to=doc.text.offsetByCodePoints(from,size);
+        return new Page(documentId,index,count,doc.text.substring(from,to));
     }
 
     private static String key(String watchNode,String id) {return watchNode+":"+id;}
