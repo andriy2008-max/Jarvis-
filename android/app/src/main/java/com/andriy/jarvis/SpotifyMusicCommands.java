@@ -25,7 +25,7 @@ public final class SpotifyMusicCommands {
         String normalized=CommandPatterns.normalize(raw)
             .replaceAll("\\s+"," ").trim();
         java.util.regex.Matcher matched=java.util.regex.Pattern.compile(
-            "^(?:увімкни|ввімкни|увімкну|включи|включить|включити|ввімкнути|запусти|постав|поставь|вруби|проиграй|воспроизведи|сыграй)\\s+"+
+            "^(?:увімкни|умімкни|ввімкни|увімкну|включи|включить|включити|ввімкнути|запусти|постав|поставь|вруби|проиграй|воспроизведи|сыграй)\\s+"+
             "(?:(?:мій|мою)\\s+)?(?:плейлист|плейліст|playlist)\\s+(.+)$"
         ).matcher(normalized);
         if (!matched.matches()) return null;
@@ -48,7 +48,7 @@ public final class SpotifyMusicCommands {
     public static String namedTrack(String raw) {
         String s=CommandPatterns.normalize(raw).replaceAll("\\s+"," ").trim();
         java.util.regex.Matcher matched=java.util.regex.Pattern.compile(
-            "^(?:увімкни|ввімкни|увімкну|включи|включить|включити|ввімкнути|запусти|постав|поставь|вруби|проиграй|воспроизведи|сыграй)\\s+"+
+            "^(?:увімкни|умімкни|ввімкни|увімкну|включи|включить|включити|ввімкнути|запусти|постав|поставь|вруби|проиграй|воспроизведи|сыграй)\\s+"+
             "(?:пісню|пісні|песню|песни|пісня|песня|трек|song|track)\\s+(.+)$").matcher(s);
         if(!matched.matches())return null;
         String title=matched.group(1).trim()
@@ -62,10 +62,10 @@ public final class SpotifyMusicCommands {
         if (raw == null) return null;
         String s = CommandPatterns.normalize(raw).toLowerCase(Locale.forLanguageTag("uk-UA"))
             .replaceAll("[.,!?]+$", "").replaceAll("\\s+", " ").trim();
-        if (!s.matches("^(увімкни|ввімкни|увімкну|включи|включить|включити|ввімкнути|запусти|постав|поставь|вруби|проиграй|воспроизведи|сыграй)\\s+.+$"))
+        if (!s.matches("^(увімкни|умімкни|ввімкни|увімкну|включи|включить|включити|ввімкнути|запусти|постав|поставь|вруби|проиграй|воспроизведи|сыграй)\\s+.+$"))
             return null;
         String object = s.replaceFirst(
-            "^(?:увімкни|ввімкни|увімкну|включи|включить|включити|ввімкнути|запусти|постав|поставь|вруби|проиграй|воспроизведи|сыграй)\\s+", "");
+            "^(?:увімкни|умімкни|ввімкни|увімкну|включи|включить|включити|ввімкнути|запусти|постав|поставь|вруби|проиграй|воспроизведи|сыграй)\\s+", "");
         switch (object) {
             case "музику": case "музыку": case "музон": case "музика":
             case "музыка": case "spotify":
