@@ -91,6 +91,23 @@ public final class SpotifyUiLabels {
             (t+b)/2f<rootT+rh*.62f;
     }
 
+    /** Prefer the current actual Spotify playlist action circle over a
+     * screenshot coordinate. The green Play is the large RIGHTMOST button;
+     * crossed-arrows Shuffle and three-dot menus have smaller bounds.
+     * Only use after confirming the exact playlist header and its page. */
+    public static boolean unlabelledPlaylistPlayCircle(int l,int t,int r,int b,
+                                                        int rootL,int rootT,
+                                                        int rootR,int rootB,
+                                                        float density) {
+        int w=r-l,h=b-t,rw=rootR-rootL,rh=rootB-rootT;
+        return rw>=240 && rh>=400 && density>0 &&
+            w>=28*density && h>=28*density &&
+            w<rw*.19f && h<rh*.13f &&
+            w>h*.72f && h>w*.72f &&
+            (l+r)/2f>rootL+rw*.84f && (l+r)/2f<rootR-rw*.018f &&
+            (t+b)/2f>rootT+rh*.16f && (t+b)/2f<rootT+rh*.66f;
+    }
+
     /** Last-resort Play tap calibrated from the user's Spotify playlist
      * screenshot (684×1536), x≈616,y≈369. Only use after identifying a
      * PLAYLIST page in Spotify; never on library/search/mini-player screens. */
