@@ -26,7 +26,7 @@ public final class SpotifyPlaybackController {
     private static final long NAMED_FIND_TIMEOUT_MS = 52000L;
 
     private enum Stage {
-        WAIT_APP, OPEN_LIBRARY, OPEN_COLLECTION, CHOOSE_RAP, PLAY,
+        WAIT_APP, OPEN_LIBRARY, OPEN_COLLECTION, CHOOSE_RAP, PLAY, VERIFY_PLAY,
         OPEN_SEARCH, VERIFY_SEARCH_LINK, OPEN_SEARCH_TAB,
         FOCUS_SEARCH, TYPE_SEARCH, SELECT_TRACK
     }
@@ -224,6 +224,10 @@ public final class SpotifyPlaybackController {
                     reason = "Не знайшов точну назву пісні «"+namedTrack+
                         "» у результатах Spotify. Спробуй додати виконавця.";
                     break;
+                case VERIFY_PLAY:
+                    reason = "Натиснув Play, але Spotify не підтвердив відтворення. " +
+                        "Перевір, чи музика грає та чи не обмежений акаунт.";
+                    break;
                 case OPEN_COLLECTION:
                     reason = requested == SpotifyMusicCommands.Kind.RAP
                         ? "Не знайшов «Пісні, що сподобалися» в бібліотеці."
@@ -335,23 +339,35 @@ public final class SpotifyPlaybackController {
                     move(Stage.PLAY, "Знайшов «Реп». Натискаю Play без перемішування...");
                 break;
             case PLAY: {
-                // Opening a playlist is not playback. Wait for the new page to
-                // render and then press its actual large Play (or an emulated
-                // tap in the verified playlist toolbar if icon-only).
+                // Opening a playlist is NOT playing it. Only stop when a
+                // large visible Pause has been observed, never merely because
+                // ACTION_CLICK/dispatchGesture accepted a press.
                 if(age<1050L)break;
                 ScreenControlAccessibilityService.SpotifyStep result =
                     requested == SpotifyMusicCommands.Kind.PLAYLIST
                         ? ScreenControlAccessibilityService.spotifyNamedPlaylistControl(
                             SpotifyUiLabels.Target.PLAY,namedPlaylist,false)
                         : ScreenControlAccessibilityService.spotifyPlaylistPlay(pageTarget());
-                if(successful(result))
-                    finish(true,result == ScreenControlAccessibilityService.SpotifyStep.ALREADY
-                        ? "Spotify вже відтворює вибраний плейлист."
-                        : requested == SpotifyMusicCommands.Kind.RAP
-                            ? "Натиснув Play плейлиста «Реп» у Spotify."
-                            : requested == SpotifyMusicCommands.Kind.PLAYLIST
-                                ? "Натиснув велику кнопку Play плейлиста «"+namedPlaylist+"» у Spotify."
-                                : "Натиснув Play плейлиста «Укр муз» у Spotify.");
+                if(result==ScreenControlAccessibilityService.SpotifyStep.ALREADY)
+                    finish(true,"Spotify показує Pause: плейлист уже відтворюється.");
+                else if(result==ScreenControlAccessibilityService.SpotifyStep.CLICKED)
+                    move(Stage.VERIFY_PLAY,
+                        "Натиснув Play. Перевіряю початок відтворення плейлиста...");
+                break;
+            }
+            case VERIFY_PLAY: {
+                // Do not tap again: a second press could toggle Play -> Pause.
+                ScreenControlAccessibilityService.SpotifyStep state=
+                    ScreenControlAccessibilityService.spotifyPlaylistPlaybackState(
+                        requested==SpotifyMusicCommands.Kind.PLAYLIST
+                            ? null : pageTarget(),
+                        requested==SpotifyMusicCommands.Kind.PLAYLIST
+                            ? namedPlaylist : null);
+                if(state==ScreenControlAccessibilityService.SpotifyStep.ALREADY)
+                    finish(true,"Spotify показує Pause: плейлист почав відтворюватися.");
+                else if(age>=4800L)
+                    finish(false,"Play натиснув, але не отримав підтвердження " +
+                        "відтворення від Spotify. Перевір звук на Pixel та акаунт Spotify.");
                 break;
             }
         }
