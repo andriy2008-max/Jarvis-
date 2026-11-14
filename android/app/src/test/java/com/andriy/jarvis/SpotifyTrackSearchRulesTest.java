@@ -13,6 +13,15 @@ public final class SpotifyTrackSearchRulesTest {
         ok(SpotifyTrackSearchRules.searchField("Search Spotify"),"English search field");
         ok(!SpotifyTrackSearchRules.searchField("Надіслати"),"not unrelated field");
         ok(SpotifyTrackSearchRules.exactSong("Без бою","Без бою"),"exact song");
+        ok(SpotifyTrackSearchRules.searchTab("Поиск"),"Russian Search tab");
+        ok(SpotifyTrackSearchRules.searchField("Что хочешь послушать?"),"Russian Search field");
+        ok(SpotifyTrackSearchRules.exactSong("Метель","Метель"),"Russian song");
+        ok(SpotifyTrackSearchRules.exactSong("Все как у людей","Всё как у людей"),
+            "Russian е/ё orthography");
+        ok(SpotifyTrackSearchRules.exactSong("Весна прийде","Весна прийде"),
+            "Ukrainian song");
+        ok(!SpotifyTrackSearchRules.exactSong("Весна прийде","Весна придёт"),
+            "do not silently translate or choose a similarly named recording");
         ok(SpotifyTrackSearchRules.exactSong("Без бою","Без бою!"),"punctuation");
         ok(!SpotifyTrackSearchRules.exactSong("Без бою","Без бою ремікс"),
             "never silently select a remix");
