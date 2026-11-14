@@ -4070,6 +4070,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 }
                 watchPhoneLink.spotify(raw, (ok, detail) -> {
                     if (isFinishing() || isDestroyed()) return;
+                    if (promptForPhonePin(detail)) return;
                     JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                     appendDialogue("Джарвіс", detail);
                     setStatus(detail);
@@ -4091,6 +4092,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (screenOnly) {
                 watchPhoneLink.command(raw,(ok,detail) -> {
                     if (isFinishing() || isDestroyed()) return;
+                    if (promptForPhonePin(detail)) return;
                     if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                     appendDialogue("Джарвіс",detail);
                     setStatus(detail);
