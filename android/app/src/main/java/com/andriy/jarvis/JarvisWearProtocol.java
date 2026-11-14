@@ -17,6 +17,8 @@ public final class JarvisWearProtocol {
     public static final String ASSISTANT = "assistant";
     /** Fetch another page of a previously requested note/web answer. */
     public static final String READ_PAGE = "read_page";
+    public static final String GENERATE_IMAGE = "generate_image";
+    public static final String SAVE_IMAGE = "save_image";
     /** Ephemeral user-entered lock-screen PIN (only when root unlock opted in). */
     public static final String UNLOCK = "unlock";
     public static final String SPOTIFY = "spotify";
@@ -26,6 +28,7 @@ public final class JarvisWearProtocol {
     public static final int TAXI_ACK_TIMEOUT_MS = 65000;
     // Includes slow personal AI requests and consented phone-side app workflows.
     public static final int ASSISTANT_ACK_TIMEOUT_MS = 150000;
+    public static final int IMAGE_ACK_TIMEOUT_MS = 200000;
     // PIN verification plus the original asynchronous phone-side UI action.
     public static final int UNLOCK_ACK_TIMEOUT_MS = 140000;
 
@@ -37,6 +40,8 @@ public final class JarvisWearProtocol {
         if (TAXI.equals(action)) return TAXI_ACK_TIMEOUT_MS;
         if (ASSISTANT.equals(action)) return ASSISTANT_ACK_TIMEOUT_MS;
         if (READ_PAGE.equals(action)) return ACK_TIMEOUT_MS;
+        if (GENERATE_IMAGE.equals(action)) return IMAGE_ACK_TIMEOUT_MS;
+        if (SAVE_IMAGE.equals(action)) return 30000;
         if (UNLOCK.equals(action)) return UNLOCK_ACK_TIMEOUT_MS;
         if (COMMAND.equals(action)) return COMMAND_ACK_TIMEOUT_MS;
         return ACK_TIMEOUT_MS;
@@ -46,7 +51,8 @@ public final class JarvisWearProtocol {
 
     public static boolean validAction(String action) {
         return SYNC.equals(action) || ENTER.equals(action) || EXIT.equals(action) || COMMAND.equals(action) ||
-            TAXI.equals(action) || ASSISTANT.equals(action) || READ_PAGE.equals(action) || UNLOCK.equals(action) ||
+            TAXI.equals(action) || ASSISTANT.equals(action) || READ_PAGE.equals(action) ||
+            GENERATE_IMAGE.equals(action) || SAVE_IMAGE.equals(action) || UNLOCK.equals(action) ||
             SPOTIFY.equals(action) || CANCEL_SPOTIFY.equals(action);
     }
 
