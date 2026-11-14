@@ -6,6 +6,11 @@
     <!-- Explicit one-time grant for the small round Jarvis orb. This is NOT Accessibility. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- Foreground companion connection uses the connectedDevice type,
+         not a microphone or permanent wake lock. CHANGE_NETWORK_STATE is
+         a normal permission satisfying Android 14+ type prerequisites. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <!-- Only outgoing HTTPS to a user-configured AI proxy. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
@@ -69,6 +74,16 @@
                       android:path="/jarvis/phone-control/v1/request" />
             </intent-filter>
         </service>
+
+        <!-- Visible ongoing notification, sticky only while enabled by owner.
+             Stop-with-task is deliberately false: swiping away MainActivity
+             does not tear down incoming Wear OS command processing. -->
+        <service
+            android:name=".JarvisCompanionService"
+            android:enabled="true"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="connectedDevice" />
 
         <!-- Android Quick Settings: pressing the tile opens only the circular overlay. -->
         <service
