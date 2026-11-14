@@ -15,6 +15,8 @@ public final class JarvisWearProtocol {
     public static final String TAXI = "taxi";
     /** General voice request evaluated on the phone, with no secrets on Wear OS. */
     public static final String ASSISTANT = "assistant";
+    /** Dedicated watch-to-Pixel alarm request. Never routed to AI or screen mode. */
+    public static final String SET_ALARM = "set_alarm";
     /** Fetch another page of a previously requested note/web answer. */
     public static final String READ_PAGE = "read_page";
     public static final String GENERATE_IMAGE = "generate_image";
@@ -39,6 +41,7 @@ public final class JarvisWearProtocol {
         if (SPOTIFY.equals(action)) return SPOTIFY_ACK_TIMEOUT_MS;
         if (TAXI.equals(action)) return TAXI_ACK_TIMEOUT_MS;
         if (ASSISTANT.equals(action)) return ASSISTANT_ACK_TIMEOUT_MS;
+        if (SET_ALARM.equals(action)) return 25000;
         if (READ_PAGE.equals(action)) return ACK_TIMEOUT_MS;
         if (GENERATE_IMAGE.equals(action)) return IMAGE_ACK_TIMEOUT_MS;
         if (SAVE_IMAGE.equals(action)) return 30000;
@@ -51,7 +54,7 @@ public final class JarvisWearProtocol {
 
     public static boolean validAction(String action) {
         return SYNC.equals(action) || ENTER.equals(action) || EXIT.equals(action) || COMMAND.equals(action) ||
-            TAXI.equals(action) || ASSISTANT.equals(action) || READ_PAGE.equals(action) ||
+            TAXI.equals(action) || ASSISTANT.equals(action) || SET_ALARM.equals(action) || READ_PAGE.equals(action) ||
             GENERATE_IMAGE.equals(action) || SAVE_IMAGE.equals(action) || UNLOCK.equals(action) ||
             SPOTIFY.equals(action) || CANCEL_SPOTIFY.equals(action);
     }
