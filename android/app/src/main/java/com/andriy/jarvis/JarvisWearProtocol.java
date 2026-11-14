@@ -24,6 +24,8 @@ public final class JarvisWearProtocol {
     public static final int TAXI_ACK_TIMEOUT_MS = 65000;
     // Includes slow personal AI requests and consented phone-side app workflows.
     public static final int ASSISTANT_ACK_TIMEOUT_MS = 150000;
+    // PIN verification plus the original asynchronous phone-side UI action.
+    public static final int UNLOCK_ACK_TIMEOUT_MS = 140000;
 
     // Six sequential screen steps can each take 18 seconds.
     public static final int COMMAND_ACK_TIMEOUT_MS = 150000;
