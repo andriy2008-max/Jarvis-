@@ -1812,7 +1812,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "🔊 Голос: Дмитро / Лада",
             "🔈 Голосові відповіді: " + (voiceEnabled ? "увімкнені" : "вимкнені"),
             "⏳ Пауза після слова: " + speechPauseSeconds() + " с",
-            "🤖 ШІ — підключення",
+            "🤖 ШІ через телефон",
             "📱 Зв'язок із телефоном",
             "⌨ Написати команду",
             "🗒 Показати нотатки",
