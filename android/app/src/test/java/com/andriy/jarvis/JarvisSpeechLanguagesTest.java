@@ -6,19 +6,22 @@ public final class JarvisSpeechLanguagesTest {
         if(!ok)throw new AssertionError(detail);
     }
     public static void main(String[] args) {
-        check(JarvisSpeechLanguages.automatic(null),"default should be bilingual AUTO");
+        check(JarvisSpeechLanguages.automatic(null),"default should be multilingual AUTO");
         check(JarvisSpeechLanguages.automatic("auto"),"auto mode");
         check(!JarvisSpeechLanguages.automatic("ru"),"explicit RU is not auto");
         check(!JarvisSpeechLanguages.automatic("uk"),"explicit UA is not auto");
+        check(!JarvisSpeechLanguages.automatic("en"),"explicit EN is not auto");
         check("uk-UA".equals(JarvisSpeechLanguages.initialLanguage("auto")),
-            "Auto starts with Ukrainian and may switch to Russian");
+            "Auto starts with Ukrainian and may switch to Russian or English");
         check("uk-UA".equals(JarvisSpeechLanguages.initialLanguage("uk")),
             "Ukrainian recognition");
         check("ru-RU".equals(JarvisSpeechLanguages.initialLanguage("ru")),
             "Russian recognition");
+        check("en-US".equals(JarvisSpeechLanguages.initialLanguage("en")),
+            "English recognition for English song names");
         check(JarvisSpeechLanguages.AUTO.equals(
             JarvisSpeechLanguages.mode("invalid")),"invalid setting falls back");
-        check("Авто UA/RU".equals(JarvisSpeechLanguages.label(null)),"menu label");
+        check("Авто UA/RU/EN".equals(JarvisSpeechLanguages.label(null)),"menu label");
         System.out.println("PASS JarvisSpeechLanguagesTest");
     }
 }
