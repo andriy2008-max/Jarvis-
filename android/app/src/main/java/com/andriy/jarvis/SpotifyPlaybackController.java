@@ -30,7 +30,8 @@ public final class SpotifyPlaybackController {
         CHOOSE_RAP, PLAY, VERIFY_PLAY,
         OPEN_SEARCH, VERIFY_SEARCH_LINK, OPEN_SEARCH_TAB,
         FOCUS_SEARCH, TYPE_SEARCH, SELECT_TRACK,
-        COORD_SEARCH_FIRST, COORD_SEARCH_SECOND, COORD_TYPE_SEARCH
+        COORD_SEARCH_FIRST, COORD_SEARCH_SECOND, COORD_TYPE_SEARCH,
+        COORD_SELECT_FIRST
     }
 
     private final Context context;
@@ -233,6 +234,9 @@ public final class SpotifyPlaybackController {
                 case COORD_SEARCH_SECOND:
                     reason = "Не вдалося відкрити пошук Spotify за заданими координатами.";
                     break;
+                case COORD_SELECT_FIRST:
+                    reason = "Не вдалося натиснути перший результат Spotify за координатами.";
+                    break;
                 case SELECT_TRACK:
                     reason = "Не знайшов точну назву пісні «"+namedTrack+
                         "» у результатах Spotify. Спробуй додати виконавця.";
@@ -266,7 +270,8 @@ public final class SpotifyPlaybackController {
             (stage==Stage.WAIT_APP || stage==Stage.COORD_SEARCH_FIRST ||
              stage==Stage.COORD_SEARCH_SECOND);
         boolean coordinateTyping=stage==Stage.COORD_TYPE_SEARCH;
-        boolean selectedAfterCoordinates=stage==Stage.SELECT_TRACK && coordinateTrackSearch;
+        boolean selectedAfterCoordinates=coordinateTrackSearch &&
+            (stage==Stage.SELECT_TRACK || stage==Stage.COORD_SELECT_FIRST);
         if (!ScreenControlAccessibilityService.spotifyVisible() &&
             !coordinateTyping && !selectedAfterCoordinates &&
             !(coordinateNavigation &&
@@ -376,13 +381,31 @@ public final class SpotifyPlaybackController {
                     successful(ScreenControlAccessibilityService.spotifySelectTrack(namedTrack)))
                     finish(true,"Натиснув пісню «"+namedTrack+
                         "» у результатах Spotify на телефоні. Перевіряй відтворення.");
-                else if(coordinateTrackSearch && age>=6000L) {
-                    finish(false,"Ввів у пошук Spotify пісню «"+namedTrack+
-                        "», але не можу перевірити і вибрати точний трек. "+
-                        "Натисни правильну пісню в результатах вручну.");
-                    return;
+                else if(coordinateTrackSearch && age>=3000L) {
+                    // The user explicitly calibrated the first search result.
+                    // Prefer the exact accessible title; fall back once after
+                    // results have had 3s to appear. Do not claim a song match.
+                    move(Stage.COORD_SELECT_FIRST,
+                        "Точного результату не видно. Натискаю перший рядок "+
+                        "за заданими координатами...");
                 }
                 break;
+            case COORD_SELECT_FIRST:
+                if(!ScreenControlAccessibilityService.spotifyCoordinateReady()) {
+                    finish(false,"Spotify не підтверджено на передньому плані. "+
+                        "Перший результат не натискав.");
+                    return;
+                }
+                ScreenControlAccessibilityService.spotifyTapCalibrated(490,550,
+                    (ok,detail)->{
+                        if(!active || stage!=Stage.COORD_SELECT_FIRST)return;
+                        finish(ok,ok
+                            ? "Натиснув перший результат Spotify (X=490, Y=550). "+
+                              "Не можу підтвердити точність пісні чи початок відтворення. "+
+                              "Перевір на телефоні."
+                            : "Не вдалося натиснути перший результат Spotify: "+detail);
+                    });
+                return;
             case WAIT_PLAYLIST_PAGE: {
                 ScreenControlAccessibilityService.SpotifyStep ready=
                     ScreenControlAccessibilityService.spotifyNamedPlaylistDetailReady(
