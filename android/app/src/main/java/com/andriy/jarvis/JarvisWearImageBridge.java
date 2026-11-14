@@ -193,8 +193,10 @@ public final class JarvisWearImageBridge {
             // Store only a recognized format. Save-to-gallery also checks the format.
             boolean png=original[0]==(byte)137 && original[1]==80 &&
                 original[2]==78 && original[3]==71;
-            if(!png)throw new IllegalArgumentException(
-                "ШІ повернув не PNG. Збереження з годинника поки підтримує PNG.");
+            boolean jpeg=original[0]==(byte)0xFF &&
+                original[1]==(byte)0xD8 && original[2]==(byte)0xFF;
+            if(!png && !jpeg)throw new IllegalArgumentException(
+                "ШІ повернув непідтримуваний формат. Потрібен PNG або JPEG.");
             BitmapFactory.Options dimensions=new BitmapFactory.Options();
             dimensions.inJustDecodeBounds=true;
             BitmapFactory.decodeByteArray(original,0,original.length,dimensions);
@@ -219,7 +221,7 @@ public final class JarvisWearImageBridge {
             File dir=new File(app.getCacheDir(),"watch-generated");
             if(!dir.isDirectory() && !dir.mkdirs())
                 throw new IllegalStateException("Не вдалося створити кеш на телефоні.");
-            file=new File(dir,id+".png");
+            file=new File(dir,id+(png?".png":".jpg"));
             try(FileOutputStream stream=new FileOutputStream(file)){
                 stream.write(original);
             }
