@@ -54,7 +54,9 @@ public final class JarvisWearPhoneSession {
         String action = request.optString("action","");
         final long feedback = JarvisWearProtocol.COMMAND.equals(action) ||
             JarvisWearProtocol.SPOTIFY.equals(action) ||
-            JarvisWearProtocol.TAXI.equals(action) ? JarvisControlFeedback.begin() : 0L;
+            JarvisWearProtocol.TAXI.equals(action) ||
+            JarvisWearProtocol.ASSISTANT.equals(action) ?
+                JarvisControlFeedback.begin() : 0L;
         Result out = (ok, detail, token, ended) -> {
             JarvisControlFeedback.finish(feedback,ok,SystemClock.uptimeMillis());
             originalOut.reply(ok,detail,token,ended);
@@ -148,6 +150,17 @@ public final class JarvisWearPhoneSession {
                     out.reply(ok,detail,"",false);
                 }
             });
+            return;
+        }
+        if (JarvisWearProtocol.ASSISTANT.equals(action)) {
+            // Independent of manual Accessibility sessions and their 2-minute
+            // idle expiry. The paired phone owns every API credential.
+            if (!JarvisWearProtocol.validCommand(command)) {
+                out.reply(false,"Некоректна команда з годинника.","",false);
+                return;
+            }
+            JarvisWearPhoneAssistant.execute(context,sourceNode,command,
+                (ok,description) -> out.reply(ok,description,"",false));
             return;
         }
         if (JarvisWearProtocol.ENTER.equals(action)) {
@@ -298,7 +311,7 @@ public final class JarvisWearPhoneSession {
             session,false);
     }
 
-    private static String launchApp(Context context,String voiceName) {
+    static String launchApp(Context context,String voiceName) {
         PackageManager pm = context.getPackageManager();
         Intent launcher = new Intent(Intent.ACTION_MAIN);
         launcher.addCategory(Intent.CATEGORY_LAUNCHER);
