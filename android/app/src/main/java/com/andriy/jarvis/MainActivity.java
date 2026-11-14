@@ -186,6 +186,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
     };
     private JarvisWearPhoneLink watchPhoneLink;
     private boolean phoneListening;
+    // Watch phone mode must re-arm automatically after EVERY phone reply.
+    // It is independent of launching/closing the main Activity on Pixel.
+    private void ensureWatchPhoneListening() {
+        if (isWatchDevice && foreground && JarvisPhoneMode.isActive())
+            startPhoneListening();
+    }
+
     private final Runnable phoneListenAgain = new Runnable() {
         @Override public void run() {
             if (!foreground || !phoneListening || !JarvisPhoneMode.isActive()) return;
@@ -203,6 +210,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void startPhoneListening() {
         if (!foreground || !JarvisPhoneMode.isActive()) return;
+        if (isWatchDevice) {
+            // Never interrupt TTS or a pending phone ACK just to re-arm.
+            // A single loop polls until the reply/voice stops, then listens.
+            phoneListening = true;
+            getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            wakeHandler.removeCallbacks(phoneListenAgain);
+            wakeHandler.postDelayed(phoneListenAgain, 200L);
+            return;
+        }
         if (!isWatchDevice && android.provider.Settings.canDrawOverlays(this) &&
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             Intent listen = new Intent(this, FloatingJarvisService.class);
@@ -239,6 +255,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
     private final Runnable phoneModeListener = () -> runOnUiThread(() -> {
         if (isFinishing() || isDestroyed()) return;
+        if (isWatchDevice && JarvisPhoneMode.isActive() && foreground)
+            ensureWatchPhoneListening();
         if (!JarvisPhoneMode.isActive() && phoneListening) {
             stopPhoneListening();
             cancelManualRestart();
@@ -443,6 +461,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
     protected void onResume() {
         super.onResume();
         foreground = true;
+        if (isWatchDevice && JarvisPhoneMode.isActive())
+            ensureWatchPhoneListening();
         // Phone companion survives closing this Activity; the microphone
         // stays off and Watch7 commands arrive through WearableListenerService.
         if (!isWatchDevice) JarvisCompanionService.startIfEnabled(this);
@@ -2121,8 +2141,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         face.setContentDescription(
             "Обличчя Джарвіса. Свайп вліво по словах — прибрати останнє й вимовити заново.");
         face.setOnClickListener(v -> {
-            if (JarvisPhoneMode.isActive()) startPhoneListening();
-            else if (isWatchDevice) toggleListening();
+            if (isWatchDevice) toggleListening();
+            else if (JarvisPhoneMode.isActive()) startPhoneListening();
         });
         face.setOnTouchListener(new View.OnTouchListener() {
             float startX, startY;
@@ -2675,6 +2695,22 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     /** Manual recording waits for words, then auto-submits after configured silence. */
     private void toggleListening() {
+        if (isWatchDevice && JarvisPhoneMode.isActive()) {
+            if (manualCapture) {
+                // Second press sends the already captured phrase immediately.
+                startManualListening();
+                return;
+            }
+            if (watchPhoneLink != null && watchPhoneLink.busy()) {
+                setStatus("Телефон ще виконує команду. Дочекайся відповіді.");
+                ensureWatchPhoneListening();
+                return;
+            }
+            ensureWatchPhoneListening();
+            if (!processing && !aiBusy && !speaking && visibleDialogs == 0)
+                startManualListening();
+            return;
+        }
         if (JarvisPhoneMode.isActive()) { startPhoneListening(); return; }
         startManualListening();
     }
@@ -4050,7 +4086,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 watchPhoneLink.enter((ok, detail) -> {
                     if (isFinishing() || isDestroyed()) return;
                     if (promptForPhonePin(detail)) return;
-                    if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+                    if (ok) {
+                        JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+                        ensureWatchPhoneListening();
+                    }
                     appendDialogue("Джарвіс", detail);
                     setStatus(detail);
                     if (voiceEnabled) speakReply(detail);
@@ -4093,6 +4132,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 watchPhoneLink.command(raw,(ok,detail) -> {
                     if (isFinishing() || isDestroyed()) return;
                     if (promptForPhonePin(detail)) return;
+                    ensureWatchPhoneListening();
                     if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                     appendDialogue("Джарвіс",detail);
                     setStatus(detail);
@@ -4108,6 +4148,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     processing = false;
                     if (isFinishing() || isDestroyed()) return;
                     if (promptForPhonePin(detail)) return;
+                    ensureWatchPhoneListening();
                     if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                     appendDialogue("Джарвіс",detail);
                     setStatus(detail);
