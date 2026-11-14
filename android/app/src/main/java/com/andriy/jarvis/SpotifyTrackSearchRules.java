@@ -67,6 +67,20 @@ public final class SpotifyTrackSearchRules {
         return visible.equals(title);
     }
 
+    /** Spotify sometimes exposes a single combined Accessibility label
+     * instead of separate title and category nodes. Accept an EXACT title
+     * next to an explicit song/track category; never an artist, album or
+     * playlist with a similar name. Metadata must have real delimiters. */
+    public static boolean exactTypedSong(String requested,String label) {
+        String wanted=normal(requested);
+        if(wanted.isEmpty() || wanted.length()>100 || label==null)return false;
+        String[] segments=label.split("[,•·\\n]",4);
+        if(segments.length<2)return false;
+        String first=normal(segments[0]),second=normal(segments[1]);
+        return (wanted.equals(first) && songType(second)) ||
+            (songType(first) && wanted.equals(second));
+    }
+
     public static boolean songType(String text) {
         String s=normal(text);
         return s.equals("song") || s.equals("track") ||
