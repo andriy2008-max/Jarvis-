@@ -30,6 +30,32 @@ public final class JarvisWearReplyPagesTest {
             "past-last page rejected");
         yes(JarvisWearReplyPages.save("watch-1","not-a-uuid","x")==null,
             "reject invalid document id");
+        // Paragraph-aware chunking should not alter the source.
+        String paragraphs="A. ".repeat(160)+"\n"+"Б. ".repeat(170)+"\n";
+        String id2="123e4567-e89b-12d3-a456-426614174001";
+        JarvisWearReplyPages.Page paragraphsFirst=
+            JarvisWearReplyPages.save("watch-1",id2,paragraphs);
+        StringBuilder paragraphsActual=new StringBuilder();
+        for(int i=0;i<paragraphsFirst.count;i++) {
+            JarvisWearReplyPages.Page page=JarvisWearReplyPages.read("watch-1",id2,i);
+            yes(page!=null,"paragraph page available");
+            paragraphsActual.append(page.text);
+        }
+        yes(paragraphs.equals(paragraphsActual.toString()),
+            "paragraph-aware split preserves every character");
+
+        // Extremely long answers must be explicitly marked as shortened.
+        String oversized="🙂".repeat(33000);
+        String id3="123e4567-e89b-12d3-a456-426614174002";
+        JarvisWearReplyPages.Page truncated=
+            JarvisWearReplyPages.save("watch-1",id3,oversized);
+        StringBuilder truncatedText=new StringBuilder();
+        for(int i=0;i<truncated.count;i++)
+            truncatedText.append(JarvisWearReplyPages.read("watch-1",id3,i).text);
+        yes(truncatedText.toString().contains("Відповідь занадто довга"),
+            "long answer explicitly marked rather than silently dropped");
+        yes(!truncatedText.toString().contains("\uFFFD"),
+            "no replacement characters in long emoji reply");
         System.out.println("PASS JarvisWearReplyPagesTest");
     }
 }
