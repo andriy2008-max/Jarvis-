@@ -129,9 +129,9 @@ public final class JarvisWearPhoneSession {
         if (!JarvisPhoneScreenGuard.available(context) &&
             JarvisRemoteUnlock.needsUi(action,command) &&
             !JarvisWearProtocol.ENTER.equals(action)) {
-            String request = JarvisRemoteUnlock.begin(context,sourceNode,action,command);
-            if (request != null) {
-                out.reply(false,request,"",false);
+            String unlockChallengeResult = JarvisRemoteUnlock.begin(context,sourceNode,action,command);
+            if (unlockChallengeResult != null) {
+                out.reply(false,unlockChallengeResult,"",false);
                 return;
             }
         }
