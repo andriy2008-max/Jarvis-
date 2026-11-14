@@ -53,7 +53,8 @@ public final class JarvisWearPhoneSession {
     private static void receiveOnMain(Context context,String sourceNode,JSONObject request,Result originalOut) {
         String action = request.optString("action","");
         final long feedback = JarvisWearProtocol.COMMAND.equals(action) ||
-            JarvisWearProtocol.SPOTIFY.equals(action) ? JarvisControlFeedback.begin() : 0L;
+            JarvisWearProtocol.SPOTIFY.equals(action) ||
+            JarvisWearProtocol.TAXI.equals(action) ? JarvisControlFeedback.begin() : 0L;
         Result out = (ok, detail, token, ended) -> {
             JarvisControlFeedback.finish(feedback,ok,SystemClock.uptimeMillis());
             originalOut.reply(ok,detail,token,ended);
@@ -124,6 +125,29 @@ public final class JarvisWearPhoneSession {
             }
             if (spotify != null) spotify.cancel();
             out.reply(true,"Скасував керування Spotify.","",false);
+            return;
+        }
+        if (JarvisWearProtocol.TAXI.equals(action)) {
+            // Taxi is a local command executed by the phone. No AI, no
+            // mandatory manual "Телефон" session and no automatic booking.
+            if (!JarvisWearProtocol.validCommand(command) ||
+                JarvisTaxiCommands.destination(command) == null) {
+                out.reply(false,"Невірна команда таксі.","",false);
+                return;
+            }
+            if (automaticSpotifyBusy ||
+                (spotify != null && spotify.isRunning()) ||
+                (sequences != null && sequences.isRunning())) {
+                out.reply(false,"Телефон виконує іншу дію. Повтори таксі після її завершення.","",false);
+                return;
+            }
+            BoltTaxiController.start(context,command,new BoltTaxiController.Listener() {
+                @Override public void onProgress(String detail) { }
+                @Override public void onFinished(boolean ok,String detail) {
+                    // Confirm the actual Bolt UI result, not mere message delivery.
+                    out.reply(ok,detail,"",false);
+                }
+            });
             return;
         }
         if (JarvisWearProtocol.ENTER.equals(action)) {
