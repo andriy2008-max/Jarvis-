@@ -10,12 +10,8 @@ import android.os.SystemClock;
 public final class BoltTaxiController {
     private static final String BOLT="ee.mtakso.client";
     private static final Handler HANDLER=new Handler(Looper.getMainLooper());
-    // Polling accesses an external Accessibility tree. Leave room for Bolt's
-    // own UI thread so repeated traversals cannot monopolize Jarvis main.
+    // Poll the app foreground conservatively; only user-calibrated taps run.
     private static final long POLL_MS=650L;
-    // Retry only if the explicit «Рушаймо» control appears again.
-    private static final long RETAP_AFTER_MS=2300L;
-    private static final long TIMEOUT_MS=30000L;
     private static final long TOTAL_TIMEOUT_MS=45000L;
     private static BoltTaxiController active;
     public interface Listener {
