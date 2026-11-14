@@ -62,6 +62,25 @@ public final class SpotifyUiLabelsTest {
         if (SpotifyUiLabels.toolbarPair(27,350,68,391,
             573,330,650,410,2.6f))
             throw new AssertionError("LEFT download must never be shuffle");
+        int[] play=SpotifyUiLabels.screenshotPlaylistPlayPoint(684,1536);
+        if(play==null || Math.abs(play[0]-616)>1 ||
+           Math.abs(play[1]-369)>1 ||
+           !SpotifyUiLabels.safePlaylistPlayPoint(play[0],play[1],0,0,684,1536))
+            throw new AssertionError("large green playlist Play screenshot geometry");
+        if(SpotifyUiLabels.screenshotPlaylistPlayPoint(1536,684)!=null ||
+           SpotifyUiLabels.screenshotPlaylistPlayPoint(684,900)!=null ||
+           SpotifyUiLabels.safePlaylistPlayPoint(70,369,0,0,684,1536) ||
+           SpotifyUiLabels.safePlaylistPlayPoint(616,1400,0,0,684,1536))
+            throw new AssertionError("do not tap a different Spotify icon or mini-player");
+        if(!SpotifyUiLabels.headerRegion(230,300,250,60,0,0,684,1536) ||
+           SpotifyUiLabels.headerRegion(230,1320,250,60,0,0,684,1536) ||
+           SpotifyUiLabels.headerRegion(620,300,80,60,0,0,684,1536))
+            throw new AssertionError("playlist header must be in upper left, never mini-player");
+        if(!SpotifyUiLabels.largePause("Pause") ||
+           !SpotifyUiLabels.largePause("Пауза") ||
+           SpotifyUiLabels.largePause("Play") ||
+           SpotifyUiLabels.largePause("Remove playlist"))
+            throw new AssertionError("avoid stopping an already playing playlist");
         int[] marked = SpotifyUiLabels.screenshotShufflePoint(684,1536);
         if (marked==null || Math.abs(marked[0]-530)>1 ||
             Math.abs(marked[1]-369)>1 || marked[0]<450)
