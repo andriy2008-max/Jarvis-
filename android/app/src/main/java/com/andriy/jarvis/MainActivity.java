@@ -764,6 +764,20 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 "Android може обмежити автозапуск після примусової зупинки.",
                 11,MUTED,Gravity.START,false);
             hero.addView(backgroundInfo);
+            Button batterySettings = secondaryButton(
+                "🔋 Налаштування батареї для фонової роботи",
+                () -> {
+                    try {
+                        startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:" + getPackageName())));
+                    } catch (RuntimeException error) {
+                        setStatus("Відкрий Android → Програми → Джарвіс → Батарея.");
+                    }
+                });
+            LinearLayout.LayoutParams batteryParams =
+                new LinearLayout.LayoutParams(-1, -2);
+            batteryParams.topMargin = dp(5);
+            hero.addView(batterySettings,batteryParams);
         }
 
         wakeToggle = makeWakeToggle();
