@@ -1,7 +1,12 @@
 package com.andriy.jarvis;
 
 import android.content.Context;
-import android.os.SystemClock;
+import android.content.SharedPreferences;
+import java.text.DateFormat;
+import java.util.Date;
+import java.util.Locale;
+import org.json.JSONArray;
+import org.json.JSONException;
 
 /**
  * Companion-phone dispatcher for Wear OS voice commands.
@@ -175,6 +180,50 @@ public final class JarvisWearPhoneAssistant {
             return;
         }
 
+        // Non-network utilities remain local to the companion phone. This
+        // also keeps the watch's Notes menu and "New chat" action meaningful.
+        if (normalized.equals("новий діалог") || normalized.equals("очисти діалог") ||
+            normalized.equals("почни новий діалог")) {
+            if (ai != null) ai.clearHistory();
+            completion.finished(true,"Розмову ШІ на телефоні очищено.");
+            return;
+        }
+        if (normalized.equals("що ти вмієш") || normalized.equals("які команди") ||
+            normalized.equals("допомога")) {
+            completion.finished(true,
+                "Говори з ШІ телефона. Можу керувати застосунками, Spotify, " +
+                "Shazam, Bolt, Telegram, нотатками, таймером і витратами в " +
+                "«Менеджері фінансів». Для екранних дій увімкни «Джарвіс — " +
+                "керування екраном» на телефоні.");
+            return;
+        }
+        String noteResult = phoneNotes(phone,raw,normalized);
+        if (noteResult != null) {
+            completion.finished(true,noteResult);
+            return;
+        }
+        if (normalized.contains("котра година") ||
+            normalized.contains("яка година") ||
+            normalized.contains("скільки часу")) {
+            completion.finished(true,"Зараз " +
+                DateFormat.getTimeInstance(DateFormat.SHORT,new Locale("uk","UA"))
+                    .format(new Date()) + ".");
+            return;
+        }
+        if (normalized.contains("яка сьогодні дата") ||
+            normalized.contains("який сьогодні день")) {
+            completion.finished(true,"Сьогодні " +
+                DateFormat.getDateInstance(DateFormat.FULL,new Locale("uk","UA"))
+                    .format(new Date()) + ".");
+            return;
+        }
+        if (normalized.startsWith("проаналізуй фото") ||
+            normalized.startsWith("прочитай документ")) {
+            completion.finished(false,
+                "Вибери фото чи документ у Джарвісі на телефоні.");
+            return;
+        }
+
         // Only free-form, non-device-control speech reaches the phone's AI.
         // No API key, personal token or other credential is sent to the watch.
         if (aiBusy) {
@@ -203,6 +252,49 @@ public final class JarvisWearPhoneAssistant {
         } catch (RuntimeException error) {
             aiBusy = false;
             completion.finished(false,"Не вдалося передати запит телефонному ШІ.");
+        }
+    }
+
+    /** Read the same preferences as MainActivity.getPreferences(MODE_PRIVATE). */
+    private static String phoneNotes(Context phone,String raw,String normalized) {
+        boolean add = normalized.startsWith("запиши ") ||
+            normalized.startsWith("занотуй ") ||
+            normalized.startsWith("нотатка ");
+        boolean list = normalized.contains("покажи нотатки") ||
+            normalized.contains("мої нотатки") ||
+            normalized.contains("прочитай нотатки");
+        boolean deleteLast = normalized.equals("видали останню нотатку");
+        if (!add && !list && !deleteLast) return null;
+        SharedPreferences prefs = phone.getSharedPreferences("MainActivity",Context.MODE_PRIVATE);
+        try {
+            JSONArray array = new JSONArray(prefs.getString("notes","[]"));
+            if (add) {
+                String content = normalized.replaceFirst(
+                    "^(?:запиши|занотуй|нотатка)\\s+","").trim();
+                if (content.isEmpty()) return "Назви, що записати.";
+                if (content.length() > 800) return "Нотатка занадто довга.";
+                array.put(content);
+                prefs.edit().putString("notes",array.toString()).apply();
+                return "Записав у нотатки телефона: " + content;
+            }
+            if (list) {
+                if (array.length() == 0) return "На телефоні ще немає нотаток.";
+                StringBuilder result = new StringBuilder("Нотатки телефона: ");
+                for (int i=0;i<Math.min(array.length(),12);i++) {
+                    if (i>0) result.append("; ");
+                    result.append(i+1).append(". ").append(array.optString(i));
+                }
+                if (array.length()>12) result.append("; та інші.");
+                return result.toString();
+            }
+            if (array.length()==0) return "На телефоні немає нотаток.";
+            String deleted = array.optString(array.length()-1);
+            JSONArray left = new JSONArray();
+            for(int i=0;i<array.length()-1;i++)left.put(array.get(i));
+            prefs.edit().putString("notes",left.toString()).apply();
+            return "Видалив останню нотатку: " + deleted;
+        } catch (JSONException problem) {
+            return "Не зміг прочитати нотатки телефона. Відкрий Джарвіса для перевірки.";
         }
     }
 
