@@ -62,6 +62,19 @@ public final class SpotifyUiLabelsTest {
         if (SpotifyUiLabels.toolbarPair(27,350,68,391,
             573,330,650,410,2.6f))
             throw new AssertionError("LEFT download must never be shuffle");
+        // A real green Play button should be recognised even without
+        // a Compose Accessibility label; Shuffle/download are not Play.
+        if(!SpotifyUiLabels.unlabelledPlaylistPlayCircle(573,330,650,410,
+            0,0,684,1536,2.6f) ||
+           !SpotifyUiLabels.unlabelledPlaylistPlayCircle(904,530,1025,652,
+            0,0,1080,2424,3.0f) ||
+           SpotifyUiLabels.unlabelledPlaylistPlayCircle(505,345,553,391,
+            0,0,684,1536,2.6f) ||
+           SpotifyUiLabels.unlabelledPlaylistPlayCircle(30,350,110,430,
+            0,0,684,1536,2.6f) ||
+           SpotifyUiLabels.unlabelledPlaylistPlayCircle(573,1350,650,1430,
+            0,0,684,1536,2.6f))
+            throw new AssertionError("only the large upper-right Spotify Play circle");
         int[] play=SpotifyUiLabels.screenshotPlaylistPlayPoint(684,1536);
         if(play==null || Math.abs(play[0]-616)>1 ||
            Math.abs(play[1]-369)>1 ||
