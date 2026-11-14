@@ -89,6 +89,20 @@ public final class SpotifyUiLabelsTest {
            SpotifyUiLabels.headerRegion(230,1320,250,60,0,0,684,1536) ||
            SpotifyUiLabels.headerRegion(620,300,80,60,0,0,684,1536))
             throw new AssertionError("playlist header must be in upper left, never mini-player");
+        // Spotify's current Compose detail header can be small and
+        // clickable; only a separate large toolbar Play legitimizes it.
+        if(!SpotifyUiLabels.playlistDetailEvidence(true,false,false,false,true) ||
+           !SpotifyUiLabels.playlistDetailEvidence(false,true,true,false,true) ||
+           SpotifyUiLabels.playlistDetailEvidence(false,true,false,false,true) ||
+           SpotifyUiLabels.playlistDetailEvidence(false,true,true,true,true) ||
+           SpotifyUiLabels.playlistDetailEvidence(true,false,true,false,false))
+            throw new AssertionError("Do not mistake a library row for an opened playlist");
+        if(!SpotifyUiLabels.largePause("Pause Мої хіти") ||
+           !SpotifyUiLabels.largePause("Пауза Мої хіти") ||
+           !SpotifyUiLabels.largePause("Приостановить воспроизведение") ||
+           SpotifyUiLabels.largePause("Pause shuffle") ||
+           SpotifyUiLabels.largePause("Play playlist"))
+            throw new AssertionError("Spotify playlist Pause action with track context");
         if(!SpotifyUiLabels.largePause("Pause") ||
            !SpotifyUiLabels.largePause("Пауза") ||
            SpotifyUiLabels.largePause("Play") ||
