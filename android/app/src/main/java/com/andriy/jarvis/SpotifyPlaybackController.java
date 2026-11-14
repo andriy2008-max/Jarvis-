@@ -29,7 +29,8 @@ public final class SpotifyPlaybackController {
         WAIT_APP, OPEN_LIBRARY, OPEN_COLLECTION, WAIT_PLAYLIST_PAGE,
         CHOOSE_RAP, PLAY, VERIFY_PLAY,
         OPEN_SEARCH, VERIFY_SEARCH_LINK, OPEN_SEARCH_TAB,
-        FOCUS_SEARCH, TYPE_SEARCH, SELECT_TRACK
+        FOCUS_SEARCH, TYPE_SEARCH, SELECT_TRACK,
+        COORD_SEARCH_FIRST, COORD_SEARCH_SECOND, COORD_TYPE_SEARCH
     }
 
     private final Context context;
@@ -48,6 +49,7 @@ public final class SpotifyPlaybackController {
     private boolean bypassDirectOnce;
     private boolean playlistPlayRetried;
     private boolean playlistRowRetried;
+    private boolean coordinateTrackSearch;
 
     public SpotifyPlaybackController(Context context) {
         this.context = context;
@@ -156,6 +158,7 @@ public final class SpotifyPlaybackController {
         scrolled = 0;
         playlistPlayRetried = false;
         playlistRowRetried = false;
+        coordinateTrackSearch = false;
         listener = callback;
         active = true;
         move(Stage.WAIT_APP, "Режим «Телефон»: очікую відкриття Spotify...");
@@ -223,7 +226,12 @@ public final class SpotifyPlaybackController {
                     reason = "Не вдалося відкрити пошук Spotify. Спробуй вручну відкрити вкладку «Пошук» та повторити команду.";
                     break;
                 case TYPE_SEARCH:
+                case COORD_TYPE_SEARCH:
                     reason = "Не вдалося ввести назву пісні в пошук Spotify.";
+                    break;
+                case COORD_SEARCH_FIRST:
+                case COORD_SEARCH_SECOND:
+                    reason = "Не вдалося відкрити пошук Spotify за заданими координатами.";
                     break;
                 case SELECT_TRACK:
                     reason = "Не знайшов точну назву пісні «"+namedTrack+
@@ -254,16 +262,84 @@ public final class SpotifyPlaybackController {
             finish(false, reason + " Нічого навмання не натискав.");
             return;
         }
-        if (!ScreenControlAccessibilityService.spotifyVisible()) {
+        boolean coordinateNavigation=requested==SpotifyMusicCommands.Kind.TRACK &&
+            (stage==Stage.WAIT_APP || stage==Stage.COORD_SEARCH_FIRST ||
+             stage==Stage.COORD_SEARCH_SECOND);
+        boolean coordinateTyping=stage==Stage.COORD_TYPE_SEARCH;
+        boolean selectedAfterCoordinates=stage==Stage.SELECT_TRACK && coordinateTrackSearch;
+        if (!ScreenControlAccessibilityService.spotifyVisible() &&
+            !coordinateTyping && !selectedAfterCoordinates &&
+            !(coordinateNavigation &&
+              ScreenControlAccessibilityService.spotifyCoordinateReady())) {
             handler.postDelayed(poll, POLL_MS);
             return;
         }
         switch (stage) {
             case WAIT_APP:
-                if(requested==SpotifyMusicCommands.Kind.TRACK)
-                    move(Stage.OPEN_SEARCH,"Відкриваю пошук Spotify для пісні «"+namedTrack+"»...");
-                else
+                if(requested==SpotifyMusicCommands.Kind.TRACK) {
+                    // The owner calibrated the Spotify Search button on this
+                    // Pixel. Use it even if Spotify hides the accessibility tree.
+                    if(age>=2000L &&
+                        ScreenControlAccessibilityService.spotifyCoordinateReady())
+                        move(Stage.COORD_SEARCH_FIRST,
+                            "Відкриваю пошук Spotify за координатами...");
+                } else
                     move(Stage.OPEN_LIBRARY,"Відкриваю «Моя бібліотека»...");
+                break;
+            case COORD_SEARCH_FIRST:
+                ScreenControlAccessibilityService.spotifyTapCalibrated(403,2211,
+                    (ok,detail)->{
+                        if(!active || stage!=Stage.COORD_SEARCH_FIRST)return;
+                        if(!ok) {
+                            finish(false,"Spotify: перше натискання Пошук: "+detail);
+                            return;
+                        }
+                        move(Stage.COORD_SEARCH_SECOND,
+                            "Натиснув Пошук. Через 1 секунду повторю натискання...");
+                        handler.postDelayed(poll,1000L);
+                    });
+                return;
+            case COORD_SEARCH_SECOND:
+                if(age<1000L) {
+                    handler.postDelayed(poll,1000L-age);
+                    return;
+                }
+                if(!ScreenControlAccessibilityService.spotifyCoordinateReady()) {
+                    finish(false,"Spotify не на передньому плані перед другим натисканням.");
+                    return;
+                }
+                ScreenControlAccessibilityService.spotifyTapCalibrated(403,2211,
+                    (ok,detail)->{
+                        if(!active || stage!=Stage.COORD_SEARCH_SECOND)return;
+                        if(!ok) {
+                            finish(false,"Spotify: друге натискання Пошук: "+detail);
+                            return;
+                        }
+                        move(Stage.COORD_TYPE_SEARCH,
+                            "Поле Spotify відкрите. Вводжу назву пісні...");
+                        handler.postDelayed(poll,450L);
+                    });
+                return;
+            case COORD_TYPE_SEARCH:
+                if(age<450L) {
+                    handler.postDelayed(poll,450L-age);
+                    return;
+                }
+                ScreenControlAccessibilityService.SpotifyStep typed=
+                    ScreenControlAccessibilityService.spotifyTypeViaInputMethod(namedTrack);
+                if(typed==ScreenControlAccessibilityService.SpotifyStep.CLICKED ||
+                   typed==ScreenControlAccessibilityService.SpotifyStep.ALREADY) {
+                    coordinateTrackSearch=true;
+                    move(Stage.SELECT_TRACK,
+                        "Ввів назву пісні. Перевіряю точний збіг у Spotify...");
+                } else if(typed==ScreenControlAccessibilityService.SpotifyStep.BLOCKED) {
+                    finish(false,"Не вдалося ввести текст: поле пошуку Spotify "+
+                        "не активне або Android не дозволив введення.");
+                    return;
+                } else if(age>6000L) {
+                    finish(false,"Spotify не відкрив поле введення після двох натискань.");
+                    return;
+                }
                 break;
             case OPEN_SEARCH:
                 if(openDirectSpotifySearch(namedTrack))
@@ -300,6 +376,12 @@ public final class SpotifyPlaybackController {
                     successful(ScreenControlAccessibilityService.spotifySelectTrack(namedTrack)))
                     finish(true,"Натиснув пісню «"+namedTrack+
                         "» у результатах Spotify на телефоні. Перевіряй відтворення.");
+                else if(coordinateTrackSearch && age>=6000L) {
+                    finish(false,"Ввів у пошук Spotify пісню «"+namedTrack+
+                        "», але не можу перевірити і вибрати точний трек. "+
+                        "Натисни правильну пісню в результатах вручну.");
+                    return;
+                }
                 break;
             case WAIT_PLAYLIST_PAGE: {
                 ScreenControlAccessibilityService.SpotifyStep ready=
@@ -456,6 +538,7 @@ public final class SpotifyPlaybackController {
         stage = null;
         namedPlaylist = null;
         namedTrack = null;
+        coordinateTrackSearch = false;
         JarvisPhoneModeManager.Lease lease = temporaryControl;
         temporaryControl = null;
         // Always restore Jarvis' normal face, even on errors/cancellation.
