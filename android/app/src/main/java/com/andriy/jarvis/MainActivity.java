@@ -627,6 +627,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
     protected void onResume() {
         super.onResume();
         foreground = true;
+        if(isWatchDevice)
+            android.util.Log.i("JARVIS_WATCH_LIFECYCLE",
+                "onResume; watch face remains active until user/system navigates away");
         // Keep the watch awake for the whole visible Jarvis session, including
         // idle, replies and microphone recovery, independently of listening mode.
         if (isWatchDevice)
@@ -650,6 +653,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
         resumePendingTimerIfAllowed();
         scheduleLauncherMicrophone();
+    }
+
+    @Override
+    protected void onStop() {
+        if(isWatchDevice)
+            android.util.Log.i("JARVIS_WATCH_LIFECYCLE",
+                "onStop; finishing="+isFinishing()+
+                " changingConfig="+isChangingConfigurations());
+        super.onStop();
     }
 
     @Override
@@ -680,6 +692,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
         JarvisLiveTranscript.setCorrectionHandler(TRANSCRIPT_OWNER, null);
         JarvisLiveTranscript.unsubscribe(transcriptListener);
         foreground = false;
+        cancelPendingWatchTtsStart();
+        if(isWatchDevice)
+            android.util.Log.i("JARVIS_WATCH_LIFECYCLE",
+                "onPause; finishing="+isFinishing()+
+                " changingConfig="+isChangingConfigurations()+
+                " speaking="+speaking+" processing="+processing);
         if(!isWatchDevice)JarvisWearImageBridge.detachPhone(this);
         telegramDictationAfterReply=false;
         cancelAutoWakeSchedule();
@@ -1484,13 +1502,56 @@ public final class MainActivity extends Activity implements RecognitionListener 
         });
     }
 
+    // TextToSpeech initializes asynchronously on Wear OS; a command spoken
+    // immediately after launching Jarvis used to fail silently before init.
+    private Runnable pendingWatchTtsStart;
+
+    private void cancelPendingWatchTtsStart() {
+        if(pendingWatchTtsStart!=null){
+            wakeHandler.removeCallbacks(pendingWatchTtsStart);
+            pendingWatchTtsStart=null;
+        }
+    }
+
     private void speakSystemVoice(String text) {
-        if (!voiceEnabled) { endSpeaking(); return; }
+        if (!voiceEnabled) { cancelPendingWatchTtsStart(); endSpeaking(); return; }
         if (!ttsReady || tts == null) {
+            if(isWatchDevice && foreground && !isFinishing() && !isDestroyed()) {
+                cancelPendingWatchTtsStart();
+                prepareSpeech();
+                setStatus("Підключаю голос Android на Watch7...");
+                final long since=SystemClock.elapsedRealtime();
+                final String wanted=text;
+                pendingWatchTtsStart=new Runnable() {
+                    @Override public void run() {
+                        if(pendingWatchTtsStart!=this)return;
+                        if(!foreground || isFinishing() || isDestroyed() || !voiceEnabled) {
+                            pendingWatchTtsStart=null;
+                            endSpeaking();
+                            return;
+                        }
+                        if(ttsReady && tts!=null) {
+                            pendingWatchTtsStart=null;
+                            speakSystemVoice(wanted);
+                        } else if(SystemClock.elapsedRealtime()-since>=4500L) {
+                            pendingWatchTtsStart=null;
+                            setStatus("Голос Android на Watch7 не запустився. "+
+                                "Перевір синтез мовлення в налаштуваннях годинника.");
+                            if(face!=null)face.showTranscript(
+                                "Голос недоступний. Перевір TTS Watch7.",false,
+                                SystemClock.uptimeMillis()+5000L);
+                            endSpeaking();
+                        } else wakeHandler.postDelayed(this,300L);
+                    }
+                };
+                wakeHandler.postDelayed(pendingWatchTtsStart,300L);
+                return;
+            }
             setStatus("Немає доступного синтезатора мовлення.");
             endSpeaking();
             return;
         }
+        cancelPendingWatchTtsStart();
         prepareSpeech();
         activeTtsId = "jarvis-system-" + SystemClock.uptimeMillis();
         int statusCode = tts.speak(text, TextToSpeech.QUEUE_FLUSH, new Bundle(), activeTtsId);
@@ -4120,6 +4181,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private void stopSpeaking() {
+        cancelPendingWatchTtsStart();
         activeTtsId = null;
         JarvisSpeechMouth.stopSystemTts();
         if (offlineSpeech != null) offlineSpeech.stop();
@@ -5239,7 +5301,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
             activeTtsId = null;
             JarvisSpeechMouth.stopSystemTts();
             speaking = false;
-            if (!listening && !processing) face.setState("idle");
+            if (!listening && !processing && face!=null) face.setState("idle");
+            // Finishing speech must restore the normal watch face, never
+            // navigate away, finish an Activity, or launch the watch face.
+            if(isWatchDevice && foreground && !isFinishing() && !isDestroyed()) {
+                getWindow().addFlags(
+                    android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                android.util.Log.i("JARVIS_WATCH_LIFECYCLE",
+                    "Speech finished; staying on Jarvis face");
+            }
             if(telegramDictationAfterReply)restartTelegramDictation();
             else resumeAfterReply();
         });
@@ -5247,6 +5317,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     protected void onDestroy() {
+        if(isWatchDevice) {
+            android.util.Log.i("JARVIS_WATCH_LIFECYCLE",
+                "onDestroy; finishing="+isFinishing()+
+                " changingConfig="+isChangingConfigurations());
+            cancelPendingWatchTtsStart();
+        }
         if (headsetRoute != null) headsetRoute.end();
         JarvisPhoneMode.unsubscribe(phoneModeListener);
         if (watchPhoneLink != null) watchPhoneLink.close();
