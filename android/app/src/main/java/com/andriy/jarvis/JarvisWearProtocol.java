@@ -12,15 +12,18 @@ public final class JarvisWearProtocol {
     public static final String ENTER = "enter";
     public static final String EXIT = "exit";
     public static final String COMMAND = "command";
+    public static final String TAXI = "taxi";
     public static final String SPOTIFY = "spotify";
     public static final String CANCEL_SPOTIFY = "cancel_spotify";
     public static final int SPOTIFY_ACK_TIMEOUT_MS = 145000;
+    // Bolt UI flow is bounded to 45 s; allow delivery and result latency.
+    public static final int TAXI_ACK_TIMEOUT_MS = 65000;
 
     private JarvisWearProtocol() {}
 
     public static boolean validAction(String action) {
         return SYNC.equals(action) || ENTER.equals(action) || EXIT.equals(action) || COMMAND.equals(action) ||
-            SPOTIFY.equals(action) || CANCEL_SPOTIFY.equals(action);
+            TAXI.equals(action) || SPOTIFY.equals(action) || CANCEL_SPOTIFY.equals(action);
     }
 
     public static boolean validCommand(String command) {
