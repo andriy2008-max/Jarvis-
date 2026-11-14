@@ -24,6 +24,27 @@ public final class SpotifyTrackSearchRules {
             s.equals("вкладка поиск");
     }
 
+    /** Only a short visible label from Spotify's bottom navigation can
+     * authorize fallback touch. Never assume a fixed tab coordinate. */
+    public static boolean bottomSearchTabRegion(int x,int y,int w,int h,
+                                                int left,int top,int right,int bottom) {
+        int width=right-left,height=bottom-top;
+        return width>=240 && height>=400 && w>=12 && h>=12 &&
+            w<width*.45f && h<height*.19f &&
+            x>left+width*.04f && x<right-width*.04f &&
+            y>top+height*.72f && y<bottom-height*.012f;
+    }
+
+    /** A top-of-screen query header is different from a song result in
+     * Spotify's scrolling search results or from the bottom mini-player. */
+    public static boolean queryHeaderRegion(int x,int y,int w,int h,
+                                            int left,int top,int right,int bottom) {
+        int width=right-left,height=bottom-top;
+        return width>=240 && height>=400 && w>=15 && h>=12 &&
+            x>left+width*.05f && x<right-width*.05f &&
+            y>top+height*.015f && y<top+height*.18f;
+    }
+
     public static boolean searchField(String label) {
         String s=normal(label);
         return s.equals("search") || s.equals("search spotify") ||
