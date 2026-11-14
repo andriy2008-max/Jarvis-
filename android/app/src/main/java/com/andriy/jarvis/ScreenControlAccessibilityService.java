@@ -2067,6 +2067,26 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
      * A library item must have an exact visible title and a clickable row.
      * Ambiguous duplicates do not get clicked. */
     public static SpotifyStep spotifyOpenNamedPlaylist(String name) {
+        return spotifyNamedPlaylistEntry(name,false);
+    }
+
+    /** A one-time rescue when Spotify reported an accessibility row click
+     * but did not navigate. Do not retry after the detail page appeared. */
+    public static SpotifyStep spotifyRetryNamedPlaylistEntry(String name) {
+        return spotifyNamedPlaylistEntry(name,true);
+    }
+
+    public static SpotifyStep spotifyNamedPlaylistDetailReady(String name) {
+        ScreenControlAccessibilityService service=connected.get();
+        if(service==null || !service.sessionActive || name==null)
+            return SpotifyStep.BLOCKED;
+        AccessibilityNodeInfo root=service.currentSpotifyRoot();
+        return root!=null && service.spotifyPlaylistHeaderVisible(root,null,name)
+            ? SpotifyStep.ALREADY : SpotifyStep.WAIT;
+    }
+
+    private static SpotifyStep spotifyNamedPlaylistEntry(String name,
+                                                         boolean forceTouch) {
         ScreenControlAccessibilityService service=connected.get();
         if(service==null || !service.sessionActive || name==null)
             return SpotifyStep.BLOCKED;
@@ -2083,6 +2103,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         q.add(root);
         AccessibilityNodeInfo found=null;
         Rect foundBounds=null;
+        Rect titleBounds=null;
         int examined=0;
         while(!q.isEmpty() && ++examined<=MAX_SCAN){
             AccessibilityNodeInfo n=q.removeFirst();
@@ -2106,6 +2127,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                             return SpotifyStep.WAIT;
                         found=control;
                         foundBounds=box;
+                        titleBounds=labelBounds;
                     }
                 }
             }
@@ -2117,8 +2139,21 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if(examined>MAX_SCAN || found==null || service.currentSpotifyRoot()==null)
             return SpotifyStep.WAIT;
         FloatingJarvisService.avoidControl(foundBounds);
-        return found.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-            ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
+        if(!forceTouch)
+            return found.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
+        if(titleBounds==null || titleBounds.isEmpty() ||
+           !foundBounds.contains(titleBounds.centerX(),titleBounds.centerY()) ||
+           service.currentSpotifyRoot()==null)return SpotifyStep.WAIT;
+        Path path=new Path();
+        path.moveTo(titleBounds.exactCenterX(),titleBounds.exactCenterY());
+        GestureDescription gesture=new GestureDescription.Builder()
+            .addStroke(new GestureDescription.StrokeDescription(path,0,90))
+            .build();
+        return service.dispatchTrackedGesture(gesture,(ok,detail)->{
+            if(!ok && service.sessionActive)
+                service.toast("Spotify: повторне відкриття плейлиста не вдалося: "+detail);
+        }) ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
     }
 
     /** PLAY and SHUFFLE can only target the exact already-open playlist,
