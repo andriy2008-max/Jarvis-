@@ -31,6 +31,22 @@ public final class SpotifyTrackSearchRulesTest {
         ok(SpotifyTrackSearchRules.searchField("Search Spotify"),"English search field");
         ok(!SpotifyTrackSearchRules.searchField("Надіслати"),"not unrelated field");
         ok(SpotifyTrackSearchRules.exactSong("Без бою","Без бою"),"exact song");
+        // Current Spotify accessibility may combine title + content type +
+        // artist in a single label instead of exposing the title separately.
+        ok(SpotifyTrackSearchRules.exactTypedSong("Морозы","Морозы, Song, Artist"),
+            "Russian result with explicit song category");
+        ok(SpotifyTrackSearchRules.exactTypedSong("Я хочу","Я хочу • Пісня • Виконавець"),
+            "Ukrainian result with explicit song category");
+        ok(SpotifyTrackSearchRules.exactTypedSong("Shape of You","Track, Shape of You"),
+            "English result whose accessible label starts with Track");
+        ok(!SpotifyTrackSearchRules.exactTypedSong("Я хочу","Я хочу, Playlist, Artist"),
+            "never click a playlist sharing the song title");
+        ok(!SpotifyTrackSearchRules.exactTypedSong("Морозы","Морозы remix, Song, Artist"),
+            "never click a different recording");
+        ok(!SpotifyTrackSearchRules.exactTypedSong("Я хочу","Я хочу в отпуск"),
+            "untyped partial text must not match");
+        ok(!SpotifyTrackSearchRules.exactTypedSong("Я хочу","Я хочу, Album, Artist"),
+            "album title is not a track");
         ok(SpotifyTrackSearchRules.searchTab("Поиск"),"Russian Search tab");
         ok(SpotifyTrackSearchRules.searchField("Что хочешь послушать?"),"Russian Search field");
         ok(SpotifyTrackSearchRules.exactSong("Метель","Метель"),"Russian song");
