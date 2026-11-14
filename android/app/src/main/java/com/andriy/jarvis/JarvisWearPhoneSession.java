@@ -102,6 +102,40 @@ public final class JarvisWearPhoneSession {
             out.reply(true,"Режим телефона активний.",session,false);
             return;
         }
+        // A PIN may only arrive in a distinct, short-lived request type.
+        // Never send a credential to AI, Telegram, logs or the screen parser.
+        if (JarvisWearProtocol.UNLOCK.equals(action)) {
+            JarvisRemoteUnlock.complete(context,sourceNode,command,
+                (originalAction,originalText,completion) -> {
+                    try {
+                        JSONObject deferred = new JSONObject();
+                        deferred.put("action",originalAction);
+                        deferred.put("text",originalText);
+                        // For a previously active, node-bound manual session:
+                        deferred.put("session",node.equals(sourceNode)?session:"");
+                        receiveOnMain(context,sourceNode,deferred,(ok,detail,token,ended) -> {
+                            if (JarvisWearProtocol.COMMAND.equals(originalAction))
+                                endSession();
+                            completion.done(ok,detail);
+                        });
+                    } catch (Exception error) {
+                        completion.done(false,"Не вдалося відновити відкладену команду.");
+                    }
+                },(ok,detail) -> out.reply(ok,detail,"",false));
+            return;
+        }
+        // Only a real screen-dependent task may ask for a one-time PIN.
+        // Simple AI, notes, timers and direct Telegram API work while locked.
+        if (!JarvisPhoneScreenGuard.available(context) &&
+            JarvisRemoteUnlock.needsUi(action,command) &&
+            !JarvisWearProtocol.ENTER.equals(action)) {
+            String request = JarvisRemoteUnlock.begin(context,sourceNode,action,command);
+            if (request != null) {
+                out.reply(false,request,"",false);
+                return;
+            }
+        }
+
         // A watch voice command can temporarily use the phone's already
         // user-approved Accessibility service without entering manual Phone mode.
         if (JarvisWearProtocol.SPOTIFY.equals(action)) {
