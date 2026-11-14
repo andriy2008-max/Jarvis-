@@ -129,6 +129,10 @@
             android:foregroundServiceType="microphone" />
         <receiver android:name=".TimerFireReceiver" android:exported="false" />
         <receiver android:name=".JarvisWearAlarmReceiver" android:exported="false" />
+        <service android:name=".JarvisWearAlertService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
         <!-- A PIN-free OS alarm that locks Pixel if a rooted watch task
              outlives its process. Never exported to other apps. -->
         <receiver android:name=".JarvisRelockReceiver" android:exported="false" />
