@@ -14,8 +14,12 @@ public final class FinanceVoiceCommands {
         public final String amount; // canonical positive decimal with dot
         public final String category;
         public final String account; // null means selected account in app
+        public final int daysAgo; // 0=today, 1=yesterday, 2=day before yesterday
         public Entry(Kind kind,String amount,String category,String account) {
-            this.kind=kind;this.amount=amount;this.category=category;this.account=account;
+            this(kind,amount,category,account,0);
+        }
+        private Entry(Kind kind,String amount,String category,String account,int daysAgo) {
+            this.kind=kind;this.amount=amount;this.category=category;this.account=account;this.daysAgo=daysAgo;
         }
         /** Keypad chars, without extra zeros or a hidden negative sign. */
         public String keypad() {return amount.replace('.',',');}
@@ -37,11 +41,16 @@ public final class FinanceVoiceCommands {
         if(voice==null||voice.length()>230)return null;
         String s=voice.toLowerCase(Locale.forLanguageTag("uk-UA")).trim()
             .replaceAll("[.!?]+$","");
+        int daysAgo=s.endsWith(" позавчора")?2:s.endsWith(" вчора")?1:0;
+        s=s.replaceFirst("\\s+(?:позавчора|вчора|сьогодні)$","").trim();
         Matcher m=EXP.matcher(s);
         Kind kind=Kind.EXPENSE;
         if(!m.matches()) {
             m=INC.matcher(s);
-            if(!m.matches())return natural(s);
+            if(!m.matches()){
+                Entry fallback=natural(s);
+                return fallback==null?null:new Entry(fallback.kind,fallback.amount,fallback.category,fallback.account,daysAgo);
+            }
             kind=Kind.INCOME;
         }
         String amount=m.group(1).replace(',','.');
@@ -68,14 +77,14 @@ public final class FinanceVoiceCommands {
             }
         }
         String category=category(kind,descriptor);
-        return category==null?null:new Entry(kind,amount,category,account);
+        return category==null?null:new Entry(kind,amount,category,account,daysAgo);
     }
 
     /** Explicit finance trigger prevents ambiguous taxi/song commands from recording money. */
     private static Entry natural(String speech){
         String s=speech.replaceFirst("^(?:джарвіс|jarvis)[ ,:]*", "");
-        boolean income=s.matches("^(?:(?:запиши|додай)\\s+)?(?:дохід|чайові|зарплата)(?:\\s|:).*" );
-        if(!income&&!s.matches("^(?:(?:запиши|додай)\\s+)?(?:витрата|витрату)(?:\\s|:).*"))return null;
+        boolean income=s.matches("^(?:(?:запиши|додай)\\s+)?(?:дохід|чайові|зарплата|отримав)(?:\\s|:).*" );
+        if(!income&&!s.matches("^(?:(?:запиши|додай)\\s+)?(?:витрата|витрату|витратив|витратила)(?:\\s|:).*"))return null;
         if(s.matches(".*(?:вчора|завтра|позавчора|долар|євро|usd|eur|борг|позик).*"))return null;
         String account=null;
         if(s.endsWith("готівкою")){account="готівка";s=s.substring(0,s.length()-8).trim();}
@@ -83,7 +92,8 @@ public final class FinanceVoiceCommands {
         if(!number.find())return null;
         String amount=number.group(1).replace(',','.');int begin=number.start(),end=number.end();if(number.find())return null;
         try{if(new java.math.BigDecimal(amount).signum()<=0)return null;}catch(RuntimeException e){return null;}
-        String descriptor=(s.substring(0,begin)+" "+s.substring(end)).replaceFirst("^(?:(?:запиши|додай)\\s+)?(?:витрата|витрату|дохід)[: ]*", "").replaceAll("\\b(?:грн|гривень|гривні)\\b", "").trim();
+        String descriptor=(s.substring(0,begin)+" "+s.substring(end)).replaceFirst("^(?:(?:запиши|додай)\\s+)?(?:витрата|витрату|витратив|витратила|дохід|отримав)[: ]*", "").replaceAll("\\b(?:грн|гривень|гривні)\\b", "").trim();
+        descriptor=descriptor.replaceFirst("^(?:на|за|від)\\s+","").trim();
         if(descriptor.isEmpty())return null;
         String cat=category(income?Kind.INCOME:Kind.EXPENSE,descriptor);
         if(cat==null&&descriptor.equals("кава"))cat="Їжа → Кафе";
@@ -107,6 +117,7 @@ public final class FinanceVoiceCommands {
             }
         }
         switch(s){
+            case "кава":case "каву":case "кафе":return "Їжа → Кафе";
             case "харчування":case "їжу":case "їжа":case "їжі":
             case "продукти":case "продуктів":case "продукти харчування":
                 return "Харчування";
