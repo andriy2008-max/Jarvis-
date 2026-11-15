@@ -14,8 +14,8 @@ public final class FinanceCryptoFifoTest {
             new FinanceCryptoFifo.Trade(false,"0.5",70000,700)),
             BigDecimal.ZERO);
         if(!partial.complete)throw new AssertionError("Known trades should be priced");
-        eq("50500.0",partial.knownRemainingCostMinor.stripTrailingZeros().toPlainString());
-        eq("18800.0",partial.realizedMinor.stripTrailingZeros().toPlainString());
+        eq("50500",partial.knownRemainingCostMinor.stripTrailingZeros().toPlainString());
+        eq("18800",partial.realizedMinor.stripTrailingZeros().toPlainString());
         FinanceCryptoFifo.Result unknown=FinanceCryptoFifo.compute(Arrays.asList(
             new FinanceCryptoFifo.Trade(true,"1",50000,0),
             new FinanceCryptoFifo.Trade(false,"0.5",30000,0)),
