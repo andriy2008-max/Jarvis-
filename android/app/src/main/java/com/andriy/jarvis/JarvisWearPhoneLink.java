@@ -116,6 +116,12 @@ public final class JarvisWearPhoneLink {
             callback.finished(false,"Команда занадто довга або порожня.");
             return;
         }
+        if(FinanceVoiceCommands.cancel(voice)){
+            if(busy()&&FinanceWatchQueue.count(context)<=1){
+                callback.finished(false,"Команда вже надсилається. Для скасування перевір журнал на Pixel.");
+            }else callback.finished(true,FinanceWatchQueue.cancelLatestUnsent(context));
+            return;
+        }
         String normalized = CommandPatterns.normalizeControlVerb(voice);
         if (JarvisWearProtocol.ASSISTANT.equals(pendingType) &&
             (normalized.equals("скасуй макрос") || normalized.equals("зупини макрос") ||
@@ -325,6 +331,15 @@ public final class JarvisWearPhoneLink {
 
     private void send(String type, String text, Callback cb) {
         if (closed) { cb.finished(false, "Зв'язок із телефоном вимкнено."); return; }
+        if(JarvisWearProtocol.SYNC.equals(type)&&!busy()){
+            String queued=FinanceWatchQueue.first(context);
+            if(!FinanceWatchQueue.firstId(context).isEmpty()&&
+                (FinanceVoiceCommands.parse(queued)!=null || FinanceVoiceFollowups.parse(queued)!=null || FinanceBatchCommands.looksLikeBatch(queued) ||
+                FinanceVoiceClarification.maybeStart(queued) ||
+                (FinanceWatchClarification.pending(context)&&FinanceVoiceClarification.maybeReply(queued)))){
+                send(JarvisWearProtocol.ASSISTANT,queued,cb);return;
+            }
+        }
         // User voice takes priority over the 10-second background heartbeat.
         // It can preempt both an in-flight node lookup and an ACK wait.
         if (!JarvisWearProtocol.SYNC.equals(type)) {
@@ -335,7 +350,26 @@ public final class JarvisWearPhoneLink {
             }
             if (JarvisWearProtocol.SYNC.equals(pendingType)) clearPending();
         }
+        final boolean financeRequest=(JarvisWearProtocol.ASSISTANT.equals(type)||JarvisWearProtocol.COMMAND.equals(type))&&
+            (FinanceVoiceCommands.parse(text)!=null || FinanceVoiceFollowups.parse(text)!=null || FinanceBatchCommands.looksLikeBatch(text) ||
+             FinanceVoiceClarification.maybeStart(text) ||
+             (FinanceWatchClarification.pending(context)&&FinanceVoiceClarification.maybeReply(text)));
+        if(financeRequest && !FinanceWatchQueue.firstId(context).isEmpty() &&
+            !text.equals(FinanceWatchQueue.first(context))){
+            boolean added=FinanceWatchQueue.add(context,text);
+            cb.finished(false,added?"Фінансову команду додано до черги. Очікує Pixel.":"Черга з 20 команд заповнена.");
+            if(added&&!busy())main.post(()->send(JarvisWearProtocol.SYNC,"",(ok,detail)->{}));
+            return;
+        }
+        if(busy()&&financeRequest){
+            boolean added=FinanceWatchQueue.add(context,text);
+            cb.finished(false,added?"Команда вже в черзі. Очікує підтвердження Pixel.":"Не вдалося зберегти фінансову команду.");
+            return;
+        }
         if (busy()) { cb.finished(false, "Чекаю відповіді телефона на попередню команду."); return; }
+        if(financeRequest && !FinanceWatchQueue.add(context,text)){
+            cb.finished(false,"Не вдалося зберегти фінансову команду у годиннику.");return;
+        }
         if (!JarvisWearProtocol.validAction(type)) {
             cb.finished(false, "Непідтримувана команда телефона."); return;
         }
@@ -349,6 +383,8 @@ public final class JarvisWearPhoneLink {
             return;
         }
 
+        final boolean finance=financeRequest;
+        final String financeId=finance?FinanceWatchQueue.firstId(context):"";
         requesting = true;
         requestingType = type;
         final long epoch = ++requestEpoch;
@@ -366,13 +402,14 @@ public final class JarvisWearPhoneLink {
                 }
                 try {
                     JSONObject request = new JSONObject();
-                    pendingId = UUID.randomUUID().toString();
+                    pendingId = finance?financeId:UUID.randomUUID().toString();
                     final String requestId = pendingId;
                     requesting = false;
                     requestingType = null;
                     request.put("id",requestId);
                     request.put("action",type);
                     request.put("text",text);
+                    if(finance)request.put("captured_at",FinanceWatchQueue.firstAt(context));
                     request.put("session",activeSession);
                     byte[] data = request.toString().getBytes(StandardCharsets.UTF_8);
                     pendingNode = target.getId();
@@ -390,6 +427,7 @@ public final class JarvisWearPhoneLink {
                     if (JarvisWearProtocol.SPOTIFY.equals(type) ||
                         JarvisWearProtocol.TAXI.equals(type))
                         JarvisPhoneMode.setActive(true);
+                    if(finance)FinanceWatchQueue.markSent(context,financeId);
                     messageClient.sendMessage(target.getId(),JarvisWearProtocol.REQUEST,data)
                         .addOnFailureListener(err -> {
                             // The old SYNC send may fail *after* replacement;
@@ -435,10 +473,16 @@ public final class JarvisWearPhoneLink {
         try {
             JSONObject data = new JSONObject(new String(event.getData(),StandardCharsets.UTF_8));
             if (!pendingId.equals(data.optString("id"))) return;
+            final boolean financeAcknowledged=pendingId.equals(FinanceWatchQueue.firstId(context));
+            if(financeAcknowledged){
+                if(data.optBoolean("ok",false))FinanceWatchQueue.acknowledge(context,pendingId);
+                else FinanceWatchQueue.rejected(context,pendingId);
+            }
             final String type = pendingType;
             final Callback cb = pendingCallback;
             final boolean ok = data.optBoolean("ok",false);
             final String detail = data.optString("detail","Телефон не повернув результат.");
+            if(financeAcknowledged&&ok)FinanceWatchClarification.observe(context,detail);
             pendingImageId=data.optString("image_id","");
             if(!JarvisWearProtocol.validId(pendingImageId))pendingImageId="";
             pendingImageNode=pendingImageId.isEmpty()?"":event.getSourceNodeId();

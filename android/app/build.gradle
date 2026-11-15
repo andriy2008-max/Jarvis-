@@ -11,7 +11,7 @@ def stableSigningReady = [stableKeystore, stableStorePassword, stableAlias, stab
 
 android {
     namespace 'com.andriy.jarvis'
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId 'com.andriy.jarvis'
@@ -102,6 +102,9 @@ tasks.matching { it.name == 'preBuild' ||
 // CPU ONNX runtime is included in the small APK; actual voice models download once.
 dependencies {
     implementation files(spotifyRemoteAar)
+    // Native, full-file encrypted finance ledger (API 23+, 16 KiB-compatible SQLCipher).
+    implementation(group: 'net.zetetic', name: 'sqlcipher-android', version: '4.20.0')
+    implementation(group: 'androidx.sqlite', name: 'sqlite', version: '2.7.0')
     implementation 'com.google.code.gson:gson:2.10.1'
     // Supertonic upstream Java ONNX helper JSON parser (local inference only).
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.2'

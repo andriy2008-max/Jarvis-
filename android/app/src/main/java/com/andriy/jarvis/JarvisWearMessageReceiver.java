@@ -23,6 +23,27 @@ public final class JarvisWearMessageReceiver extends WearableListenerService {
         if(node==null || node.isEmpty())return;
         String action=request.optString("action","");
 
+        if((JarvisWearProtocol.ASSISTANT.equals(action)||JarvisWearProtocol.COMMAND.equals(action)) && FinanceVoiceQueries.matches(request.optString("text",""))){
+            try(FinanceLedger ledger=new FinanceLedger(this)){
+                android.app.KeyguardManager lock=(android.app.KeyguardManager)getSystemService(KEYGUARD_SERVICE);
+                if(lock!=null&&lock.isDeviceLocked()&&!ledger.setting("finance_voice_locked","false").equals("true")){
+                    sendReply(node,id,false,"Для озвучування фінансових сум розблокуй Pixel.","",false,null);
+                    return;
+                }
+                sendReply(node,id,true,FinanceVoiceQueries.answer(ledger,request.optString("text","")),"",false,null);
+            }catch(Exception e){
+                sendReply(node,id,false,"Не вдалося отримати фінансовий звіт.","",false,null);
+            }
+            return;
+        }
+        if((JarvisWearProtocol.ASSISTANT.equals(action)||JarvisWearProtocol.COMMAND.equals(action)) && (FinanceVoiceCommands.parse(request.optString("text",""))!=null || FinanceVoiceFollowups.parse(request.optString("text",""))!=null || FinanceBatchCommands.looksLikeBatch(request.optString("text","")) ||
+            FinanceVoiceClarification.maybeStart(request.optString("text","")) ||
+            (FinanceVoiceClarification.pending(this,node)&&FinanceVoiceClarification.maybeReply(request.optString("text",""))))){
+            FinanceManagerController.start(this,request.optString("text",""),node+":"+id,request.optLong("captured_at",System.currentTimeMillis()),new FinanceManagerController.Listener(){
+                public void onProgress(String detail){}
+                public void onFinished(boolean ok,String detail){sendReply(node,id,ok,detail,"",false,null);}
+            });return;
+        }
         if(JarvisWearProtocol.GENERATE_IMAGE.equals(action)) {
             String command=request.optString("text","");
             if(!JarvisWearProtocol.validCommand(command) ||

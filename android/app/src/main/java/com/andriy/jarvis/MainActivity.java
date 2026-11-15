@@ -887,8 +887,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
             new LinearLayout.LayoutParams(-1,dp(46));
         telegramParams.topMargin=dp(7);
         content.addView(telegramTab,telegramParams);
-        Button financeApiTab=secondaryButton("💰 Менеджер фінансів · API",
-            ()->startActivity(new Intent(this,FinanceApiSettingsActivity.class)));
+        Button financeApiTab=secondaryButton("💰 Фінанси",
+            ()-> {
+                if(isWatchDevice){setStatus("Фінансовий журнал зберігається на телефоні. Записуй витрати голосом через годинник.");return;}
+                startActivity(new Intent(this,FinanceActivity.class));
+            });
         LinearLayout.LayoutParams financeApiParams=
             new LinearLayout.LayoutParams(-1,dp(46));
         financeApiParams.topMargin=dp(7);
@@ -4960,14 +4963,33 @@ public final class MainActivity extends Activity implements RecognitionListener 
             else setStatus("Фінансовий запис виконується. Скажи «Скасуй витрату», щоб зупинити.");
             return;
         }
-        if (!isWatchDevice && FinanceVoiceCommands.parse(raw)!=null) {
+        if (!isWatchDevice && FinanceVoiceQueries.open(raw)) {
+            startActivity(new Intent(this,FinanceActivity.class));
+            return;
+        }
+        if (!isWatchDevice && FinanceVoiceQueries.matches(raw)) {
+            String response;
+            try(FinanceLedger l=new FinanceLedger(this)){
+                android.app.KeyguardManager km=(android.app.KeyguardManager)getSystemService(KEYGUARD_SERVICE);
+                if(km!=null&&km.isDeviceLocked()&&!l.setting("finance_voice_locked","false").equals("true")){
+                    response="Розблокуй телефон для фінансового звіту.";
+                }else response=FinanceVoiceQueries.answer(l,raw);
+            }catch(Exception e){response="Не вдалося прочитати фінансовий звіт.";}
+            appendDialogue("Джарвіс",response);
+            setStatus(response);
+            if(voiceEnabled)speakReply(response);
+            return;
+        }
+        if (!isWatchDevice && (FinanceVoiceCommands.parse(raw)!=null || FinanceVoiceFollowups.parse(raw)!=null ||
+                FinanceBatchCommands.looksLikeBatch(raw) || FinanceVoiceClarification.maybeStart(raw) ||
+                (FinanceVoiceClarification.pending(this,"phone")&&FinanceVoiceClarification.maybeReply(raw)))) {
             FinanceManagerController.start(this,raw,new FinanceManagerController.Listener(){
                 @Override public void onProgress(String detail){setStatus(detail);}
                 @Override public void onFinished(boolean ok,String detail){
                     if(isFinishing()||isDestroyed())return;
                     appendDialogue("Джарвіс",detail);
                     setStatus(detail);
-                    if(!ok && voiceEnabled)speakReply(detail);
+                    if(voiceEnabled)speakReply(detail);
                 }
             });
             return;
