@@ -4980,7 +4980,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if(voiceEnabled)speakReply(response);
             return;
         }
-        if (!isWatchDevice && (FinanceVoiceCommands.parse(raw)!=null || FinanceVoiceFollowups.parse(raw)!=null || FinanceBatchCommands.looksLikeBatch(raw))) {
+        if (!isWatchDevice && (FinanceVoiceCommands.parse(raw)!=null || FinanceVoiceFollowups.parse(raw)!=null ||
+                FinanceBatchCommands.looksLikeBatch(raw) || FinanceVoiceClarification.maybeStart(raw) ||
+                (FinanceVoiceClarification.pending(this,"phone")&&FinanceVoiceClarification.maybeReply(raw)))) {
             FinanceManagerController.start(this,raw,new FinanceManagerController.Listener(){
                 @Override public void onProgress(String detail){setStatus(detail);}
                 @Override public void onFinished(boolean ok,String detail){
