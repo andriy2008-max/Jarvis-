@@ -120,6 +120,8 @@ public final class FinanceActivity extends Activity {
             v->FinanceAssets.position(ledger,v[0],v[1],v[2],v[3])));
         button("Швидко записати текстом",()->form("Витрата / дохід",new String[]{"Наприклад: кава 85 або чайові 650 готівкою"},v->{
             String voice=v[0].trim();
+            if(voice.matches("(?iu)^.+[0-9]+.*\\s+і\\s+.+[0-9]+.*$")&&!FinanceBatchCommands.looksLikeBatch(voice))
+                voice="запиши витрати "+voice;
             if(voice.matches("(?iu)^кава\\s+[0-9]+(?:[,.][0-9]{1,2})?$"))voice="витрата "+voice;
             final String[] error={null};
             FinanceManagerController.start(this,voice,new FinanceManagerController.Listener(){
