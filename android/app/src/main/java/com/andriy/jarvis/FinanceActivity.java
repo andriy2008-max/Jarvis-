@@ -68,6 +68,7 @@ public final class FinanceActivity extends Activity {
             text(FinanceInsights.report(ledger));
             text(FinanceFx.valuation(ledger));
             text(FinanceAssets.positions(ledger));
+            button("Історія криптоугод",()->showInfo(FinanceCryptoTrades.history(ledger)));
             button("Підсумки змін і чайових",()->showInfo(FinanceShifts.report(ledger)));
             button("Аудит витрат і повторів",()->showInfo(FinanceAnalytics.audit(ledger)));
             button("Сценарій: зменшення витрат на N%",()->form("Сценарій без змін у бюджеті",
@@ -120,6 +121,8 @@ public final class FinanceActivity extends Activity {
         button("Обмін валют (фактичний курс і комісія)",()->pickAccount(from->pickAccount(to->
             form("Обмін валют",new String[]{"Списано з першого рахунку","Отримано на другий рахунок","Комісія у валюті першого рахунку (0)"},
                 v->FinanceAssets.exchange(ledger,from,to,v[0],v[1],v[2])))));
+        button("Купити криптоактив",()->cryptoTrade("buy"));
+        button("Продати криптоактив",()->cryptoTrade("sell"));
         button("Криптоактив · кількість і ручна оцінка",()->form("Криптоактив",
             new String[]{"Символ (BTC, ETH тощо)","Кількість","UAH за одиницю (необов'язково)","Дата ціни РРРР-ММ-ДД"},
             v->FinanceAssets.position(ledger,v[0],v[1],v[2],v[3])));
@@ -208,6 +211,18 @@ public final class FinanceActivity extends Activity {
         formWithDefaults("Новий рахунок",new String[]{"Назва (готівка або картка)","Валюта (UAH)","Залишок на сьогодні (необов’язково)"},
             new String[]{"","UAH",""},values->ledger.account(values[0],
                 values[1].trim().isEmpty()?"UAH":values[1].trim().toUpperCase(Locale.ROOT),values[2]));
+    }
+    private void cryptoTrade(String action){
+        new AlertDialog.Builder(this).setTitle("Рух коштів за угодою")
+            .setItems(new String[]{"Записати з рахунком UAH","Лише записати криптоугоду"},
+                (dialog,which)->{
+                    final Account destination=account->form(
+                        action.equals("buy")?"Купівля активу":"Продаж активу",
+                        new String[]{"Символ (BTC)","Кількість активу","Загальна ціна угоди, UAH","Комісія, UAH (0)"},
+                        v->FinanceCryptoTrades.trade(ledger,v[0],action,v[1],v[2],v[3],account));
+                    if(which==0)pickAccount(destination);
+                    else destination.run(-1);
+                }).show();
     }
     private void planning(){
         String[] types={"budget","goal","payment","owed","owing"};
