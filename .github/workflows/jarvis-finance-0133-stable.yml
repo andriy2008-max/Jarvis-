@@ -176,10 +176,9 @@ jobs:
             "android/RELEASE-0.1.33-JARVIS-CHANGES-CHECKLIST.md" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
+            --title "JARVIS $JARVIS_VERSION_NAME — Finance release candidate" \
             --prerelease \
-            --notes "JARVIS Finance v6 release candidate: encrypted ledger, offline-ledger voice, Watch7 queue, budgets, crypto and reports. Signed stable APK; physical-device verification is still required."-title "JARVIS $JARVIS_VERSION_NAME — stable signed Android" \
-            --notes 'Стабільний APK з постійним підписом та ID com.andriy.jarvis.stable. Збережи нотатки з попередніх тестових копій до їх видалення. Наступні stable-версії з більшим versionCode та тим самим сертифікатом оновлюватимуть цей застосунок.' \
-            --prerelease
+            --notes "Signed stable JARVIS Finance v6 candidate. Pixel and Galaxy Watch7 hardware verification remains necessary."
       - name: Clean up signing material
         if: always()
         shell: bash
