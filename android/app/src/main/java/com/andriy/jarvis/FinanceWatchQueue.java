@@ -77,7 +77,7 @@ public final class FinanceWatchQueue {
                 "Останню команду, яка ще не надсилалась, прибрано з черги.":
                 "Не вдалося оновити чергу.";
         }
-        if(!p.getString("id","").isEmpty()&&!p.getBoolean("sent",false)){
+        if(!p.getString("id","").isEmpty()&&p.contains("sent")&&!p.getBoolean("sent",true)){
             return p.edit().clear().commit()?"Не надіслану команду скасовано.":"Не вдалося скасувати запис.";
         }
         return "Команду вже могли передати телефону. Перевір журнал і скасуй операцію там, щоб уникнути розбіжностей.";
