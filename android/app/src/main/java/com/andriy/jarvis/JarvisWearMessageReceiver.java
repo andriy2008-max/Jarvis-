@@ -23,6 +23,12 @@ public final class JarvisWearMessageReceiver extends WearableListenerService {
         if(node==null || node.isEmpty())return;
         String action=request.optString("action","");
 
+        if((JarvisWearProtocol.ASSISTANT.equals(action)||JarvisWearProtocol.COMMAND.equals(action)) && FinanceVoiceCommands.parse(request.optString("text",""))!=null){
+            FinanceManagerController.start(this,request.optString("text",""),node+":"+id,request.optLong("captured_at",System.currentTimeMillis()),new FinanceManagerController.Listener(){
+                public void onProgress(String detail){}
+                public void onFinished(boolean ok,String detail){sendReply(node,id,ok,detail,"",false,null);}
+            });return;
+        }
         if(JarvisWearProtocol.GENERATE_IMAGE.equals(action)) {
             String command=request.optString("text","");
             if(!JarvisWearProtocol.validCommand(command) ||

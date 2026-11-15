@@ -325,6 +325,11 @@ public final class JarvisWearPhoneLink {
 
     private void send(String type, String text, Callback cb) {
         if (closed) { cb.finished(false, "Зв'язок із телефоном вимкнено."); return; }
+        if(JarvisWearProtocol.SYNC.equals(type)&&!busy()){
+            android.content.SharedPreferences queue=context.getSharedPreferences("finance_watch_queue",Context.MODE_PRIVATE);
+            String queued=queue.getString("text","");
+            if(!queue.getString("id","").isEmpty()&&FinanceVoiceCommands.parse(queued)!=null){send(JarvisWearProtocol.ASSISTANT,queued,cb);return;}
+        }
         // User voice takes priority over the 10-second background heartbeat.
         // It can preempt both an in-flight node lookup and an ACK wait.
         if (!JarvisWearProtocol.SYNC.equals(type)) {
@@ -349,6 +354,16 @@ public final class JarvisWearPhoneLink {
             return;
         }
 
+        final android.content.SharedPreferences financeQueue=context.getSharedPreferences("finance_watch_queue",Context.MODE_PRIVATE);
+        final boolean finance=(JarvisWearProtocol.ASSISTANT.equals(type)||JarvisWearProtocol.COMMAND.equals(type))&&FinanceVoiceCommands.parse(text)!=null;
+        String savedFinanceId=financeQueue.getString("id","");
+        if(finance&&!savedFinanceId.isEmpty()&&!text.equals(financeQueue.getString("text",""))){
+            cb.finished(false,"Попередня фінансова команда ще не підтверджена. Повтори: "+financeQueue.getString("text",""));return;
+        }
+        final String financeId=finance?(savedFinanceId.isEmpty()?UUID.randomUUID().toString():savedFinanceId):"";
+        if(finance&&!financeQueue.edit().putString("id",financeId).putString("text",text).putLong("captured_at",financeQueue.getLong("captured_at",System.currentTimeMillis())).commit()){
+            cb.finished(false,"Не вдалося зберегти команду в черзі годинника.");return;
+        }
         requesting = true;
         requestingType = type;
         final long epoch = ++requestEpoch;
@@ -366,13 +381,14 @@ public final class JarvisWearPhoneLink {
                 }
                 try {
                     JSONObject request = new JSONObject();
-                    pendingId = UUID.randomUUID().toString();
+                    pendingId = finance?financeId:UUID.randomUUID().toString();
                     final String requestId = pendingId;
                     requesting = false;
                     requestingType = null;
                     request.put("id",requestId);
                     request.put("action",type);
                     request.put("text",text);
+                    if(finance)request.put("captured_at",financeQueue.getLong("captured_at",System.currentTimeMillis()));
                     request.put("session",activeSession);
                     byte[] data = request.toString().getBytes(StandardCharsets.UTF_8);
                     pendingNode = target.getId();
@@ -435,6 +451,8 @@ public final class JarvisWearPhoneLink {
         try {
             JSONObject data = new JSONObject(new String(event.getData(),StandardCharsets.UTF_8));
             if (!pendingId.equals(data.optString("id"))) return;
+            android.content.SharedPreferences financeQueue=context.getSharedPreferences("finance_watch_queue",Context.MODE_PRIVATE);
+            if(data.optBoolean("ok",false)&&pendingId.equals(financeQueue.getString("id","")))financeQueue.edit().clear().commit();
             final String type = pendingType;
             final Callback cb = pendingCallback;
             final boolean ok = data.optBoolean("ok",false);

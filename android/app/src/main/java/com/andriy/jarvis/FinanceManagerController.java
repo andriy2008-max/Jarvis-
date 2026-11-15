@@ -7,24 +7,36 @@ public final class FinanceManagerController {
     public static boolean isRunning(){return false;}
     public static void cancel(){}
     public static void start(Context context,String utterance,Listener listener) {
+        start(context,utterance,java.util.UUID.randomUUID().toString(),listener);
+    }
+    public static synchronized void start(Context context,String utterance,String commandId,Listener listener) {
+        start(context,utterance,commandId,System.currentTimeMillis(),listener);
+    }
+    public static synchronized void start(Context context,String utterance,String commandId,long capturedAt,Listener listener) {
         if(listener==null)return;
+        if(capturedAt<=0||capturedAt>System.currentTimeMillis()+300000L){listener.onFinished(false,"Перевір дату й час годинника.");return;}
         FinanceVoiceCommands.Entry request=FinanceVoiceCommands.parse(utterance);
         if(request==null){listener.onFinished(false,"Не розпізнав фінансовий запис.");return;}
         try(FinanceLedger ledger=new FinanceLedger(context)){
+            android.database.sqlite.SQLiteDatabase db=ledger.getWritableDatabase();
+            db.beginTransaction();try{
+            String previous=ledger.receipt(commandId,utterance);if(previous!=null){listener.onFinished(true,previous);return;}
             long account=-1;
-            try(android.database.Cursor c=ledger.getReadableDatabase().rawQuery(
-                request.account==null?"SELECT id FROM accounts":"SELECT id FROM accounts WHERE lower(name)=lower(?)",
-                request.account==null?null:new String[]{request.account})){
-                if(c.moveToFirst()){account=c.getLong(0);if(request.account==null&&c.moveToNext())account=-1;}
+            if(request.account==null)account=Long.parseLong(ledger.setting("default_account","-1"));
+            else try(android.database.Cursor c=ledger.getReadableDatabase().rawQuery("SELECT id,name FROM accounts",null)){
+                while(c.moveToNext())if(request.account.equalsIgnoreCase(c.getString(1))){if(account!=-1){account=-1;break;}account=c.getLong(0);}
             }
             if(account<0){listener.onFinished(false,"Відкрий Фінанси у Джарвісі та додай рахунок або вкажи його назву в команді.");return;}
             if(!ledger.currency(account).equals("UAH")){listener.onFinished(false,"Голосовий запис гривень потребує рахунку UAH.");return;}
             if(request.category.equals("борг")||request.category.equals("крипта")){
                 listener.onFinished(false,"Для боргів та активів потрібен окремий тип обліку. Запис не створено.");return;
             }
-            ledger.record(java.util.UUID.randomUUID().toString(),account,FinanceLedger.minor(request.amount),
-                request.kind==FinanceVoiceCommands.Kind.EXPENSE?"expense":"income",request.category,utterance,System.currentTimeMillis());
-            listener.onFinished(true,"✅ "+request.amount+" ₴ · "+request.category+" · сьогодні. Записано у Джарвісі.");
+            ledger.record(commandId,account,FinanceLedger.minor(request.amount),
+                request.kind==FinanceVoiceCommands.Kind.EXPENSE?"expense":"income",request.category,utterance,capturedAt);
+            String reply="✅ "+request.amount+" ₴ · "+request.category+" · "+java.time.Instant.ofEpochMilli(capturedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate()+". Записано у Джарвісі.";
+            ledger.receipt(commandId,utterance,reply);db.setTransactionSuccessful();
+            }finally{db.endTransaction();}
+            listener.onFinished(true,ledger.receipt(commandId,utterance));
         }catch(RuntimeException e){listener.onFinished(false,"Не вдалося зберегти фінансовий запис.");}
     }
 }

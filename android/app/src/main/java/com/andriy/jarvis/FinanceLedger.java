@@ -8,19 +8,69 @@ import java.util.UUID;
 
 /** Local ledger. Amounts are integer minor units; transfers commit atomically. */
 public final class FinanceLedger extends SQLiteOpenHelper {
-    public FinanceLedger(Context c){super(c.getApplicationContext(),"jarvis-finance.db",null,2);}
+    public FinanceLedger(Context c){super(c.getApplicationContext(),"jarvis-finance.db",null,3);}
     public void onConfigure(SQLiteDatabase db){db.setForeignKeyConstraintsEnabled(true);}
     public void onCreate(SQLiteDatabase db){
         db.execSQL("CREATE TABLE accounts(id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL, currency TEXT NOT NULL, opening INTEGER)");
         db.execSQL("CREATE TABLE entries(id TEXT PRIMARY KEY, account INTEGER NOT NULL REFERENCES accounts(id), amount INTEGER NOT NULL, category TEXT NOT NULL, note TEXT NOT NULL, happened INTEGER NOT NULL, kind TEXT NOT NULL, group_id TEXT, deleted INTEGER NOT NULL DEFAULT 0)");
         db.execSQL("CREATE INDEX entries_date ON entries(happened)");
         createPlanning(db);
+        createSettlements(db);
     }
     private void createPlanning(SQLiteDatabase db){
         db.execSQL("CREATE TABLE plans(id TEXT PRIMARY KEY, type TEXT NOT NULL, name TEXT NOT NULL, currency TEXT NOT NULL, amount INTEGER NOT NULL CHECK(amount>0), progress INTEGER NOT NULL DEFAULT 0 CHECK(progress>=0), due TEXT NOT NULL, category TEXT NOT NULL)");
         db.execSQL("CREATE TABLE audit(id INTEGER PRIMARY KEY, entry_id TEXT NOT NULL, event TEXT NOT NULL, happened INTEGER NOT NULL, previous_amount INTEGER)");
     }
-    public void onUpgrade(SQLiteDatabase db,int old,int next){if(old<2)createPlanning(db);}
+    public void onUpgrade(SQLiteDatabase db,int old,int next){if(old<2)createPlanning(db);if(old<3)createSettlements(db);}
+    private void createSettlements(SQLiteDatabase db){
+        db.execSQL("CREATE TABLE allocations(id TEXT PRIMARY KEY, plan TEXT NOT NULL REFERENCES plans(id), account INTEGER NOT NULL REFERENCES accounts(id), amount INTEGER NOT NULL CHECK(amount>0))");
+        db.execSQL("CREATE TABLE settings(name TEXT PRIMARY KEY,value TEXT NOT NULL)");
+        db.execSQL("CREATE TABLE receipts(id TEXT PRIMARY KEY, utterance TEXT NOT NULL, reply TEXT NOT NULL)");
+        db.execSQL("ALTER TABLE plans ADD COLUMN interval_months INTEGER NOT NULL DEFAULT 0");
+    }
+    public long balance(long account){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT a.opening+COALESCE(SUM(CASE WHEN e.deleted=0 THEN e.amount ELSE 0 END),0) FROM accounts a LEFT JOIN entries e ON a.id=e.account WHERE a.id=? GROUP BY a.id",new String[]{""+account})){
+            if(!c.moveToFirst()||c.isNull(0))throw new IllegalArgumentException("Спочатку звір залишок рахунку");return c.getLong(0);
+        }
+    }
+    public long available(long account){
+        long total=balance(account);try(Cursor c=getReadableDatabase().rawQuery("SELECT COALESCE(SUM(amount),0) FROM allocations WHERE account=?",new String[]{""+account})){c.moveToFirst();return Math.subtractExact(total,c.getLong(0));}
+    }
+    public void settle(String id,long account,String value){
+        long amount=minor(value);if(amount<=0)throw new IllegalArgumentException("Вкажи додатну суму");
+        SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{
+            try(Cursor c=db.rawQuery("SELECT type,name,currency,amount,progress,due,category,interval_months FROM plans WHERE id=?",new String[]{id})){
+                if(!c.moveToFirst())throw new IllegalArgumentException("План не знайдено");
+                String type=c.getString(0);if(type.equals("budget"))throw new IllegalArgumentException("Бюджет не потребує внесків");
+                if(!currency(account).equals(c.getString(2)))throw new IllegalArgumentException("Валюти рахунку та плану мають збігатися");
+                long left=Math.subtractExact(c.getLong(3),c.getLong(4));if(amount>left)throw new IllegalArgumentException("Сума перевищує залишок плану");
+                if(type.equals("goal")){
+                    if(amount>available(account))throw new IllegalArgumentException("Недостатньо незарезервованих коштів");
+                    db.execSQL("INSERT INTO allocations VALUES(?,?,?,?)",new Object[]{UUID.randomUUID().toString(),id,account,amount});
+                }else{
+                    String kind=type.equals("payment")?"expense":"debt";
+                    insert(db,UUID.randomUUID().toString(),account,type.equals("owed")?amount:-amount,kind,c.getString(6),c.getString(1),System.currentTimeMillis(),"plan:"+id);
+                }
+                long progress=Math.addExact(c.getLong(4),amount);
+                if(type.equals("payment")&&progress==c.getLong(3)&&c.getInt(7)>0&&!c.getString(5).isEmpty()){
+                    db.execSQL("UPDATE plans SET progress=0,due=? WHERE id=?",new Object[]{java.time.LocalDate.parse(c.getString(5)).plusMonths(c.getInt(7)).toString(),id});
+                }else db.execSQL("UPDATE plans SET progress=? WHERE id=?",new Object[]{progress,id});
+            }db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+    }
+    public void recurrence(String id,int months){
+        if(months<0||months>120)throw new IllegalArgumentException("Інтервал: 0–120 місяців");
+        getWritableDatabase().execSQL("UPDATE plans SET interval_months=? WHERE id=? AND type='payment'",new Object[]{months,id});
+    }
+    public void deletePlan(String id){
+        SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{
+            db.delete("allocations","plan=?",new String[]{id});db.delete("plans","id=?",new String[]{id});db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+    }
+    public void setSetting(String key,String value){ContentValues v=new ContentValues();v.put("name",key);v.put("value",value);getWritableDatabase().insertWithOnConflict("settings",null,v,SQLiteDatabase.CONFLICT_REPLACE);}
+    public String setting(String key,String fallback){try(Cursor c=getReadableDatabase().rawQuery("SELECT value FROM settings WHERE name=?",new String[]{key})){return c.moveToFirst()?c.getString(0):fallback;}}
+    public String receipt(String id,String utterance){try(Cursor c=getReadableDatabase().rawQuery("SELECT utterance,reply FROM receipts WHERE id=?",new String[]{id})){if(!c.moveToFirst())return null;if(!c.getString(0).equals(utterance))throw new IllegalArgumentException("Конфлікт ідентифікатора команди");return c.getString(1);}}
+    public void receipt(String id,String utterance,String reply){getWritableDatabase().execSQL("INSERT INTO receipts VALUES(?,?,?)",new Object[]{id,utterance,reply});}
     public static long minor(String s){
         try{return new BigDecimal(s.trim().replace(" ","").replace(',','.')).movePointRight(2).longValueExact();}
         catch(RuntimeException e){throw new IllegalArgumentException("Вкажи точну суму, максимум дві цифри після коми");}
@@ -55,6 +105,9 @@ public final class FinanceLedger extends SQLiteOpenHelper {
     }
     public String currency(long account){try(Cursor c=getReadableDatabase().rawQuery("SELECT currency FROM accounts WHERE id=?",new String[]{""+account})){if(!c.moveToFirst())throw new IllegalArgumentException("Рахунок не знайдено");return c.getString(0);}}
     public void remove(String id){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT group_id FROM entries WHERE id=?",new String[]{id})){
+            if(c.moveToFirst()&&c.getString(0)!=null&&c.getString(0).startsWith("plan:"))throw new IllegalArgumentException("Це погашення плану. Видалення потребує звірки прогресу.");
+        }
         getWritableDatabase().execSQL("UPDATE entries SET deleted=1 WHERE id=? OR group_id=(SELECT group_id FROM entries WHERE id=?)",new Object[]{id,id});
     }
     public void plan(String type,String name,String currency,String amount,String due,String category){
@@ -67,8 +120,8 @@ public final class FinanceLedger extends SQLiteOpenHelper {
     public void edit(String id,String amount,String category){
         long value=minor(amount);if(value<=0||category.trim().isEmpty())throw new IllegalArgumentException("Перевір суму й категорію");
         SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{
-            try(Cursor c=db.rawQuery("SELECT amount,kind FROM entries WHERE id=? AND deleted=0",new String[]{id})){
-                if(!c.moveToFirst()||c.getString(1).equals("transfer"))throw new IllegalArgumentException("Переказ редагується через скасування обох сторін і новий запис");
+            try(Cursor c=db.rawQuery("SELECT amount,kind,group_id FROM entries WHERE id=? AND deleted=0",new String[]{id})){
+                if(!c.moveToFirst()||(c.getString(2)!=null&&c.getString(2).startsWith("plan:"))||!java.util.Arrays.asList("expense","income").contains(c.getString(1)))throw new IllegalArgumentException("Переказ редагується через скасування обох сторін і новий запис");
                 db.execSQL("INSERT INTO audit(entry_id,event,happened,previous_amount) VALUES(?,?,?,?)",new Object[]{id,"edit",System.currentTimeMillis(),c.getLong(0)});
                 db.execSQL("UPDATE entries SET amount=?,category=? WHERE id=?",new Object[]{c.getLong(0)<0?-value:value,category,id});
             }db.setTransactionSuccessful();
@@ -84,7 +137,7 @@ public final class FinanceLedger extends SQLiteOpenHelper {
     public String monthlyReport(){
         long start=java.time.LocalDate.now().withDayOfMonth(1).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
         StringBuilder b=new StringBuilder("Поточний місяць\n");
-        try(Cursor c=getReadableDatabase().rawQuery("SELECT a.currency,e.kind,e.category,SUM(e.amount) FROM entries e JOIN accounts a ON a.id=e.account WHERE e.deleted=0 AND e.kind!='transfer' AND e.happened>=? GROUP BY a.currency,e.kind,e.category ORDER BY ABS(SUM(e.amount)) DESC",new String[]{""+start})){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT a.currency,e.kind,e.category,SUM(e.amount) FROM entries e JOIN accounts a ON a.id=e.account WHERE e.deleted=0 AND e.kind IN ('expense','income') AND e.happened>=? GROUP BY a.currency,e.kind,e.category ORDER BY ABS(SUM(e.amount)) DESC",new String[]{""+start})){
             while(c.moveToNext())b.append(c.getString(2)).append(" · ").append(money(c.getLong(3))).append(" ").append(c.getString(0)).append("\n");
         }return b.toString();
     }
@@ -93,7 +146,7 @@ public final class FinanceLedger extends SQLiteOpenHelper {
         try(Cursor c=getReadableDatabase().rawQuery("SELECT a.name,a.currency,a.opening,COALESCE(SUM(CASE WHEN e.deleted=0 THEN e.amount ELSE 0 END),0) FROM accounts a LEFT JOIN entries e ON e.account=a.id GROUP BY a.id",null)){
             while(c.moveToNext())out.append(c.getString(0)).append(": ").append(c.isNull(2)?"залишок невідомий":money(Math.addExact(c.getLong(2),c.getLong(3)))+" "+c.getString(1)).append("\n");
         }
-        try(Cursor c=getReadableDatabase().rawQuery("SELECT a.currency,e.kind,SUM(e.amount) FROM entries e JOIN accounts a ON a.id=e.account WHERE e.deleted=0 AND e.kind!='transfer' GROUP BY a.currency,e.kind",null)){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT a.currency,e.kind,SUM(e.amount) FROM entries e JOIN accounts a ON a.id=e.account WHERE e.deleted=0 AND e.kind IN ('expense','income') GROUP BY a.currency,e.kind",null)){
             while(c.moveToNext())out.append(c.getString(1).equals("income")?"Доходи: ":"Витрати: ").append(money(c.getLong(2))).append(" ").append(c.getString(0)).append("\n");
         }
         return out.length()==0?"Додай перший рахунок. Невідомий залишок можна пропустити.":out.toString();
