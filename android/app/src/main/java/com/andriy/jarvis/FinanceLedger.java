@@ -124,6 +124,12 @@ public final class FinanceLedger extends SQLiteOpenHelper {
                     if(!p.moveToFirst()||p.getLong(0)!=c.getLong(2)||!dueAfter.equals(p.getString(1)))
                         throw new IllegalArgumentException("План змінився після внеску; потрібна ручна звірка");
                 }
+                try(Cursor refunds=db.rawQuery(
+                    "SELECT 1 FROM entries WHERE kind='refund' AND deleted=0 AND note=? LIMIT 1",
+                    new String[]{"Повернення:"+entryId})){
+                    if(refunds.moveToFirst())throw new IllegalArgumentException(
+                        "Спочатку скасуй пов’язані повернення за цей платіж");
+                }
                 db.execSQL("UPDATE entries SET deleted=1 WHERE id=?",new Object[]{entryId});
                 db.execSQL("UPDATE plans SET progress=?,due=? WHERE id=?",new Object[]{c.getLong(1),dueBefore,planId});
                 db.execSQL("UPDATE settlement_history SET reversed=1 WHERE entry_id=?",new Object[]{entryId});
@@ -138,6 +144,11 @@ public final class FinanceLedger extends SQLiteOpenHelper {
             long reserved;
             try(Cursor c=db.rawQuery("SELECT COALESCE(SUM(amount),0) FROM allocations WHERE plan=? AND account=?",new String[]{planId,""+account})){
                 c.moveToFirst();reserved=c.getLong(0);
+            }
+            try(Cursor p=db.rawQuery("SELECT progress,currency FROM plans WHERE id=? AND type='goal'",new String[]{planId})){
+                if(!p.moveToFirst())throw new IllegalArgumentException("Ціль не знайдено");
+                if(!p.getString(1).equals(currency(account)))throw new IllegalArgumentException("Валюта цілі й рахунку відрізняється");
+                if(remaining>p.getLong(0))throw new IllegalArgumentException("Резерв перевищує виконання цілі");
             }
             if(remaining>reserved)throw new IllegalArgumentException("Не можна звільнити більше за резерв");
             long original=remaining;
@@ -155,7 +166,12 @@ public final class FinanceLedger extends SQLiteOpenHelper {
     }
     public void deletePlan(String id){
         SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{
-            db.delete("allocations","plan=?",new String[]{id});db.delete("plans","id=?",new String[]{id});db.setTransactionSuccessful();
+            try(Cursor c=db.rawQuery("SELECT 1 FROM settlement_history WHERE plan_id=? AND reversed=0 LIMIT 1",new String[]{id})){
+                if(c.moveToFirst())throw new IllegalArgumentException(
+                    "Цей план має проведені платежі. Спочатку скасуй їх із вкладки «Операції».");
+            }
+            db.delete("allocations","plan=?",new String[]{id});
+            db.delete("plans","id=?",new String[]{id});db.setTransactionSuccessful();
         }finally{db.endTransaction();}
     }
     public void setSetting(String key,String value){ContentValues v=new ContentValues();v.put("name",key);v.put("value",value);getWritableDatabase().insertWithOnConflict("settings",null,v,SQLiteDatabase.CONFLICT_REPLACE);}
@@ -271,7 +287,34 @@ public final class FinanceLedger extends SQLiteOpenHelper {
             }db.setTransactionSuccessful();
         }finally{db.endTransaction();}
     }
-    public void restore(String id){getWritableDatabase().execSQL("UPDATE entries SET deleted=0 WHERE id=? OR group_id=(SELECT group_id FROM entries WHERE id=?)",new Object[]{id,id});}
+    /** Undo a deleted transaction only when this does not break linked refund constraints. */
+    public void restore(String id){
+        SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{
+            try(Cursor c=db.rawQuery("SELECT kind,note,group_id,amount,deleted FROM entries WHERE id=?",new String[]{id})){
+                if(!c.moveToFirst()||c.getInt(4)==0)throw new IllegalArgumentException("Видалену операцію не знайдено");
+                String group=c.getString(2);
+                if(group!=null&&group.startsWith("plan:"))
+                    throw new IllegalArgumentException("Проведення плану відновлюється тільки через підтвердження нового внеску");
+                if("refund".equals(c.getString(0))){
+                    String note=c.getString(1);
+                    if(!note.startsWith("Повернення:"))throw new IllegalArgumentException("Невідоме походження повернення");
+                    String originalId=note.substring("Повернення:".length());
+                    try(Cursor original=db.rawQuery("SELECT amount FROM entries WHERE id=? AND kind='expense' AND deleted=0",new String[]{originalId})){
+                        if(!original.moveToFirst())throw new IllegalArgumentException("Спершу віднови початкову покупку");
+                        long alreadyRefunded;
+                        try(Cursor used=db.rawQuery("SELECT COALESCE(SUM(amount),0) FROM entries WHERE kind='refund' AND deleted=0 AND note=?",new String[]{note})){
+                            used.moveToFirst();alreadyRefunded=used.getLong(0);
+                        }
+                        if(Math.addExact(alreadyRefunded,c.getLong(3))>Math.negateExact(original.getLong(0)))
+                            throw new IllegalArgumentException("Відновлене повернення перевищить суму покупки");
+                    }
+                }
+                if(group!=null)db.execSQL("UPDATE entries SET deleted=0 WHERE group_id=?",new Object[]{group});
+                else db.execSQL("UPDATE entries SET deleted=0 WHERE id=?",new Object[]{id});
+            }
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+    }
     public String csv(){
         StringBuilder b=new StringBuilder("id,date,type,amount,currency,account,category,note,deleted\n");
         try(Cursor c=getReadableDatabase().rawQuery("SELECT e.id,e.happened,e.kind,e.amount,a.currency,a.name,e.category,e.note,e.deleted FROM entries e JOIN accounts a ON a.id=e.account ORDER BY e.happened",null)){
