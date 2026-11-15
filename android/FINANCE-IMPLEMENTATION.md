@@ -31,8 +31,8 @@ Branch: `feature/finance-local-ledger` · Draft PR #4 · Pixel is the sole autho
 - [x] Python SQLite schema, FK, cutoff, settlement, cash-flow, reconciliation, alias, crypto and refund contract tests.
 - [x] Pure Java Ukrainian voice command/query matcher, amount-correction, number words, slash aliases, batch, month-end recurrence and FIFO cost basis tests.
 - [x] Whole Android `:app:compileDebugJavaWithJavac` (NO APK), including SQLCipher and Wear OS libraries.
-- [x] Verified non-APK GitHub Actions run #231 (2026-11-15) — parser/schema jobs and Android compile job successful:
-  https://github.com/andriy2008-max/Jarvis-/actions/runs/43755092451
+- [x] Verified non-APK GitHub Actions run #234 (2026-11-15) — parser/schema jobs and Android compile job successful:
+  https://github.com/andriy2008-max/Jarvis-/actions/runs/43755281158
 - [ ] No real Pixel, Galaxy Watch7, Android Keystore restore, Doze/Battery Saver, call microphone or encrypted migration runtime test. Real-world functionality is **not** confirmed solely by passing CI.
 
 ## Remaining limitations requiring devices, permissions, providers or decisions
