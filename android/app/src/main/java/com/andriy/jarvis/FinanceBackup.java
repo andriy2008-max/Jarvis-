@@ -32,18 +32,41 @@ public final class FinanceBackup {
         byte[] payload=cipher(Cipher.ENCRYPT_MODE,password,salt,iv).doFinal(root.toString().getBytes(StandardCharsets.UTF_8));
         java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream();out.write(new byte[]{'J','F','B',5});out.write(salt);out.write(iv);out.write(payload);return out.toByteArray();
     }
-    public static void restore(FinanceLedger ledger,char[] password,byte[] bytes)throws Exception{
-        if(bytes.length<48||bytes.length>20*1024*1024||bytes[0]!='J'||bytes[1]!='F'||bytes[2]!='B'||(bytes[3]!=2&&bytes[3]!=3&&bytes[3]!=4&&bytes[3]!=5))throw new IllegalArgumentException("Непідтримувана резервна копія");
-        JSONObject root=new JSONObject(new String(cipher(Cipher.DECRYPT_MODE,password,Arrays.copyOfRange(bytes,4,20),Arrays.copyOfRange(bytes,20,32)).doFinal(Arrays.copyOfRange(bytes,32,bytes.length)),StandardCharsets.UTF_8));
-        if(root.getInt("version")!=2&&root.getInt("version")!=3&&root.getInt("version")!=4&&root.getInt("version")!=5)throw new IllegalArgumentException("Версія копії не підтримується");
-        if(root.getInt("version")==2){root.put("allocations",new JSONArray());root.put("settings",new JSONArray());root.put("receipts",new JSONArray());}
-        if(root.getInt("version")<5){
+    /** Authenticate and validate all required tables before any snapshot is replaced. */
+    public static void validate(char[] password,byte[] bytes)throws Exception{
+        parseAndCheck(password,bytes);
+    }
+    private static JSONObject parseAndCheck(char[] password,byte[] bytes)throws Exception{
+        if(bytes==null||bytes.length<48||bytes.length>20*1024*1024||
+           bytes[0]!='J'||bytes[1]!='F'||bytes[2]!='B'||
+           (bytes[3]!=2&&bytes[3]!=3&&bytes[3]!=4&&bytes[3]!=5))
+            throw new IllegalArgumentException("Непідтримувана резервна копія");
+        byte[] decoded=cipher(Cipher.DECRYPT_MODE,password,Arrays.copyOfRange(bytes,4,20),
+            Arrays.copyOfRange(bytes,20,32)).doFinal(Arrays.copyOfRange(bytes,32,bytes.length));
+        JSONObject root;
+        try{root=new JSONObject(new String(decoded,StandardCharsets.UTF_8));}
+        finally{Arrays.fill(decoded,(byte)0);}
+        int version=root.getInt("version");
+        if(version!=2&&version!=3&&version!=4&&version!=5)
+            throw new IllegalArgumentException("Версія копії не підтримується");
+        // Reject mismatched headers instead of accepting a misleading container version.
+        if(version!=bytes[3])throw new IllegalArgumentException("Заголовок копії не збігається з даними");
+        if(version==2){
+            root.put("allocations",new JSONArray());
+            root.put("settings",new JSONArray());
+            root.put("receipts",new JSONArray());
+        }
+        if(version<5){
             root.put("fx_transfers",new JSONArray());
             root.put("crypto_positions",new JSONArray());
             root.put("settlement_history",new JSONArray());
         }
         if(!root.has("finance_shifts"))root.put("finance_shifts",new JSONArray());
         for(String table:TABLES)root.getJSONArray(table);
+        return root;
+    }
+    public static void restore(FinanceLedger ledger,char[] password,byte[] bytes)throws Exception{
+        JSONObject root=parseAndCheck(password,bytes);
         SQLiteDatabase db=ledger.getWritableDatabase();db.beginTransaction();try{
             db.delete("settlement_history",null,null);db.delete("fx_transfers",null,null);db.delete("crypto_positions",null,null);db.delete("finance_shifts",null,null);
             db.delete("allocations",null,null);db.delete("settings",null,null);db.delete("receipts",null,null);db.delete("audit",null,null);db.delete("entries",null,null);db.delete("plans",null,null);db.delete("accounts",null,null);
