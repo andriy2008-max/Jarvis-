@@ -38,6 +38,7 @@ public final class FinanceLedger extends SQLiteOpenHelper {
     private void createAdvanced(SQLiteDatabase db){
         db.execSQL("CREATE TABLE fx_transfers(id TEXT PRIMARY KEY, from_account INTEGER NOT NULL REFERENCES accounts(id), to_account INTEGER NOT NULL REFERENCES accounts(id), from_minor INTEGER NOT NULL CHECK(from_minor>0), to_minor INTEGER NOT NULL CHECK(to_minor>0), fee_minor INTEGER NOT NULL CHECK(fee_minor>=0), happened INTEGER NOT NULL)");
         db.execSQL("CREATE TABLE crypto_positions(symbol TEXT PRIMARY KEY, quantity TEXT NOT NULL, value_uah TEXT, valued_on TEXT)");
+        db.execSQL("CREATE TABLE finance_shifts(id TEXT PRIMARY KEY, label TEXT NOT NULL, captured INTEGER NOT NULL, hours TEXT)");
         db.execSQL("CREATE TABLE settlement_history(id INTEGER PRIMARY KEY AUTOINCREMENT, entry_id TEXT UNIQUE NOT NULL REFERENCES entries(id), plan_id TEXT NOT NULL, before_progress INTEGER NOT NULL, after_progress INTEGER NOT NULL, before_due TEXT NOT NULL, after_due TEXT NOT NULL, reversed INTEGER NOT NULL DEFAULT 0)");
         db.execSQL("ALTER TABLE plans ADD COLUMN budget_period TEXT NOT NULL DEFAULT 'month'");
         db.execSQL("ALTER TABLE plans ADD COLUMN recurrence_unit TEXT NOT NULL DEFAULT 'month'");
