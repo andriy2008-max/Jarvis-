@@ -2,7 +2,7 @@ package com.andriy.jarvis;
 
 import android.content.Context;
 import android.database.Cursor;
-import android.database.sqlite.SQLiteDatabase;
+import net.zetetic.database.sqlcipher.SQLiteDatabase;
 
 /** Confirmed edits only: correct the last entry from the same phone/watch source. */
 public final class FinanceCorrectionController {
