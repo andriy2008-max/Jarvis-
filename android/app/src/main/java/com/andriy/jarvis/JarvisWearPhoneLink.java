@@ -334,7 +334,9 @@ public final class JarvisWearPhoneLink {
         if(JarvisWearProtocol.SYNC.equals(type)&&!busy()){
             String queued=FinanceWatchQueue.first(context);
             if(!FinanceWatchQueue.firstId(context).isEmpty()&&
-                (FinanceVoiceCommands.parse(queued)!=null || FinanceVoiceFollowups.parse(queued)!=null || FinanceBatchCommands.looksLikeBatch(queued))){
+                (FinanceVoiceCommands.parse(queued)!=null || FinanceVoiceFollowups.parse(queued)!=null || FinanceBatchCommands.looksLikeBatch(queued) ||
+                FinanceVoiceClarification.maybeStart(queued) ||
+                (FinanceWatchClarification.pending(context)&&FinanceVoiceClarification.maybeReply(queued)))){
                 send(JarvisWearProtocol.ASSISTANT,queued,cb);return;
             }
         }
@@ -349,7 +351,9 @@ public final class JarvisWearPhoneLink {
             if (JarvisWearProtocol.SYNC.equals(pendingType)) clearPending();
         }
         final boolean financeRequest=(JarvisWearProtocol.ASSISTANT.equals(type)||JarvisWearProtocol.COMMAND.equals(type))&&
-            (FinanceVoiceCommands.parse(text)!=null || FinanceVoiceFollowups.parse(text)!=null || FinanceBatchCommands.looksLikeBatch(text));
+            (FinanceVoiceCommands.parse(text)!=null || FinanceVoiceFollowups.parse(text)!=null || FinanceBatchCommands.looksLikeBatch(text) ||
+             FinanceVoiceClarification.maybeStart(text) ||
+             (FinanceWatchClarification.pending(context)&&FinanceVoiceClarification.maybeReply(text)));
         if(financeRequest && !FinanceWatchQueue.firstId(context).isEmpty() &&
             !text.equals(FinanceWatchQueue.first(context))){
             boolean added=FinanceWatchQueue.add(context,text);
@@ -469,7 +473,8 @@ public final class JarvisWearPhoneLink {
         try {
             JSONObject data = new JSONObject(new String(event.getData(),StandardCharsets.UTF_8));
             if (!pendingId.equals(data.optString("id"))) return;
-            if(pendingId.equals(FinanceWatchQueue.firstId(context))){
+            final boolean financeAcknowledged=pendingId.equals(FinanceWatchQueue.firstId(context));
+            if(financeAcknowledged){
                 if(data.optBoolean("ok",false))FinanceWatchQueue.acknowledge(context,pendingId);
                 else FinanceWatchQueue.rejected(context,pendingId);
             }
@@ -477,6 +482,7 @@ public final class JarvisWearPhoneLink {
             final Callback cb = pendingCallback;
             final boolean ok = data.optBoolean("ok",false);
             final String detail = data.optString("detail","Телефон не повернув результат.");
+            if(financeAcknowledged&&ok)FinanceWatchClarification.observe(context,detail);
             pendingImageId=data.optString("image_id","");
             if(!JarvisWearProtocol.validId(pendingImageId))pendingImageId="";
             pendingImageNode=pendingImageId.isEmpty()?"":event.getSourceNodeId();
