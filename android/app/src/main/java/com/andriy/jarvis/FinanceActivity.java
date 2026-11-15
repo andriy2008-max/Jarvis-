@@ -9,7 +9,7 @@ import java.util.*;
 
 /** Native finance screen backed by the same ledger as voice commands. */
 public final class FinanceActivity extends Activity {
-    private FinanceLedger ledger; private LinearLayout body; private String tab="Огляд"; private String query=""; private boolean unlocked=false,authenticating=false,pickingDocument=false,backupRunning=false; private String lastDeleted; private char[] backupPassword;
+    private FinanceLedger ledger; private LinearLayout body; private String tab="Огляд"; private String query="",filterKind="",filterPeriod="all"; private long filterAccount=-1,filterMin=0,filterMax=Long.MAX_VALUE; private boolean unlocked=false,authenticating=false,pickingDocument=false,backupRunning=false; private String lastDeleted; private char[] backupPassword;
     public void onCreate(Bundle state){super.onCreate(state);
         getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
         ledger=new FinanceLedger(this);authenticate();
@@ -136,11 +136,38 @@ public final class FinanceActivity extends Activity {
         button("Переказ",()->pickAccount(from->pickAccount(to->form("Переказ",new String[]{"Сума"},v->ledger.transfer(from,to,FinanceLedger.minor(v[0]))))));
         return;
         }
-        button("Всі операції",()->{query="";show();});
+        button("Скинути фільтри",()->{query="";filterKind="";filterPeriod="all";filterAccount=-1;filterMin=0;filterMax=Long.MAX_VALUE;show();});
+        button("Рахунок для фільтру",()->pickAccount(id->{filterAccount=id;show();}));
+        button("Тип операції: "+(filterKind.isEmpty()?"усі":filterKind),()->{
+            String[] labels={"Усі","Витрати","Доходи","Перекази","Повернення","Борги"};
+            String[] keys={"","expense","income","transfer","refund","debt"};
+            new AlertDialog.Builder(this).setItems(labels,(dialog,index)->{filterKind=keys[index];show();}).show();
+        });
+        button("Період: "+filterPeriod,()->{
+            String[] labels={"Увесь час","Сьогодні","Цей тиждень","Цей місяць","Попередній місяць"};
+            String[] keys={"all","today","week","month","previous_month"};
+            new AlertDialog.Builder(this).setItems(labels,(dialog,index)->{filterPeriod=keys[index];show();}).show();
+        });
+        button("Фільтр сум",()->form("Межі суми (можна пропустити)",new String[]{"Від, у валюті рахунку","До, у валюті рахунку"},
+            v->{filterMin=v[0].trim().isEmpty()?0:FinanceLedger.minor(v[0]);
+                filterMax=v[1].trim().isEmpty()?Long.MAX_VALUE:FinanceLedger.minor(v[1]);
+                if(filterMin<0||filterMax<filterMin)throw new IllegalArgumentException("Перевір діапазон сум");
+            }));
         button("Пошук операцій",()->form("Пошук",new String[]{"Категорія або нотатка"},v->query=v[0]));
         if(lastDeleted!=null)button("Відновити останнє видалення",()->{ledger.restore(lastDeleted);lastDeleted=null;show();});
         text("Операції · натисни для дій");
-        try(Cursor c=ledger.getReadableDatabase().rawQuery("SELECT e.id,e.amount,a.currency,e.category,a.name,e.happened,e.kind,e.group_id FROM entries e JOIN accounts a ON a.id=e.account WHERE e.deleted=0 AND (e.category LIKE ? OR e.note LIKE ?) ORDER BY e.happened DESC LIMIT 100",new String[]{"%"+query+"%","%"+query+"%"})){
+        long periodFrom=filterPeriod.equals("all")?0:FinanceAnalytics.begin(filterPeriod);
+        long periodTo=filterPeriod.equals("all")?Long.MAX_VALUE:FinanceAnalytics.end(filterPeriod);
+        String sql="SELECT e.id,e.amount,a.currency,e.category,a.name,e.happened,e.kind,e.group_id "+
+            "FROM entries e JOIN accounts a ON a.id=e.account WHERE e.deleted=0 "+
+            "AND (e.category LIKE ? OR e.note LIKE ? OR a.name LIKE ?) "+
+            "AND (?='' OR e.kind=?) AND (?=-1 OR e.account=?) "+
+            "AND e.happened>=? AND e.happened<? AND ABS(e.amount)>=? AND ABS(e.amount)<=? "+
+            "ORDER BY e.happened DESC LIMIT 100";
+        String[] args={"%"+query+"%","%"+query+"%","%"+query+"%",
+            filterKind,filterKind,""+filterAccount,""+filterAccount,""+periodFrom,""+periodTo,
+            ""+filterMin,""+filterMax};
+        try(Cursor c=ledger.getReadableDatabase().rawQuery(sql,args)){
             while(c.moveToNext()){
                 final String id=c.getString(0);String label=FinanceLedger.money(c.getLong(1))+" "+c.getString(2)+" · "+c.getString(3)+" · "+c.getString(4)+" · "+android.text.format.DateFormat.format("dd.MM.yyyy",c.getLong(5));
                 final String kind=c.getString(6),group=c.getString(7);
