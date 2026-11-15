@@ -9,7 +9,9 @@ public final class FinanceVoiceQueries {
     private FinanceVoiceQueries(){}
     private static String normalize(String voice){
         if(voice==null||voice.length()>240)return "";
-        return voice.toLowerCase(Locale.forLanguageTag("uk-UA")).trim()
+        String expanded=FinanceSlashCommands.expand(voice);
+        if(expanded==null)return "";
+        return expanded.toLowerCase(Locale.forLanguageTag("uk-UA")).trim()
             .replaceFirst("^(?:джарвіс|джарвис|jarvis)[,\\s:–—-]*","")
             .replaceAll("[?.!]+$","").trim();
     }
@@ -34,8 +36,8 @@ public final class FinanceVoiceQueries {
             String events=FinanceInsights.reminders(ledger);
             return events.isEmpty()?"Немає внесених найближчих платежів на 3 дні.":events;
         }
-        if(s.contains("бюджет"))return budgets(ledger);
-        if(s.equals("фінансовий звіт")||s.equals("звіт фінанси"))return ledger.monthlyReport();
+        if(s.contains("бюджет"))return FinanceAnalytics.budgets(ledger);
+        if(s.equals("фінансовий звіт")||s.equals("звіт фінанси"))return FinanceAnalytics.report(ledger,"month");
         if(s.contains("витрат")||s.contains("витратив"))return period(ledger,s,false);
         if(s.contains("заробив")||s.contains("отримав")||s.contains("доход")||s.contains("дохід"))return period(ledger,s,true);
         return ledger.report();
