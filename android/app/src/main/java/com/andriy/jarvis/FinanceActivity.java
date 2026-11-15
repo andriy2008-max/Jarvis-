@@ -64,6 +64,7 @@ public final class FinanceActivity extends Activity {
             button("Звіт: минулий місяць",()->showInfo(FinanceAnalytics.report(ledger,"previous_month")));
             text(FinanceAnalytics.budgets(ledger));
             text(FinanceAnalytics.knownPayments(ledger));
+            text(FinanceHealth.report(ledger));
             text(FinanceInsights.report(ledger));
             text(FinanceFx.valuation(ledger));
             text(FinanceAssets.positions(ledger));
