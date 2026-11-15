@@ -61,7 +61,7 @@ public final class FinanceVoiceQueries {
         return result.toString();
     }
     private static String tips(FinanceLedger ledger,String words){
-        Period selected=periodFor(words);
+        Period selected=periodFor(words,false);
         long from=selected.from,to=selected.to;
         StringBuilder out=new StringBuilder("Чайові за вибраний період:\n");boolean any=false;
         try(Cursor c=ledger.getReadableDatabase().rawQuery(
