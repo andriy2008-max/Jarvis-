@@ -4977,7 +4977,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if(voiceEnabled)speakReply(response);
             return;
         }
-        if (!isWatchDevice && FinanceVoiceCommands.parse(raw)!=null) {
+        if (!isWatchDevice && (FinanceVoiceCommands.parse(raw)!=null || FinanceVoiceFollowups.parse(raw)!=null)) {
             FinanceManagerController.start(this,raw,new FinanceManagerController.Listener(){
                 @Override public void onProgress(String detail){setStatus(detail);}
                 @Override public void onFinished(boolean ok,String detail){
