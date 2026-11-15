@@ -32,9 +32,7 @@ public final class FinanceManagerController {
             String previous=ledger.receipt(commandId,utterance);if(previous!=null){listener.onFinished(true,previous);return;}
             long account=-1;
             if(request.account==null)account=Long.parseLong(ledger.setting("default_account","-1"));
-            else try(android.database.Cursor c=ledger.getReadableDatabase().rawQuery("SELECT id,name FROM accounts",null)){
-                while(c.moveToNext())if(request.account.equalsIgnoreCase(c.getString(1))){if(account!=-1){account=-1;break;}account=c.getLong(0);}
-            }
+            else account=ledger.resolveAccount(request.account);
             if(account<0){listener.onFinished(false,"Відкрий Фінанси у Джарвісі та додай рахунок або вкажи його назву в команді.");return;}
             if(!ledger.currency(account).equals("UAH")){listener.onFinished(false,"Голосовий запис гривень потребує рахунку UAH.");return;}
             if(request.category.equals("борг")||request.category.equals("крипта")){
@@ -53,6 +51,7 @@ public final class FinanceManagerController {
             db.setTransactionSuccessful();
             }finally{db.endTransaction();}
             listener.onFinished(true,ledger.receipt(commandId,utterance));
+        }catch(IllegalArgumentException e){listener.onFinished(false,e.getMessage());}
         }catch(RuntimeException e){listener.onFinished(false,"Не вдалося зберегти фінансовий запис.");}
     }
 }
