@@ -355,7 +355,7 @@ public final class JarvisWearPhoneLink {
         }
 
         final android.content.SharedPreferences financeQueue=context.getSharedPreferences("finance_watch_queue",Context.MODE_PRIVATE);
-        final boolean finance=(JarvisWearProtocol.ASSISTANT.equals(type)||JarvisWearProtocol.COMMAND.equals(type))&&FinanceVoiceCommands.parse(text)!=null;
+        final boolean finance=(JarvisWearProtocol.ASSISTANT.equals(type)||JarvisWearProtocol.COMMAND.equals(type))&&(FinanceVoiceCommands.parse(text)!=null || FinanceVoiceFollowups.parse(text)!=null);
         String savedFinanceId=financeQueue.getString("id","");
         if(finance&&!savedFinanceId.isEmpty()&&!text.equals(financeQueue.getString("text",""))){
             cb.finished(false,"Попередня фінансова команда ще не підтверджена. Повтори: "+financeQueue.getString("text",""));return;
