@@ -47,20 +47,14 @@ public final class FinanceCryptoTrades {
             db.execSQL("UPDATE crypto_positions SET quantity=? WHERE symbol=?",
                 new Object[]{after.toPlainString(),ticker});
             if(cashAccount>0){
-                long net=action.equals("buy")?-value:Math.subtractExact(value,feeMinor);
+                long net=action.equals("buy")?-value:value;
                 db.execSQL("INSERT INTO entries(id,account,amount,category,note,happened,kind,group_id) VALUES(?,?,?,?,?,?,?,?)",
                     new Object[]{id+":asset",cashAccount,net,"Криптоактиви",
                         action.equals("buy")?"Купівля "+ticker:"Продаж "+ticker,now,"asset",id});
-                if(action.equals("buy")&&feeMinor>0)db.execSQL(
+                if(feeMinor>0)db.execSQL(
                     "INSERT INTO entries(id,account,amount,category,note,happened,kind,group_id) VALUES(?,?,?,?,?,?,?,?)",
                     new Object[]{id+":fee",cashAccount,-feeMinor,"Комісії",
                         "Комісія криптоугоди "+ticker,now,"expense",id});
-                if(action.equals("sell")&&feeMinor>0)db.execSQL(
-                    "INSERT INTO entries(id,account,amount,category,note,happened,kind,group_id) VALUES(?,?,?,?,?,?,?,?)",
-                    new Object[]{id+":fee",cashAccount,-feeMinor,"Комісії",
-                        "Комісія криптоугоди "+ticker+" (утримана з виручки)",now,"memo_fee",id});
-                // For sales the credited amount is already net of fee, so memo_fee
-                // is explicitly excluded from income and cash-balance calculations.
             }
             db.setTransactionSuccessful();
         }finally{db.endTransaction();}
