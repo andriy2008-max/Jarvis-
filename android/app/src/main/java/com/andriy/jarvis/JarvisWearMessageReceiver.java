@@ -23,6 +23,14 @@ public final class JarvisWearMessageReceiver extends WearableListenerService {
         if(node==null || node.isEmpty())return;
         String action=request.optString("action","");
 
+        if((JarvisWearProtocol.ASSISTANT.equals(action)||JarvisWearProtocol.COMMAND.equals(action)) && FinanceVoiceQueries.matches(request.optString("text",""))){
+            try(FinanceLedger ledger=new FinanceLedger(this)){
+                sendReply(node,id,true,FinanceVoiceQueries.answer(ledger,request.optString("text","")),"",false,null);
+            }catch(Exception e){
+                sendReply(node,id,false,"Не вдалося отримати фінансовий звіт.","",false,null);
+            }
+            return;
+        }
         if((JarvisWearProtocol.ASSISTANT.equals(action)||JarvisWearProtocol.COMMAND.equals(action)) && FinanceVoiceCommands.parse(request.optString("text",""))!=null){
             FinanceManagerController.start(this,request.optString("text",""),node+":"+id,request.optLong("captured_at",System.currentTimeMillis()),new FinanceManagerController.Listener(){
                 public void onProgress(String detail){}
