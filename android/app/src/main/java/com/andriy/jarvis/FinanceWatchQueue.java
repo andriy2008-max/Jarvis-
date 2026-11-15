@@ -65,6 +65,11 @@ public final class FinanceWatchQueue {
         }
         return e.commit();
     }
+    /** A phone-side validation failure is final; do not block every later queued expense. */
+    public static synchronized boolean rejected(Context c,String id){
+        // Keep no private utterance outside the queue; the phone has not posted a record.
+        return acknowledge(c,id);
+    }
     public static synchronized String cancelLatestUnsent(Context c){
         SharedPreferences p=prefs(c);
         JSONArray pending=tail(p);
