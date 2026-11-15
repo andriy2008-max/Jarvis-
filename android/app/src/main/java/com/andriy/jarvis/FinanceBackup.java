@@ -12,7 +12,7 @@ import java.util.Arrays;
 
 /** Portable password-encrypted snapshots. Authentication precedes any database mutation. */
 public final class FinanceBackup {
-    private static final String[] TABLES={"accounts","entries","plans","audit","allocations","settings","receipts","fx_transfers","crypto_positions","settlement_history","finance_shifts"};
+    private static final String[] TABLES={"accounts","entries","plans","audit","allocations","settings","receipts","fx_transfers","crypto_positions","settlement_history","finance_shifts","finance_aliases"};
     private FinanceBackup(){}
     private static Cipher cipher(int mode,char[] password,byte[] salt,byte[] iv)throws Exception{
         if(password.length<10)throw new IllegalArgumentException("Пароль: щонайменше 10 символів");
@@ -62,13 +62,14 @@ public final class FinanceBackup {
             root.put("settlement_history",new JSONArray());
         }
         if(!root.has("finance_shifts"))root.put("finance_shifts",new JSONArray());
+        if(!root.has("finance_aliases"))root.put("finance_aliases",new JSONArray());
         for(String table:TABLES)root.getJSONArray(table);
         return root;
     }
     public static void restore(FinanceLedger ledger,char[] password,byte[] bytes)throws Exception{
         JSONObject root=parseAndCheck(password,bytes);
         SQLiteDatabase db=ledger.getWritableDatabase();db.beginTransaction();try{
-            db.delete("settlement_history",null,null);db.delete("fx_transfers",null,null);db.delete("crypto_positions",null,null);db.delete("finance_shifts",null,null);
+            db.delete("settlement_history",null,null);db.delete("fx_transfers",null,null);db.delete("crypto_positions",null,null);db.delete("finance_shifts",null,null);db.delete("finance_aliases",null,null);
             db.delete("allocations",null,null);db.delete("settings",null,null);db.delete("receipts",null,null);db.delete("audit",null,null);db.delete("entries",null,null);db.delete("plans",null,null);db.delete("accounts",null,null);
             for(String table:TABLES){JSONArray rows=root.getJSONArray(table);for(int i=0;i<rows.length();i++){
                 JSONObject row=rows.getJSONObject(i);ContentValues v=new ContentValues();java.util.Iterator<String> keys=row.keys();while(keys.hasNext()){String key=keys.next();Object value=row.get(key);if(value==JSONObject.NULL)v.putNull(key);else if(value instanceof Number)v.put(key,((Number)value).longValue());else v.put(key,value.toString());}db.insertOrThrow(table,null,v);
