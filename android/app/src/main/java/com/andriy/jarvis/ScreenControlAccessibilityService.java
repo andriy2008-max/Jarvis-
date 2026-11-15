@@ -755,8 +755,8 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     }
 
     /**
-     * Allow only the two owner-calibrated Bolt points and the explicitly
-     * requested Spotify Search point. Do not infer coordinates on new devices.
+     * Allow owner-calibrated Bolt/Spotify points, including the requested
+     * first song at the horizontal centre and Y=510.
      * Callback fires only after Android has completed or cancelled a gesture.
      */
     private boolean verifiedNamedPlaylistReady(String name) {
@@ -772,7 +772,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         boolean spotify="com.spotify.music".equals(packageName);
         boolean playlistPlay=spotify && x==977 && y==1291;
         boolean allowed=bolt ? ((x==333 && y==645) || (x==450 && y==520)) :
-            (spotify && ((x==403 && y==2211) || (x==490 && y==550) ||
+            (spotify && ((x==-1 && y==510) ||
                 (x==665 && y==2224) ||
                 (playlistPlay && verifiedPlaylistName!=null)));
         if(!allowed || !sessionActive || !trustedExternalApp(packageName) ||
@@ -790,8 +790,10 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             cb.finished(false,"Не вдалося визначити екран.");return;
         }
         display.getRealSize(size);
+        // -1 is the explicit Spotify first-row horizontal centre, not a raw X.
+        final int tapX=(spotify && x==-1 && y==510) ? size.x/2 : x;
         if(size.x<450 || size.y<size.x*1.6f ||
-           x<0 || y<0 || x>=size.x || y>=size.y) {
+           tapX<0 || y<0 || tapX>=size.x || y>=size.y) {
             cb.finished(false,"Невідповідна орієнтація або координати екрана.");
             return;
         }
@@ -801,7 +803,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         final Runnable restore;
         try {
             if(!bolt)FloatingJarvisService.avoidControl(
-                new Rect(x-24,y-24,x+24,y+24));
+                new Rect(tapX-24,y-24,tapX+24,y+24));
             restore=FloatingJarvisService.hideForGesture();
         }catch(RuntimeException overlayFailure) {
             android.util.Log.w("JARVIS_COORDINATES",
@@ -826,7 +828,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                         return;
                     }
                     Path path=new Path();
-                    path.moveTo(x,y);
+                    path.moveTo(tapX,y);
                     GestureDescription gesture=new GestureDescription.Builder()
                         .addStroke(new GestureDescription.StrokeDescription(path,0,90))
                         .build();
@@ -859,7 +861,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     }
 
     /**
-     * Coordinates open Spotify's keyboard, then Android's InputMethod bridge
+     * Text-labelled controls open Spotify's keyboard; the InputMethod bridge
      * inserts the spoken title in the focused Spotify editor. Never touches
      * passwords or editors belonging to another package.
      */
@@ -972,6 +974,55 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             return BoltStep.SUBMITTED;
         }catch(RuntimeException denied){
             return BoltStep.BLOCKED;
+        }
+    }
+
+    /** Submit once in Spotify's own editor, before selecting the first row. */
+    public static SpotifyStep spotifySubmitTrackSearch(String title) {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null || !s.sessionActive || !s.trustedExternalApp("com.spotify.music"))
+            return SpotifyStep.BLOCKED;
+        // Android 11+ exposes the editor's Search/Enter through Accessibility.
+        AccessibilityNodeInfo root=s.currentSpotifyRoot();
+        AccessibilityNodeInfo field=root==null?null:s.spotifySearchEditor(root);
+        if(android.os.Build.VERSION.SDK_INT>=30 && field!=null && field.isFocused() &&
+           SpotifyTrackSearchRules.exactSong(title,asString(field.getText())) &&
+           field.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.getId()))
+            return SpotifyStep.CLICKED;
+        if(android.os.Build.VERSION.SDK_INT<33)return SpotifyStep.WAIT;
+        try {
+            android.accessibilityservice.InputMethod input=s.getInputMethod();
+            if(input==null || !input.getCurrentInputStarted())return SpotifyStep.WAIT;
+            android.view.inputmethod.EditorInfo editor=input.getCurrentInputEditorInfo();
+            android.accessibilityservice.InputMethod.AccessibilityInputConnection conn=
+                input.getCurrentInputConnection();
+            if(editor==null || conn==null)return SpotifyStep.WAIT;
+            if(!"com.spotify.music".equals(editor.packageName))
+                return SpotifyStep.BLOCKED;
+            int type=editor.inputType;
+            int variation=type & InputType.TYPE_MASK_VARIATION;
+            if((type & InputType.TYPE_MASK_CLASS)!=InputType.TYPE_CLASS_TEXT ||
+               variation==InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+               variation==InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
+               variation==InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD)
+                return SpotifyStep.BLOCKED;
+            int action=editor.imeOptions &
+                android.view.inputmethod.EditorInfo.IME_MASK_ACTION;
+            if(action==android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH ||
+               action==android.view.inputmethod.EditorInfo.IME_ACTION_GO ||
+               action==android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                conn.performEditorAction(action);
+            } else {
+                // An editor with no Search/Go/Done exposes the conventional
+                // Enter key. Send one down/up pair, never a global click.
+                conn.sendKeyEvent(new android.view.KeyEvent(
+                    android.view.KeyEvent.ACTION_DOWN,android.view.KeyEvent.KEYCODE_ENTER));
+                conn.sendKeyEvent(new android.view.KeyEvent(
+                    android.view.KeyEvent.ACTION_UP,android.view.KeyEvent.KEYCODE_ENTER));
+            }
+            return SpotifyStep.CLICKED;
+        }catch(RuntimeException denied){
+            return SpotifyStep.BLOCKED;
         }
     }
 
@@ -2146,6 +2197,16 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         return service.tapSpotifyControl(target, playlist);
     }
 
+    private SpotifyStep spotifyClickWords(String... labels) {
+        if(!sessionActive || currentSpotifyRoot()==null)return SpotifyStep.WAIT;
+        for(String label:labels) {
+            if(currentSpotifyRoot()==null)return SpotifyStep.WAIT;
+            if(JarvisControlFeedback.successfulReply(clickNamed(label)))
+                return SpotifyStep.CLICKED;
+        }
+        return SpotifyStep.WAIT;
+    }
+
     /** Spotify global Search tab, explicitly on the Pixel; never on Wear.
      * First try the accessible tab; only if Android rejects ACTION_CLICK,
      * emulate a touch at the centre of a VISIBLE bottom Search label. */
@@ -2155,6 +2216,8 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         AccessibilityNodeInfo root=service.currentSpotifyRoot();
         if(root==null)return SpotifyStep.WAIT;
         if(service.spotifySearchEditor(root)!=null)return SpotifyStep.ALREADY;
+        SpotifyStep words=service.spotifyClickWords("Пошук","Search","Поиск");
+        if(words==SpotifyStep.CLICKED)return words;
         Rect frame=new Rect();root.getBoundsInScreen(frame);
         ArrayDeque<AccessibilityNodeInfo> nodes=new ArrayDeque<>();nodes.add(root);
         AccessibilityNodeInfo found=null;Rect labelBox=null;
@@ -2280,6 +2343,10 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             return field.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
                 ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
         }
+        SpotifyStep words=service.spotifyClickWords("Що ви хочете послухати?",
+            "Що хочеш послухати?","Що ти хочеш послухати?",
+            "What do you want to listen to?","Что хочешь послушать?");
+        if(words==SpotifyStep.CLICKED)return words;
         Rect frame=new Rect();root.getBoundsInScreen(frame);
         ArrayDeque<AccessibilityNodeInfo> nodes=new ArrayDeque<>();nodes.add(root);
         int scanned=0;

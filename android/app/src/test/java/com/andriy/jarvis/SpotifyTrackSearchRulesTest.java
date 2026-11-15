@@ -28,6 +28,7 @@ public final class SpotifyTrackSearchRulesTest {
         ok(SpotifyTrackSearchRules.searchTab("Search"),"English Search tab");
         ok(!SpotifyTrackSearchRules.searchTab("Моя бібліотека"),"not library");
         ok(SpotifyTrackSearchRules.searchField("Що хочеш послухати?"),"search input");
+        ok(SpotifyTrackSearchRules.searchField("Що ви хочете послухати?"),"reported Pixel search prompt");
         ok(SpotifyTrackSearchRules.searchField("Search Spotify"),"English search field");
         ok(!SpotifyTrackSearchRules.searchField("Надіслати"),"not unrelated field");
         ok(SpotifyTrackSearchRules.exactSong("Без бою","Без бою"),"exact song");

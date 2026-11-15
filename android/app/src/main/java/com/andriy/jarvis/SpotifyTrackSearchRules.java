@@ -51,6 +51,7 @@ public final class SpotifyTrackSearchRules {
             s.equals("search songs or artists") ||
             s.equals("what do you want to listen to") ||
             s.equals("пошук") || s.equals("пошук у spotify") ||
+            s.equals("що ви хочете послухати") ||
             s.equals("що хочеш послухати") ||
             s.equals("що ти хочеш послухати") ||
             s.equals("знайти") || s.equals("пошук музики") ||
