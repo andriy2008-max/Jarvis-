@@ -81,6 +81,10 @@ public final class FinanceAssets {
             try{LocalDate.parse(date);}catch(RuntimeException e){throw new IllegalArgumentException("Дата оцінки: РРРР-ММ-ДД");}
         }
         SQLiteDatabase db=ledger.getWritableDatabase();
+        try(Cursor c=db.rawQuery("SELECT 1 FROM crypto_trades WHERE symbol=? LIMIT 1",new String[]{symbol})){
+            if(c.moveToFirst())throw new IllegalArgumentException(
+                "Для активу вже є історія угод: кількість змінюй через купівлю/продаж. Ручну ціну можна оновити окремо.");
+        }
         db.execSQL("INSERT OR REPLACE INTO crypto_positions(symbol,quantity,value_uah,valued_on) VALUES(?,?,?,?)",
             new Object[]{symbol,qty.toPlainString(),price,date});
     }
