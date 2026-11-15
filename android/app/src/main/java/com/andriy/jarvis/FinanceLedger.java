@@ -8,7 +8,7 @@ import java.util.UUID;
 
 /** Local ledger. Amounts are integer minor units; transfers commit atomically. */
 public final class FinanceLedger extends SQLiteOpenHelper {
-    public FinanceLedger(Context c){super(c.getApplicationContext(),"jarvis-finance.db",null,4);}
+    public FinanceLedger(Context c){super(c.getApplicationContext(),"jarvis-finance.db",null,5);}
     public void onConfigure(SQLiteDatabase db){db.setForeignKeyConstraintsEnabled(true);}
     public void onCreate(SQLiteDatabase db){
         db.execSQL("CREATE TABLE accounts(id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL, currency TEXT NOT NULL, opening INTEGER, opening_at INTEGER NOT NULL DEFAULT 0)");
@@ -16,6 +16,7 @@ public final class FinanceLedger extends SQLiteOpenHelper {
         db.execSQL("CREATE INDEX entries_date ON entries(happened)");
         createPlanning(db);
         createSettlements(db);
+        createAdvanced(db);
     }
     private void createPlanning(SQLiteDatabase db){
         db.execSQL("CREATE TABLE plans(id TEXT PRIMARY KEY, type TEXT NOT NULL, name TEXT NOT NULL, currency TEXT NOT NULL, amount INTEGER NOT NULL CHECK(amount>0), progress INTEGER NOT NULL DEFAULT 0 CHECK(progress>=0), due TEXT NOT NULL, category TEXT NOT NULL)");
@@ -25,12 +26,24 @@ public final class FinanceLedger extends SQLiteOpenHelper {
         if(old<2)createPlanning(db);
         if(old<3)createSettlements(db);
         if(old<4)db.execSQL("ALTER TABLE accounts ADD COLUMN opening_at INTEGER NOT NULL DEFAULT 0");
+        if(old<5)createAdvanced(db);
     }
     private void createSettlements(SQLiteDatabase db){
         db.execSQL("CREATE TABLE allocations(id TEXT PRIMARY KEY, plan TEXT NOT NULL REFERENCES plans(id), account INTEGER NOT NULL REFERENCES accounts(id), amount INTEGER NOT NULL CHECK(amount>0))");
         db.execSQL("CREATE TABLE settings(name TEXT PRIMARY KEY,value TEXT NOT NULL)");
         db.execSQL("CREATE TABLE receipts(id TEXT PRIMARY KEY, utterance TEXT NOT NULL, reply TEXT NOT NULL)");
         db.execSQL("ALTER TABLE plans ADD COLUMN interval_months INTEGER NOT NULL DEFAULT 0");
+    }
+    /** v5: linked FX movements, manual crypto positions, anchored recurrence and settlement undo. */
+    private void createAdvanced(SQLiteDatabase db){
+        db.execSQL("CREATE TABLE fx_transfers(id TEXT PRIMARY KEY, from_account INTEGER NOT NULL REFERENCES accounts(id), to_account INTEGER NOT NULL REFERENCES accounts(id), from_minor INTEGER NOT NULL CHECK(from_minor>0), to_minor INTEGER NOT NULL CHECK(to_minor>0), fee_minor INTEGER NOT NULL CHECK(fee_minor>=0), happened INTEGER NOT NULL)");
+        db.execSQL("CREATE TABLE crypto_positions(symbol TEXT PRIMARY KEY, quantity TEXT NOT NULL, value_uah TEXT, valued_on TEXT)");
+        db.execSQL("CREATE TABLE settlement_history(id INTEGER PRIMARY KEY AUTOINCREMENT, entry_id TEXT UNIQUE NOT NULL REFERENCES entries(id), plan_id TEXT NOT NULL, before_progress INTEGER NOT NULL, after_progress INTEGER NOT NULL, before_due TEXT NOT NULL, after_due TEXT NOT NULL)");
+        db.execSQL("ALTER TABLE plans ADD COLUMN recurrence_unit TEXT NOT NULL DEFAULT 'month'");
+        db.execSQL("ALTER TABLE plans ADD COLUMN recurrence_every INTEGER NOT NULL DEFAULT 0");
+        db.execSQL("ALTER TABLE plans ADD COLUMN recurrence_anchor INTEGER NOT NULL DEFAULT 0");
+        // Keep original interval_months for compatibility with existing plans.
+        db.execSQL("UPDATE plans SET recurrence_every=interval_months, recurrence_anchor=CASE WHEN due!='' THEN CAST(substr(due,9,2) AS INTEGER) ELSE 0 END WHERE interval_months>0");
     }
     public long balance(long account){
         try(Cursor c=getReadableDatabase().rawQuery("SELECT a.opening+COALESCE(SUM(CASE WHEN e.deleted=0 AND (a.opening_at=0 OR e.happened>=a.opening_at) THEN e.amount ELSE 0 END),0) FROM accounts a LEFT JOIN entries e ON a.id=e.account WHERE a.id=? GROUP BY a.id",new String[]{""+account})){
