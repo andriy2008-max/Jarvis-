@@ -13,7 +13,7 @@ class LedgerSchemaTest(unittest.TestCase):
   self.db.execute("UPDATE accounts SET opening_at=1000 WHERE id=1")
   self.add('historical',amount=-5000)
   self.db.execute("INSERT INTO entries VALUES('current',1,-1000,'Їжа','',1001,'expense',NULL,0)")
-  balance=self.db.execute("SELECT a.opening+COALESCE(SUM(CASE WHEN e.deleted=0 AND (a.opening_at=0 OR e.happened>a.opening_at) THEN e.amount ELSE 0 END),0) FROM accounts a LEFT JOIN entries e ON a.id=e.account WHERE a.id=1 GROUP BY a.id").fetchone()[0]
+  balance=self.db.execute("SELECT a.opening+COALESCE(SUM(CASE WHEN e.deleted=0 AND (a.opening_at=0 OR e.happened>=a.opening_at) THEN e.amount ELSE 0 END),0) FROM accounts a LEFT JOIN entries e ON a.id=e.account WHERE a.id=1 GROUP BY a.id").fetchone()[0]
   self.assertEqual(balance,9000)
  def test_migration_adds_cutoff_without_erasing_accounts(self):
   db=sqlite3.connect(':memory:')
