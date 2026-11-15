@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Finance data must not leave the device as a plaintext Android Auto Backup. -->
+    <exclude domain="database" path="jarvis-finance.db" />
+    <exclude domain="database" path="jarvis-finance.db-wal" />
+    <exclude domain="database" path="jarvis-finance.db-shm" />
+</full-backup-content>
