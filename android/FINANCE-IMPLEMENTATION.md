@@ -1,55 +1,51 @@
-# JARVIS Finance — checklist of the UNBUILT development version
-Date: 2026-11-15  
-Branch: `feature/finance-local-ledger` · Draft PR #4.  
-**APK has NOT been built, installed or signed in this development cycle. Stable `main` has not been updated.**
+# JARVIS Finance — unreleased native implementation status
+Date: 2026-11-15
+Branch: `feature/finance-local-ledger` · Draft PR #4 · Pixel is the sole authoritative ledger.
+**No APK has been built or signed. No code was merged into `main`. Compile-only tests do not validate hardware or production encryption migrations.**
 
-## Included in the current source (not yet installed)
+## Included in the current UNBUILT source
 
-- [x] Native Finance on the phone, separate from the former external Money Manager UI/API route; four tabs: Overview, Operations, Plan, Reports.
-- [x] First-account setup prompt, known/unknown opening amounts and explicit default account for voice.
-- [x] SQLite schema v5, preserving existing data through onUpgrade; integer minor units and capture-time balance cutoff, no phantom income from opening amounts.
-- [x] Accounts and saved voice aliases, expenses, income, tips, refunds linked to original purchases, own-account transfers with atomic database operations.
-- [x] Confirmed cash reconciliation with previous records kept in history; reconciliation date is the moment of confirmation, NOT arbitrary historical cutoff entry.
-- [x] Cross-currency exchange with exact debit and credit amounts and optional separate expense for fees; never substitutes an NBU rate for the actual exchange.
-- [x] Manual crypto positions retain exact quantity and optional manually provided UAH price plus valuation date; no auto trading or live crypto price feed.
-- [x] Expense/income voice commands with known categories and explicitly marked account suffixes, including Ukrainian number words.
-- [x] Voice record dates today/yesterday/day before yesterday, bound to capture time; last-entry correction `не 85, а 95` with a 3-minute same-device window.
-- [x] Explicit multi-expense phrase `запиши витрати кава 85 і таксі 250`, 2–5 items, all-or-nothing commit and single immutable receipt ID.
-- [x] Allowlisted slash aliases for entries, balance, summary, budgets and payments; nonimplemented slash actions do not silently mutate data.
-- [x] Phone as sole ledger; Watch7 sends immutable request IDs. Locally persisted FIFO queue of up to 20 financial records; retries on foreground heartbeat, acknowledges success and releases definitively rejected entries without blocking later ones.
-- [x] Safe cancellation of clearly unsent Watch7 queue entries. Already-sent or uncertain commands require checking the Pixel journal before reversal.
-- [x] Operations journal with search and filters: account, category/note, kind, date period and amount bounds; audited editing, confirmed delete and restore.
-- [x] Monthly and weekly budgets with spent/remaining calculations that account for linked refunds.
-- [x] Goals and nonduplicating cash reservations; release reserves, partial receivable/payable settlements; actual principal payments stay separate from earned income.
-- [x] Payment recurrence daily/weekly/monthly/yearly, original-day anchoring across short months and leap years, explicit confirmation before posting; safe undo of the most recent settlement where v5 history exists.
-- [x] Grouped shift tips across cash/card accounts with exact split sum, optional entered work hours and an hourly summary.
-- [x] Period reports (today/week/month/previous month), top categories, cash-flow breakdown, recorded-tips totals, six-month UAH bar chart and textual data.
-- [x] Evidence-bounded audit of possible duplicates/anomalies, conditional percentage-cut scenario, known upcoming payments, UAH financial-health view and emergency-buffer estimate only with sufficient history.
-- [x] Optional generic payment reminders, opt-in weekly/monthly digests, configurable quiet hours and at most 3 financial notifications/day; lock-screen text excludes transaction amounts.
-- [x] Dated manual NBU rate refresh and separate UAH valuation (no invented rate).
-- [x] Encrypted password-protected JFB v5 portable backups with v2–v4 restore compatibility, asynchronous file I/O and encrypted automatic pre-restore safety snapshot. CSV export remains available.
-- [x] Android credential gate on Finance screen, FLAG_SECURE, re-authentication after backgrounding and lock-screen voice report opt-in.
-- [x] Plaintext working finance database and cached Watch requests excluded from ordinary Android cloud/device-transfer backups; **this does NOT encrypt the live SQLite database**.
+- [x] In-app finance activity with Overview, Operations, Plan and Reports; guided account creation, typed/voice entry and quick filters.
+- [x] **SQLCipher-encrypted active SQLite database, schema v6** using the maintained `net.zetetic:sqlcipher-android:4.20.0` driver, compiled against API 36 (target SDK stays 35). Per-install random passphrase is AES-GCM-wrapped under an Android Keystore key. Neither passphrase nor database file is uploaded by normal Android Auto Backup.
+- [x] Existing **unencrypted** finance DB migration to a different encrypted file: copy in one transaction, verify foreign keys and table row counts, persist migration marker, and only then delete old file. Fail visibly and preserve original database on migration failure. **Actual hardware migration test still required.**
+- [x] Reconciliation at current instant or **end of any historical past date**, retaining the original entries, previous opening/cutoff, and immutable reconciliation audit; prevent accounting double deductions.
+- [x] Accounts with explicit voice-default selection and user-defined voice aliases, opening balances (including unknown), UAH/EUR/USD and other ISO-currency account denominations.
+- [x] Expense, income, tips, same-currency transfers, linked purchase refunds, exact actual-currency FX exchanges and separate fees; amounts use integer minor units. Bank transfer amounts do not count as income or spending.
+- [x] Goals, allocated/reserved cash, release of reserves, monthly/weekly budgets, principal debt tracking, confirmed settlements and safe undo with posted settlement history.
+- [x] Daily/weekly/monthly/yearly anchored recurrence, including month-end and leap-year rules; no automatic posting of an unconfirmed payment.
+- [x] Grouped shift tips with strict cash/card splits and optional recorded hours; report per shift and per hour.
+- [x] **Manual** crypto holdings/price dates, confirmed buy/sell history, cash account asset movements plus one separately recorded commission, FIFO acquisition cost/realized result, and explicit warnings when original holding costs are unknown. Does not place orders.
+- [x] Local speech/typed expense & income parsing with digits, Ukrainian amount words, deterministic categories, aliases, today/yesterday/day before yesterday and slash aliases; atomic two-to-five-entry voice batches.
+- [x] Idempotent receipt IDs for phone/Watch7 writes; bounded same-device last-entry amount correction.
+- [x] **Two-turn clarification** for a missing amount or category (e.g., 'витрата кава' → '85'), valid for 2 minutes, cancelable and stored with Keystore encryption. Only recognized deterministic finance categories and explicit amounts are accepted.
+- [x] Watch7-to-Pixel transmission; a persistent **20-item encrypted** Wear queue with immutable IDs, safe unsent cancellation and persisted JobScheduler retry when watch UI is closed. Pending commands survive watch process restart; jobs may still be delayed by Wear OS battery policies.
+- [x] Read-only financial speech queries for balances, periods, budgets, upcoming bills, tips/shift reports, all-currency net worth, manual crypto trade/cost history and dated NBU rates. Restricted private readouts while Pixel is locked unless explicitly enabled.
+- [x] Account/category/kind/period/amount operations filtering, local spending charts, 6-month trend, duplicate/anomaly flags, what-if percentage scenarios and known-commitment projection.
+- [x] Approximate net worth in UAH across currencies by explicitly dated NBU rates and manually entered crypto valuations, showing incomplete-data flags. No invented exchange rate.
+- [x] Configurable quiet hours, opt-in weekly/monthly digests, generic planned-payment and 80/100% budget warnings with daily cap; notifications hide sensitive amounts.
+- [x] Password-encrypted portable `JFB v6` backups of all account/plan/reconciliation/crypto/shift/alias data, backward restore support for JFB v2-v5, nonblocking file operations and encrypted recoverable pre-restore snapshot. Plain CSV export is intentional and user-triggered.
+- [x] Android device-credential-gated Finance activity, FLAG_SECURE, re-lock on background, private file exclusions from Android cloud/transfer backups.
 
-## Verified automatically on GitHub (not on physical devices)
-- [x] `tools/finance/test_schema.py`: SQLite schema/FK/cutoff/refund/FX/settlement/shift/alias contracts.
-- [x] Java parser tests for finance entries, amount correction, Ukrainian number words, slash aliases, multi-expense batches.
-- [x] Java recurrence calendar tests for leap days and month boundaries.
-- [x] Whole Android **`compileDebugJavaWithJavac`** passes, including the Wear dependencies; no APK packaging or signing.
-- Passing CI: **GitHub Actions run #139**, 2026-11-15, using CI-only validation PR #6: `https://github.com/andriy2008-max/Jarvis-/actions/runs/43751628511`.
+## Automated verification (no APK)
 
-## Still unverified / not fully implemented
-- [ ] No real Pixel or Galaxy Watch7 integration test, including locked screen, microphone, app lifecycle, retransmission, 20-item queue and notification delivery. Runtime correctness is not established by compilation.
-- [ ] No APK build, signing, installation or upgrade-migration smoke test; no release versionCode bump.
-- [ ] The **working SQLite database itself is not encrypted at rest**. Portable backups are encrypted. Rooted devices carry additional data-exposure risks.
-- [ ] Complete open-ended natural-language dialog, multiple-turn confirmation and all slash commands from the original specification are not implemented. Supported voice commands are deterministic and conservative.
-- [ ] Fully configurable opening-balance historical cutoff and transaction-level retrospective reconciliation are not complete (current-time snapshots work).
-- [ ] Crypto trades/cost basis/history, live market pricing, automated bank integration, and mixed-currency full net-worth conversion are not implemented.
-- [ ] Watch queue processing is not guaranteed when the watch app is closed; background heartbeat currently works while the companion link is alive.
-- [ ] Encrypted pre-restore snapshot and v2–v5 restore path have not been tested end-to-end on real devices.
-- [ ] Advanced per-transaction tags, multi-merchant learning, complete shift expense attribution, audit advice and confidence-based forecasting are incomplete.
-- [ ] A small UAH-only bar chart is included; a multi-currency interactive graph suite is not.
-- [ ] Independently confirmed hardware-based offline Ukrainian speech recognition is not available yet.
-- [ ] Synchronization of simultaneously changing finance data on multiple phones is outside the single-Pixel-ledger architecture.
+- [x] Python SQLite schema, FK, cutoff, settlement, cash-flow, reconciliation, alias, crypto and refund contract tests.
+- [x] Pure Java Ukrainian voice command/query matcher, amount-correction, number words, slash aliases, batch, month-end recurrence and FIFO cost basis tests.
+- [x] Whole Android `:app:compileDebugJavaWithJavac` (NO APK), including SQLCipher and Wear OS libraries.
+- [x] Verified non-APK GitHub Actions run #231 (2026-11-15) — parser/schema jobs and Android compile job successful:
+  https://github.com/andriy2008-max/Jarvis-/actions/runs/43755092451
+- [ ] No real Pixel, Galaxy Watch7, Android Keystore restore, Doze/Battery Saver, call microphone or encrypted migration runtime test. Real-world functionality is **not** confirmed solely by passing CI.
 
-**Release guard:** Do not merge this draft feature to `main` or call it production-ready until device tests and security checks are complete. The next APK should be assembled only after an explicit user command.
+## Remaining limitations requiring devices, permissions, providers or decisions
+
+- [ ] **No signed APK:** by explicit prior user constraint, build/release/installation must only follow a separate user command. `main` remains untouched.
+- [ ] Real Pixel+Watch7 acceptance testing: long-term delivery across app/process termination, reboot and energy-saving modes; microphone and Ukrainian OS speech-to-text; no Android JobScheduler can promise exact-time or guaranteed delivery under all device restrictions.
+- [ ] Android Keystore on-device migration and JFB2–JFB6 portable restore tests, including lost/unavailable hardware key. For device changes or a factory reset, **only password-protected portable JFB backups can transfer the ledger**; Keystore keys are not exportable.
+- [ ] Unrestricted conversational AI, arbitrary merchant/category recognition, complex open-ended multi-turn chats, and voice-only high-impact bill payments remain intentionally bounded by deterministic parsers and explicit confirmations to prevent false entries.
+- [ ] Automatic bank/OAuth import and live cryptocurrency-market feeds are not enabled: they need a provider-specific API, user credentials/consent, rate-limit/error/privacy rules. Manual confirmed recording works independently.
+- [ ] FIFO profit calculation intentionally marks manual opening holdings with unknown acquisition costs as incomplete.
+- [ ] Offline Ukrainian STT and bundled model voice files must be validated separately on target devices; Android text compilation does not establish real offline speech availability.
+- [ ] Multi-phone concurrent ledger synchronization is not implemented. Single Pixel is the authoritative database; portable encrypted backups are the recovery strategy.
+- [ ] Advanced merchant-learning/predictive cash-flow/shift expense attribution require further real-life examples and recorded history to avoid inventing accounting classifications.
+- [ ] Hardware/root compromise cannot be eliminated with SQLCipher or Keystore; user-controlled root can compromise a running unlocked process.
+
+**Guardrail:** The current branch is an uninstalled feature candidate, not a verified production finance app. Keep PR #4 as draft until migration, device and finance reconciliation acceptance tests pass. Do not auto-post planned payments or use unsupported external APIs.
