@@ -60,6 +60,37 @@ public final class FinanceCryptoTrades {
         }finally{db.endTransaction();}
     }
 
+    public static String costBasis(FinanceLedger ledger){
+        StringBuilder report=new StringBuilder("Собівартість FIFO · лише ручні записи, UAH\n");
+        boolean any=false;
+        try(Cursor positions=ledger.getReadableDatabase().rawQuery(
+                "SELECT symbol,quantity FROM crypto_positions ORDER BY symbol",null)){
+            while(positions.moveToNext()){
+                String symbol=positions.getString(0);
+                List<FinanceCryptoFifo.Trade> history=new ArrayList<>();
+                BigDecimal change=BigDecimal.ZERO;
+                try(Cursor c=ledger.getReadableDatabase().rawQuery(
+                    "SELECT action,quantity,price_uah_minor,fee_uah_minor FROM crypto_trades WHERE symbol=? ORDER BY happened,id",
+                    new String[]{symbol})){
+                    while(c.moveToNext()){
+                        boolean buy=c.getString(0).equals("buy");
+                        BigDecimal q=new BigDecimal(c.getString(1));
+                        change=change.add(buy?q:q.negate());
+                        history.add(new FinanceCryptoFifo.Trade(buy,c.getString(1),c.getLong(2),c.getLong(3)));
+                    }
+                }
+                if(history.isEmpty())continue;
+                any=true;
+                BigDecimal unknownOpening=new BigDecimal(positions.getString(1)).subtract(change);
+                if(unknownOpening.signum()<0){
+                    report.append(symbol).append(": історія кількості потребує ручної звірки\n");
+                    continue;
+                }
+                report.append(FinanceCryptoFifo.compute(history,unknownOpening).format(symbol)).append("\n");
+            }
+        }
+        return any?report.toString():"Немає записаних угод для оцінки собівартості.";
+    }
     /** Trade history only: manual opening positions have unknown acquisition costs. */
     public static String history(FinanceLedger ledger){
         StringBuilder b=new StringBuilder("Криптоугоди · ручний облік без ринкових котирувань\n");
