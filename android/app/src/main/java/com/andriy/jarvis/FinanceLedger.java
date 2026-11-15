@@ -141,13 +141,36 @@ public final class FinanceLedger extends SQLiteOpenHelper {
         ContentValues v=new ContentValues();v.put("id",UUID.randomUUID().toString());v.put("type",type);v.put("name",name.trim());v.put("currency",currency);v.put("amount",value);v.put("due",due);v.put("category",category);
         getWritableDatabase().insertOrThrow("plans",null,v);
     }
+    /** Editing a plan cannot invalidate any confirmed settlements or goal reservations. */
+    public void editPlan(String id,String name,String amount,String due,String category){
+        if(name.trim().isEmpty())throw new IllegalArgumentException("Вкажи назву плану");
+        long target=minor(amount);if(target<=0)throw new IllegalArgumentException("Сума має бути додатною");
+        if(!due.trim().isEmpty())try{java.time.LocalDate.parse(due.trim());}
+        catch(RuntimeException e){throw new IllegalArgumentException("Дата: РРРР-ММ-ДД");}
+        SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{
+            try(Cursor c=db.rawQuery("SELECT progress FROM plans WHERE id=?",new String[]{id})){
+                if(!c.moveToFirst())throw new IllegalArgumentException("План не знайдено");
+                if(target<c.getLong(0))throw new IllegalArgumentException("Нова сума не може бути меншою за вже виконану");
+                db.execSQL("UPDATE plans SET name=?,amount=?,due=?,category=? WHERE id=?",
+                    new Object[]{name.trim(),target,due.trim(),category.trim(),id});
+            }
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+    }
     public void edit(String id,String amount,String category){
         long value=minor(amount);if(value<=0||category.trim().isEmpty())throw new IllegalArgumentException("Перевір суму й категорію");
         SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{
             try(Cursor c=db.rawQuery("SELECT amount,kind,group_id FROM entries WHERE id=? AND deleted=0",new String[]{id})){
                 if(!c.moveToFirst()||(c.getString(2)!=null&&c.getString(2).startsWith("plan:"))||!java.util.Arrays.asList("expense","income").contains(c.getString(1)))throw new IllegalArgumentException("Переказ редагується через скасування обох сторін і новий запис");
+                if(c.getString(1).equals("expense")){
+                    try(Cursor refunds=db.rawQuery("SELECT COALESCE(SUM(amount),0) FROM entries WHERE kind='refund' AND deleted=0 AND note=?",new String[]{"Повернення:"+id})){
+                        refunds.moveToFirst();
+                        if(value<refunds.getLong(0))throw new IllegalArgumentException("Нова сума менша за вже оформлені повернення");
+                    }
+                }
                 db.execSQL("INSERT INTO audit(entry_id,event,happened,previous_amount) VALUES(?,?,?,?)",new Object[]{id,"edit",System.currentTimeMillis(),c.getLong(0)});
-                db.execSQL("UPDATE entries SET amount=?,category=? WHERE id=?",new Object[]{c.getLong(0)<0?-value:value,category,id});
+                db.execSQL("UPDATE entries SET amount=?,category=? WHERE id=?",new Object[]{c.getLong(0)<0?-value:value,category.trim(),id});
+                db.execSQL("UPDATE entries SET category=? WHERE kind='refund' AND note=?",new Object[]{category.trim(),"Повернення:"+id});
             }db.setTransactionSuccessful();
         }finally{db.endTransaction();}
     }
