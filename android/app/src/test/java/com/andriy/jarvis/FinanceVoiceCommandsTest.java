@@ -40,6 +40,14 @@ public final class FinanceVoiceCommandsTest {
         FinanceVoiceCommands.Entry today=FinanceVoiceCommands.parse("запиши витрату 300 гривень на транспорт сьогодні");
         yes(today!=null && today.daysAgo==0);
         yes(FinanceVoiceCommands.parse("витратив 120 на каву завтра")==null);
+        test("витрата кава вісімдесят п'ять",FinanceVoiceCommands.Kind.EXPENSE,"85","Їжа → Кафе",null);
+        test("витратив на каву двісті п'ятдесят",FinanceVoiceCommands.Kind.EXPENSE,"250","Їжа → Кафе",null);
+        test("витрата кава півтори тисячі",FinanceVoiceCommands.Kind.EXPENSE,"1500","Їжа → Кафе",null);
+        test("/витрата 85 кава",FinanceVoiceCommands.Kind.EXPENSE,"85","Їжа → Кафе",null);
+        test("/дохід 650 чайові",FinanceVoiceCommands.Kind.INCOME,"650","чай",null);
+        yes(FinanceVoiceCommands.parse("/видалити 85")==null);
+        yes(FinanceVoiceCommands.parse("/витрата")==null);
+        yes("який баланс".equals(FinanceSlashCommands.expand("/баланс")));
         System.out.println("PASS FinanceVoiceCommandsTest");
     }
 }
