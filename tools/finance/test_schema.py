@@ -69,4 +69,39 @@ class LedgerSchemaTest(unittest.TestCase):
     self.db.execute("INSERT INTO allocations VALUES('x','g',99,500)")
   except sqlite3.IntegrityError:pass
   self.assertEqual(self.db.execute("SELECT progress FROM plans WHERE id='g'").fetchone()[0],0)
+ def test_v5_schema_has_integrity_fields(self):
+  objects={r[0] for r in self.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+  self.assertTrue({'finance_shifts','crypto_positions','fx_transfers','settlement_history'}.issubset(objects))
+  cols={r[1] for r in self.db.execute("PRAGMA table_info(plans)")}
+  self.assertTrue({'budget_period','recurrence_unit','recurrence_every','recurrence_anchor'}.issubset(cols))
+  columns={r[1] for r in self.db.execute("PRAGMA table_info(settlement_history)")}
+  self.assertIn('reversed',columns)
+ def test_fx_transfer_and_fee_group(self):
+  self.db.execute("INSERT INTO accounts(id,name,currency,opening) VALUES(2,'Euro','EUR',20000)")
+  self.db.execute("INSERT INTO fx_transfers VALUES('fx1',1,2,4300,100,20,5000)")
+  self.db.execute("INSERT INTO entries(id,account,amount,category,note,happened,kind,group_id) VALUES('fx-out',1,-4300,'Обмін','',5000,'transfer','fx1')")
+  self.db.execute("INSERT INTO entries(id,account,amount,category,note,happened,kind,group_id) VALUES('fx-in',2,100,'Обмін','',5000,'transfer','fx1')")
+  self.db.execute("INSERT INTO entries(id,account,amount,category,note,happened,kind,group_id) VALUES('fx-fee',1,-20,'Комісії','',5000,'expense','fx1')")
+  rows=self.db.execute("SELECT account,SUM(amount) FROM entries WHERE group_id='fx1' GROUP BY account ORDER BY account").fetchall()
+  self.assertEqual(rows,[(1,-4320),(2,100)])
+  with self.assertRaises(sqlite3.IntegrityError):
+   self.db.execute("INSERT INTO fx_transfers VALUES('invalid',1,999,10,10,0,5000)")
+ def test_settlement_history_reversal_state(self):
+  self.db.execute("INSERT INTO plans(id,type,name,currency,amount,progress,due,category) VALUES('rent','payment','Оренда','UAH',12000,12000,'2027-01-01','Житло')")
+  self.db.execute("INSERT INTO entries(id,account,amount,category,note,happened,kind,group_id) VALUES('paid',1,-12000,'Житло','Оренда',1000,'expense','plan:rent')")
+  self.db.execute("INSERT INTO settlement_history(entry_id,plan_id,before_progress,after_progress,before_due,after_due) VALUES('paid','rent',0,12000,'2027-01-01','2027-01-01')")
+  with self.db:
+   self.db.execute("UPDATE entries SET deleted=1 WHERE id='paid'")
+   self.db.execute("UPDATE plans SET progress=0 WHERE id='rent'")
+   self.db.execute("UPDATE settlement_history SET reversed=1 WHERE entry_id='paid'")
+  self.assertEqual(self.db.execute("SELECT progress FROM plans WHERE id='rent'").fetchone()[0],0)
+  self.assertEqual(self.db.execute("SELECT reversed FROM settlement_history WHERE entry_id='paid'").fetchone()[0],1)
+  self.assertEqual(self.db.execute("SELECT deleted FROM entries WHERE id='paid'").fetchone()[0],1)
+ def test_grouped_shift_tips_not_double_counted(self):
+  self.db.execute("INSERT INTO accounts(id,name,currency,opening) VALUES(2,'Картка','UAH',1000)")
+  self.db.execute("INSERT INTO finance_shifts VALUES('shift1','Вечір',2000,'8')")
+  self.db.execute("INSERT INTO entries(id,account,amount,category,note,happened,kind,group_id) VALUES('cash',1,6500,'чай','',2000,'income','shift1')")
+  self.db.execute("INSERT INTO entries(id,account,amount,category,note,happened,kind,group_id) VALUES('card',2,3500,'чай','',2000,'income','shift1')")
+  self.assertEqual(self.db.execute("SELECT SUM(amount) FROM entries WHERE group_id='shift1'").fetchone()[0],10000)
+  self.assertEqual(self.db.execute("SELECT COUNT(*) FROM finance_shifts").fetchone()[0],1)
 if __name__=='__main__':unittest.main()
