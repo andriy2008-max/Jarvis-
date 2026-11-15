@@ -9,12 +9,22 @@ import java.util.*;
 
 /** Native finance screen backed by the same ledger as voice commands. */
 public final class FinanceActivity extends Activity {
-    private FinanceLedger ledger; private LinearLayout body; private String tab="Огляд"; private String query=""; private boolean unlocked=false; private String lastDeleted; private char[] backupPassword;
-    public void onCreate(Bundle state){super.onCreate(state);ledger=new FinanceLedger(this);
+    private FinanceLedger ledger; private LinearLayout body; private String tab="Огляд"; private String query=""; private boolean unlocked=false,authenticating=false,pickingDocument=false; private String lastDeleted; private char[] backupPassword;
+    public void onCreate(Bundle state){super.onCreate(state);
+        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
+        ledger=new FinanceLedger(this);authenticate();
+    }
+    private void authenticate(){
         android.app.KeyguardManager km=(android.app.KeyguardManager)getSystemService(KEYGUARD_SERVICE);
-        if(km!=null&&km.isDeviceSecure()){Intent auth=km.createConfirmDeviceCredentialIntent("Фінанси Джарвіса","Підтвердь доступ до фінансових даних");if(auth!=null){startActivityForResult(auth,90);return;}}
-        unlocked=true;show();}
-    protected void onDestroy(){if(ledger!=null)ledger.close();super.onDestroy();}
+        if(km!=null&&km.isDeviceSecure()){
+            Intent auth=km.createConfirmDeviceCredentialIntent("Фінанси Джарвіса","Підтвердь доступ до фінансових даних");
+            if(auth!=null){authenticating=true;startActivityForResult(auth,90);return;}
+        }
+        unlocked=true;show();
+    }
+    @Override protected void onStart(){super.onStart();if(ledger!=null&&!unlocked&&!authenticating&&!pickingDocument)authenticate();}
+    @Override protected void onStop(){if(!pickingDocument&&!authenticating)unlocked=false;super.onStop();}
+    protected void onDestroy(){if(backupPassword!=null)Arrays.fill(backupPassword,'\\0');if(ledger!=null)ledger.close();super.onDestroy();}
     private void text(String value){TextView t=new TextView(this);t.setText(value);t.setTextColor(Color.WHITE);t.setTextSize(18);t.setPadding(12,12,12,12);body.addView(t);}
     private void button(String label,Runnable action){Button b=new Button(this);b.setText(label);body.addView(b);b.setOnClickListener(v->action.run());}
     private void error(Exception e){new AlertDialog.Builder(this).setMessage(e instanceof IllegalArgumentException?e.getMessage():"Не вдалося зберегти. Перевір дані.").setPositiveButton("ОК",null).show();}
@@ -26,10 +36,10 @@ public final class FinanceActivity extends Activity {
         button("Резервна копія",()->backup(false));button("Відновити копію",()->new AlertDialog.Builder(this).setTitle("Замінити фінансові дані?").setMessage("Спершу збережи поточну резервну копію. Відновлення замінить рахунки, операції та плани.").setNegativeButton("Скасувати",null).setPositiveButton("Продовжити",(d,w)->backup(true)).show());
         for(String name:new String[]{"Огляд","Операції","План","Звіти"})button(name,()->{tab=name;show();});
         if(tab.equals("План")){planning();return;}
-        if(tab.equals("Звіти")){text(ledger.monthlyReport());text(FinanceInsights.report(ledger));text(FinanceFx.valuation(ledger));button("Оновити курси НБУ",()->{Toast.makeText(this,"Отримую курси НБУ…",Toast.LENGTH_SHORT).show();new Thread(()->{String message;try(FinanceLedger db=new FinanceLedger(getApplicationContext())){FinanceFx.refresh(db);message="Курси оновлено";}catch(Exception e){message="НБУ недоступний. Попередні курси збережено з датою.";}final String result=message;runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()){Toast.makeText(this,result,Toast.LENGTH_LONG).show();show();}});},"finance-fx").start();});button("Експорт CSV",()->{Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.setType("text/csv");i.addCategory(Intent.CATEGORY_OPENABLE);i.putExtra(Intent.EXTRA_TITLE,"jarvis-finance.csv");startActivityForResult(i,71);});return;}
+        if(tab.equals("Звіти")){text(ledger.monthlyReport());text(FinanceInsights.report(ledger));text(FinanceFx.valuation(ledger));button("Оновити курси НБУ",()->{Toast.makeText(this,"Отримую курси НБУ…",Toast.LENGTH_SHORT).show();new Thread(()->{String message;try(FinanceLedger db=new FinanceLedger(getApplicationContext())){FinanceFx.refresh(db);message="Курси оновлено";}catch(Exception e){message="НБУ недоступний. Попередні курси збережено з датою.";}final String result=message;runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()){Toast.makeText(this,result,Toast.LENGTH_LONG).show();show();}});},"finance-fx").start();});button("Експорт CSV",()->{Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.setType("text/csv");i.addCategory(Intent.CATEGORY_OPENABLE);i.putExtra(Intent.EXTRA_TITLE,"jarvis-finance.csv");pickingDocument=true;startActivityForResult(i,71);});return;}
         if(!tab.equals("Операції")){
         text(ledger.report());text(FinanceInsights.reminders(ledger));
-        button("Увімкнути / вимкнути нагадування",()->{boolean enable=!ledger.setting("reminders","false").equals("true");ledger.setSetting("reminders",Boolean.toString(enable));if(enable)FinanceReminderJob.schedule(this);Toast.makeText(this,enable?"Нагадування ввімкнено. Дозволь сповіщення Джарвіса в Android.":"Нагадування вимкнено",Toast.LENGTH_LONG).show();});
+        button("Увімкнути / вимкнути нагадування",()->{boolean enable=!ledger.setting("reminders","false").equals("true");ledger.setSetting("reminders",Boolean.toString(enable));if(enable)FinanceReminderJob.schedule(this);else FinanceReminderJob.cancel(this);Toast.makeText(this,enable?"Нагадування ввімкнено. Дозволь сповіщення Джарвіса в Android.":"Нагадування вимкнено",Toast.LENGTH_LONG).show();});
         button("Додати рахунок",()->form("Новий рахунок",new String[]{"Назва","Валюта (UAH)","Поточний залишок (можна пропустити)"},values->ledger.account(values[0],values[1].trim().isEmpty()?"UAH":values[1].trim().toUpperCase(Locale.ROOT),values[2])));
         button("Витрата",()->entry(false));button("Дохід / чайові",()->entry(true));
         button("Переказ",()->pickAccount(from->pickAccount(to->form("Переказ",new String[]{"Сума"},v->ledger.transfer(from,to,FinanceLedger.minor(v[0]))))));
@@ -83,11 +93,12 @@ public final class FinanceActivity extends Activity {
     private void backup(boolean restore){
         EditText field=new EditText(this);field.setHint("Пароль копії, мінімум 10 символів");field.setInputType(129);
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle(restore?"Пароль для відновлення":"Збережи пароль: без нього копію не відновити").setView(field).setNegativeButton("Скасувати",null).setPositiveButton("Далі",null).create();
-        dialog.setOnShowListener(d->dialog.getButton(-1).setOnClickListener(v->{if(field.length()<10){field.setError("Мінімум 10 символів");return;}backupPassword=field.getText().toString().toCharArray();dialog.dismiss();Intent i=new Intent(restore?Intent.ACTION_OPEN_DOCUMENT:Intent.ACTION_CREATE_DOCUMENT);i.setType("application/octet-stream");i.addCategory(Intent.CATEGORY_OPENABLE);i.putExtra(Intent.EXTRA_TITLE,"jarvis-finance.jfb");startActivityForResult(i,restore?73:72);}));dialog.show();
+        dialog.setOnShowListener(d->dialog.getButton(-1).setOnClickListener(v->{if(field.length()<10){field.setError("Мінімум 10 символів");return;}backupPassword=field.getText().toString().toCharArray();dialog.dismiss();Intent i=new Intent(restore?Intent.ACTION_OPEN_DOCUMENT:Intent.ACTION_CREATE_DOCUMENT);i.setType("application/octet-stream");i.addCategory(Intent.CATEGORY_OPENABLE);i.putExtra(Intent.EXTRA_TITLE,"jarvis-finance.jfb");pickingDocument=true;startActivityForResult(i,restore?73:72);}));dialog.show();
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
-        if(request==90){if(result==RESULT_OK){unlocked=true;show();}else finish();return;}
+        if(request==90){authenticating=false;if(result==RESULT_OK){unlocked=true;show();}else finish();return;}
+        if(request==71||request==72||request==73)pickingDocument=false;
         if(request==72||request==73){
             if(result!=RESULT_OK||data==null||data.getData()==null){if(backupPassword!=null)Arrays.fill(backupPassword,'\0');backupPassword=null;return;}
             if(backupPassword==null){error(new IllegalArgumentException("Повтори дію: пароль не зберігається після перезапуску"));return;}
