@@ -15,6 +15,11 @@ public final class FinanceManagerController {
     public static synchronized void start(Context context,String utterance,String commandId,long capturedAt,Listener listener) {
         if(listener==null)return;
         if(capturedAt<=0||capturedAt>System.currentTimeMillis()+300000L){listener.onFinished(false,"Перевір дату й час годинника.");return;}
+        FinanceVoiceFollowups.Correction correction=FinanceVoiceFollowups.parse(utterance);
+        if(correction!=null){
+            FinanceCorrectionController.start(context,utterance,commandId,capturedAt,correction,listener);
+            return;
+        }
         FinanceVoiceCommands.Entry request=FinanceVoiceCommands.parse(utterance);
         if(request==null){listener.onFinished(false,"Не розпізнав фінансовий запис.");return;}
         try(FinanceLedger ledger=new FinanceLedger(context)){
@@ -36,7 +41,12 @@ public final class FinanceManagerController {
             ledger.record(commandId,account,FinanceLedger.minor(request.amount),
                 request.kind==FinanceVoiceCommands.Kind.EXPENSE?"expense":"income",request.category,utterance,effectiveTime);
             String reply="✅ "+request.amount+" ₴ · "+request.category+" · "+java.time.Instant.ofEpochMilli(effectiveTime).atZone(java.time.ZoneId.systemDefault()).toLocalDate()+". Записано у Джарвісі.";
-            ledger.receipt(commandId,utterance,reply);db.setTransactionSuccessful();
+            ledger.receipt(commandId,utterance,reply);
+            int separator=commandId.lastIndexOf(':');
+            String source=separator<1?"phone":commandId.substring(0,separator);
+            ledger.setSetting("finance_last_id:"+source,commandId);
+            ledger.setSetting("finance_last_at:"+source,Long.toString(capturedAt));
+            db.setTransactionSuccessful();
             }finally{db.endTransaction();}
             listener.onFinished(true,ledger.receipt(commandId,utterance));
         }catch(RuntimeException e){listener.onFinished(false,"Не вдалося зберегти фінансовий запис.");}
