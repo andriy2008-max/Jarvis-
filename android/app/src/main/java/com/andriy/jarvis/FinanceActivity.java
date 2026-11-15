@@ -57,6 +57,8 @@ public final class FinanceActivity extends Activity {
             FinanceBarChart chart=new FinanceBarChart(this,ledger);
             body.addView(chart,new LinearLayout.LayoutParams(-1,(int)(240*getResources().getDisplayMetrics().density)));
             text(FinanceAnalytics.report(ledger,"month"));
+            text("Графік витрат: одна валюта, повернення враховані окремо від доходів.");
+            body.addView(new FinanceTrendChart(this,ledger),new LinearLayout.LayoutParams(-1,Math.round(250*getResources().getDisplayMetrics().density)));
             button("Звіт: сьогодні",()->showInfo(FinanceAnalytics.report(ledger,"today")));
             button("Звіт: тиждень",()->showInfo(FinanceAnalytics.report(ledger,"week")));
             button("Звіт: минулий місяць",()->showInfo(FinanceAnalytics.report(ledger,"previous_month")));
