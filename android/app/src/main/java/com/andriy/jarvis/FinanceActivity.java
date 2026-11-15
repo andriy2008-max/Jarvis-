@@ -32,6 +32,15 @@ public final class FinanceActivity extends Activity {
         if(!unlocked)return;
         ScrollView scroll=new ScrollView(this);body=new LinearLayout(this);body.setOrientation(1);body.setPadding(16,24,16,24);body.setBackgroundColor(Color.rgb(10,18,30));scroll.addView(body);setContentView(scroll);
         text("JARVIS · Фінанси");
+        try(Cursor count=ledger.getReadableDatabase().rawQuery("SELECT COUNT(*) FROM accounts",null)){
+            count.moveToFirst();
+            if(count.getLong(0)==0){
+                text("Перший запуск: додай рахунок (готівка чи картка), вибери UAH і вкажи відомий залишок. Якщо залишок невідомий, залиш поле порожнім.");
+                button("Почати · додати перший рахунок",()->newAccount());
+            }else if(ledger.setting("default_account","").isEmpty()){
+                text("Для голосових витрат вибери типовий рахунок. До вибору Джарвіс не записуватиме операції навмання.");
+            }
+        }
         button("Рахунок для голосових команд",()->pickAccount(id->{ledger.setSetting("default_account",""+id);Toast.makeText(this,"Типовий рахунок збережено",Toast.LENGTH_SHORT).show();}));
         button("Резервна копія",()->backup(false));button("Відновити копію",()->new AlertDialog.Builder(this).setTitle("Замінити фінансові дані?").setMessage("Спершу збережи поточну резервну копію. Відновлення замінить рахунки, операції та плани.").setNegativeButton("Скасувати",null).setPositiveButton("Продовжити",(d,w)->backup(true)).show());
         for(String name:new String[]{"Огляд","Операції","План","Звіти"})button(name,()->{tab=name;show();});
@@ -40,7 +49,7 @@ public final class FinanceActivity extends Activity {
         if(!tab.equals("Операції")){
         text(ledger.report());text(FinanceInsights.reminders(ledger));
         button("Увімкнути / вимкнути нагадування",()->{boolean enable=!ledger.setting("reminders","false").equals("true");ledger.setSetting("reminders",Boolean.toString(enable));if(enable)FinanceReminderJob.schedule(this);else FinanceReminderJob.cancel(this);Toast.makeText(this,enable?"Нагадування ввімкнено. Дозволь сповіщення Джарвіса в Android.":"Нагадування вимкнено",Toast.LENGTH_LONG).show();});
-        button("Додати рахунок",()->form("Новий рахунок",new String[]{"Назва","Валюта (UAH)","Поточний залишок (можна пропустити)"},values->ledger.account(values[0],values[1].trim().isEmpty()?"UAH":values[1].trim().toUpperCase(Locale.ROOT),values[2])));
+        button("Додати рахунок",this::newAccount);
         button("Витрата",()->entry(false));button("Дохід / чайові",()->entry(true));
         button("Переказ",()->pickAccount(from->pickAccount(to->form("Переказ",new String[]{"Сума"},v->ledger.transfer(from,to,FinanceLedger.minor(v[0]))))));
         return;
@@ -64,6 +73,11 @@ public final class FinanceActivity extends Activity {
             }
         }
     }
+    private void newAccount(){
+        formWithDefaults("Новий рахунок",new String[]{"Назва (готівка або картка)","Валюта (UAH)","Залишок на сьогодні (необов’язково)"},
+            new String[]{"","UAH",""},values->ledger.account(values[0],
+                values[1].trim().isEmpty()?"UAH":values[1].trim().toUpperCase(Locale.ROOT),values[2]));
+    }
     private void planning(){
         String[] types={"budget","goal","payment","owed","owing"};
         String[] labels={"Бюджет на місяць","Ціль","Майбутній платіж","Мені винні","Я винен"};
@@ -82,10 +96,27 @@ public final class FinanceActivity extends Activity {
                 detail+="\nВиконано: "+FinanceLedger.money(c.getLong(7));
                 if(type.equals("payment"))detail+=" · Інтервал: "+c.getInt(8)+" міс.";
                 final String summary=detail;
-                button(detail,()->new AlertDialog.Builder(this).setTitle(summary).setItems(new String[]{"Внесок / сплачено / повернуто","Періодичність платежу","Видалити план"},(dialog,index)->{
-                    if(index==0)pickAccount(account->form("Вкажи фактичну суму",new String[]{"Сума"},v->ledger.settle(id,account,v[0])));
-                    if(index==1)form("0 — одноразово, 1 — щомісяця, 12 — щороку",new String[]{"Місяців"},v->ledger.recurrence(id,Integer.parseInt(v[0])));
-                    if(index==2)new AlertDialog.Builder(this).setMessage("Видалити план і звільнити резерв? Проведені грошові операції залишаться.").setNegativeButton("Ні",null).setPositiveButton("Так",(d,w)->{ledger.deletePlan(id);show();}).show();
+                final String planName=c.getString(1),planAmount=FinanceLedger.money(c.getLong(3)),planDue=c.getString(4),planCategory=c.getString(5);
+                ArrayList<String> possible=new ArrayList<>();
+                if(!type.equals("budget"))possible.add(type.equals("goal")?"Відкласти на ціль":type.equals("payment")?"Підтвердити сплату":"Записати повернення боргу");
+                possible.add("Редагувати план");
+                if(type.equals("payment"))possible.add("Періодичність");
+                possible.add("Видалити план");
+                String[] actions=possible.toArray(new String[0]);
+                button(detail,()->new AlertDialog.Builder(this).setTitle(summary).setItems(actions,(dialog,index)->{
+                    String action=actions[index];
+                    if(action.equals("Відкласти на ціль")||action.equals("Підтвердити сплату")||action.equals("Записати повернення боргу")){
+                        pickAccount(account->form("Сума",new String[]{"Сума"},v->ledger.settle(id,account,v[0])));
+                    }else if(action.equals("Редагувати план")){
+                        formWithDefaults("Редагувати план",new String[]{"Назва","Сума","Дата РРРР-ММ-ДД","Категорія"},
+                            new String[]{planName,planAmount,planDue,planCategory},
+                            v->ledger.editPlan(id,v[0],v[1],v[2],v[3]));
+                    }else if(action.equals("Періодичність")){
+                        form("0 — одноразово, 1 — щомісяця, 12 — щороку",new String[]{"Місяців"},v->ledger.recurrence(id,Integer.parseInt(v[0])));
+                    }else if(action.equals("Видалити план")){
+                        new AlertDialog.Builder(this).setMessage("Видалити план і звільнити резерв? Проведені операції залишаться.")
+                            .setNegativeButton("Ні",null).setPositiveButton("Так",(d,w)->{try{ledger.deletePlan(id);show();}catch(Exception e){error(e);}}).show();
+                    }
                 }).show());
             }
         }
@@ -119,8 +150,11 @@ public final class FinanceActivity extends Activity {
     private interface Values{void run(String[] values);}
     private interface Account{void run(long id);}
     private void form(String title,String[] hints,Values action){
+        formWithDefaults(title,hints,new String[hints.length],action);
+    }
+    private void formWithDefaults(String title,String[] hints,String[] initial,Values action){
         LinearLayout box=new LinearLayout(this);box.setOrientation(1);EditText[] fields=new EditText[hints.length];
-        for(int i=0;i<hints.length;i++){fields[i]=new EditText(this);fields[i].setHint(hints[i]);box.addView(fields[i]);}
+        for(int i=0;i<hints.length;i++){fields[i]=new EditText(this);fields[i].setHint(hints[i]);if(i<initial.length&&initial[i]!=null)fields[i].setText(initial[i]);box.addView(fields[i]);}
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle(title).setView(box).setNegativeButton("Скасувати",null).setPositiveButton("Зберегти",null).create();
         dialog.setOnShowListener(d->dialog.getButton(-1).setOnClickListener(v->{String[] values=new String[fields.length];for(int i=0;i<fields.length;i++)values[i]=fields[i].getText().toString();try{action.run(values);dialog.dismiss();show();}catch(Exception e){error(e);}}));dialog.show();
     }
