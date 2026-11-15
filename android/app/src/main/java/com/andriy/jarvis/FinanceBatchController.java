@@ -27,11 +27,7 @@ public final class FinanceBatchController {
                 for(FinanceVoiceCommands.Entry item:items){
                     long account=-1;
                     if(item.account==null)account=Long.parseLong(ledger.setting("default_account","-1"));
-                    else{
-                        try(Cursor c=db.rawQuery("SELECT id FROM accounts WHERE LOWER(name)=LOWER(?)",new String[]{item.account})){
-                            if(c.moveToFirst()){account=c.getLong(0);if(c.moveToNext())account=-1;}
-                        }
-                    }
+                    else account=ledger.resolveAccount(item.account);
                     if(account<0||!ledger.currency(account).equals("UAH"))
                         throw new IllegalArgumentException("Вибери рахунок UAH для кожної витрати");
                     if(item.category.equals("крипта")||item.category.equals("борг"))
