@@ -245,7 +245,7 @@ public final class FinanceActivity extends Activity {
                     String error=null;
                     try{FinanceBackupFiles.undoRestore(getApplicationContext(),secret);}
                     catch(Exception e){error="Не вдалося відновити попередній стан. Перевір пароль.";}
-                    finally{Arrays.fill(secret,'\\0');}
+                    finally{Arrays.fill(secret,'\0');}
                     final String issue=error;
                     runOnUiThread(()->{backupRunning=false;
                         if(isFinishing()||isDestroyed())return;
@@ -280,7 +280,7 @@ public final class FinanceActivity extends Activity {
                     else FinanceBackupFiles.save(getApplicationContext(),uri,password);
                 }catch(Exception e){
                     problem="Операція не виконана. Перевір пароль, формат і вільне місце. Дані не повинні змінитися при помилці.";
-                }finally{Arrays.fill(password,'\\0');}
+                }finally{Arrays.fill(password,'\0');}
                 final String error=problem;
                 runOnUiThread(()->{
                     backupRunning=false;
