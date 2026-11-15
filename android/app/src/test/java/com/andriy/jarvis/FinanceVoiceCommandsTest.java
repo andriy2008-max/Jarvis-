@@ -28,6 +28,11 @@ public final class FinanceVoiceCommandsTest {
         yes(FinanceVoiceCommands.parse("запиши витрату 200 на зарплата")==null);
         yes(FinanceVoiceCommands.cancel("Джарвіс, скасуй витрату"));
         yes(!FinanceVoiceCommands.cancel("запиши витрату"));
+        test("витрата кава 85",FinanceVoiceCommands.Kind.EXPENSE,"85","Їжа → Кафе",null);
+        test("чайові 650 готівкою",FinanceVoiceCommands.Kind.INCOME,"650","чай","готівка");
+        yes(FinanceVoiceCommands.parse("таксі 250")==null);
+        yes(FinanceVoiceCommands.parse("витрата кава 85 завтра")==null);
+        yes(FinanceVoiceCommands.parse("витрата кава 85 і таксі 250")==null);
         System.out.println("PASS FinanceVoiceCommandsTest");
     }
 }

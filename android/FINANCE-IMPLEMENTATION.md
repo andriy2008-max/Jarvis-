@@ -1,9 +1,9 @@
-# Finance implementation — draft
+# Finance implementation status
 
-Implemented: local SQLite ledger, accounts with unknown opening balances, income/expense journal, same-currency atomic transfers, confirmed soft deletion of linked transfer entries, native Finance screen, existing finance commands routed to local storage instead of an external app.
+Implemented: local SQLite accounts and unknown balances; income/expense journal; atomic same-currency transfers; edit history; confirmed soft deletion and last-deletion restore; search; monthly category report; CSV export through Android document picker; four navigation sections; monthly budgets with used/remaining amounts; initial goal/payment/debt registers; password-encrypted portable backups with authenticated decryption and transactional restore; local finance voice dispatch; conservative short commands for coffee and tips.
 
-Not release-ready. Android compilation and device testing are outstanding; this environment lacks Android SDK and javac. Python tests validate the real SQL schema only, not Android runtime behavior.
+Validation: FinanceLedger, FinanceActivity, FinanceBackup, FinanceManagerController, FinanceVoiceCommands and CommandPatterns compile using Eclipse ECJ Java 17 against Android 15 API classes. Existing and extended voice parser tests pass. Python tests exercise extracted SQLite schema. No APK build or device validation performed.
 
-Outstanding concept requirements: full natural-language parser and clarification flow; onboarding/default account; stable transport command IDs and persistent watch queue; editing/undo and audit history; date selection and opening-balance cutoffs; category management; budgets/goals/debts/subscriptions; notifications; period reports and forecasting; FX/crypto; encrypted storage, export and portable backups; privacy controls. Existing voice grammar still applies. Do not claim full concept implementation or watch reliability.
+Still incomplete against the full concept: full onboarding/default account and account aliases; free-form clarification and correction; stable transport request IDs and persistent watch queue; date entry/opening-balance cutoffs; refund/debt settlement/goal contributions; recurring schedules and reminders; financial health/forecast/scenarios; FX/crypto; database encryption and biometric locking; full backup validation and automatic pre-restore backup; plan editing/deletion. Goals, payments and debts currently store plans, not linked cash movements. Backups are encrypted but the working SQLite database uses Android app-private storage without additional database encryption. Backup operations currently run on the UI thread and require device performance testing.
 
-No APK requested or built. Keep this branch as a draft until remaining requirements and Android validation are complete.
+Do not merge as a completed implementation of the full concept or claim production readiness. No APK requested or built.

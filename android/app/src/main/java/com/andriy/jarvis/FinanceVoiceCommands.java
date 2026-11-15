@@ -41,7 +41,7 @@ public final class FinanceVoiceCommands {
         Kind kind=Kind.EXPENSE;
         if(!m.matches()) {
             m=INC.matcher(s);
-            if(!m.matches())return null;
+            if(!m.matches())return natural(s);
             kind=Kind.INCOME;
         }
         String amount=m.group(1).replace(',','.');
@@ -69,6 +69,26 @@ public final class FinanceVoiceCommands {
         }
         String category=category(kind,descriptor);
         return category==null?null:new Entry(kind,amount,category,account);
+    }
+
+    /** Explicit finance trigger prevents ambiguous taxi/song commands from recording money. */
+    private static Entry natural(String speech){
+        String s=speech.replaceFirst("^(?:джарвіс|jarvis)[ ,:]*", "");
+        boolean income=s.matches("^(?:(?:запиши|додай)\\s+)?(?:дохід|чайові|зарплата)(?:\\s|:).*" );
+        if(!income&&!s.matches("^(?:(?:запиши|додай)\\s+)?(?:витрата|витрату)(?:\\s|:).*"))return null;
+        if(s.matches(".*(?:вчора|завтра|позавчора|долар|євро|usd|eur|борг|позик).*"))return null;
+        String account=null;
+        if(s.endsWith("готівкою")){account="готівка";s=s.substring(0,s.length()-8).trim();}
+        java.util.regex.Matcher number=Pattern.compile("(?<![0-9])([0-9]+(?:[,.][0-9]{1,2})?)(?![0-9])").matcher(s);
+        if(!number.find())return null;
+        String amount=number.group(1).replace(',','.');int begin=number.start(),end=number.end();if(number.find())return null;
+        try{if(new java.math.BigDecimal(amount).signum()<=0)return null;}catch(RuntimeException e){return null;}
+        String descriptor=(s.substring(0,begin)+" "+s.substring(end)).replaceFirst("^(?:(?:запиши|додай)\\s+)?(?:витрата|витрату|дохід)[: ]*", "").replaceAll("\\b(?:грн|гривень|гривні)\\b", "").trim();
+        if(descriptor.isEmpty())return null;
+        String cat=category(income?Kind.INCOME:Kind.EXPENSE,descriptor);
+        if(cat==null&&descriptor.equals("кава"))cat="Їжа → Кафе";
+        if(cat==null)return null;
+        return new Entry(income?Kind.INCOME:Kind.EXPENSE,amount,cat,account);
     }
 
     private static String category(Kind kind,String value){
