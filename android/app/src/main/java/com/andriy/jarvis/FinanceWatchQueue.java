@@ -26,8 +26,10 @@ public final class FinanceWatchQueue {
         if(command==null||command.trim().isEmpty())return false;
         String id=p.getString("id","");
         if(id.isEmpty()){
-            return p.edit().putString("id",UUID.randomUUID().toString()).putString("text",command)
+            boolean stored=p.edit().putString("id",UUID.randomUUID().toString()).putString("text",command)
                 .putLong("captured_at",System.currentTimeMillis()).putBoolean("sent",false).commit();
+            if(stored)FinanceWatchRetryJob.schedule(c,15000L);
+            return stored;
         }
         // Repeating the pending command is a retransmission, never a new charge.
         if(command.equals(p.getString("text","")))return true;
@@ -38,7 +40,9 @@ public final class FinanceWatchQueue {
             JSONObject next=new JSONObject().put("id",UUID.randomUUID().toString())
                 .put("text",command).put("captured_at",System.currentTimeMillis());
             pending.put(next);
-            return p.edit().putString(TAIL,pending.toString()).commit();
+            boolean stored=p.edit().putString(TAIL,pending.toString()).commit();
+            if(stored)FinanceWatchRetryJob.schedule(c,15000L);
+            return stored;
         }catch(Exception e){return false;}
     }
     public static synchronized String first(Context c){return prefs(c).getString("text","");}
@@ -63,7 +67,12 @@ public final class FinanceWatchQueue {
                     .putBoolean("sent",false).putString(TAIL,rest.toString());
             }catch(Exception exc){return false;}
         }
-        return e.commit();
+        boolean stored=e.commit();
+        if(stored){
+            if(!firstId(c).isEmpty())FinanceWatchRetryJob.schedule(c,15000L);
+            else FinanceWatchRetryJob.cancel(c);
+        }
+        return stored;
     }
     /** A phone-side validation failure is final; do not block every later queued expense. */
     public static synchronized boolean rejected(Context c,String id){
