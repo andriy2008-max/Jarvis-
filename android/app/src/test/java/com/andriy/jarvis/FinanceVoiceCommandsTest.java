@@ -33,6 +33,13 @@ public final class FinanceVoiceCommandsTest {
         yes(FinanceVoiceCommands.parse("таксі 250")==null);
         yes(FinanceVoiceCommands.parse("витрата кава 85 завтра")==null);
         yes(FinanceVoiceCommands.parse("витрата кава 85 і таксі 250")==null);
+        FinanceVoiceCommands.Entry yesterday=FinanceVoiceCommands.parse("витрата кава 85 вчора");
+        yes(yesterday!=null && yesterday.daysAgo==1 && yesterday.category.equals("Їжа → Кафе"));
+        FinanceVoiceCommands.Entry earlier=FinanceVoiceCommands.parse("витратив 150 на каву позавчора");
+        yes(earlier!=null && earlier.daysAgo==2 && earlier.amount.equals("150"));
+        FinanceVoiceCommands.Entry today=FinanceVoiceCommands.parse("запиши витрату 300 гривень на транспорт сьогодні");
+        yes(today!=null && today.daysAgo==0);
+        yes(FinanceVoiceCommands.parse("витратив 120 на каву завтра")==null);
         System.out.println("PASS FinanceVoiceCommandsTest");
     }
 }
