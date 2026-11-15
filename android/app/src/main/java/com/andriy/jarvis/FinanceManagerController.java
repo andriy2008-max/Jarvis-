@@ -24,8 +24,24 @@ public final class FinanceManagerController {
             FinanceCorrectionController.start(context,utterance,commandId,capturedAt,correction,listener);
             return;
         }
-        FinanceVoiceCommands.Entry request=FinanceVoiceCommands.parse(utterance);
+        final int sourceSeparator=commandId.lastIndexOf(':');
+        final String sourceId=sourceSeparator<1?"phone":commandId.substring(0,sourceSeparator);
+        String command=utterance;
+        boolean clarified=false;
+        if(FinanceVoiceClarification.pending(context,sourceId)||FinanceVoiceClarification.maybeStart(utterance)){
+            try(FinanceLedger check=new FinanceLedger(context)){
+                String receipt=check.receipt(commandId,utterance);
+                if(receipt!=null){listener.onFinished(true,receipt);return;}
+            }catch(RuntimeException e){listener.onFinished(false,"Не вдалося перевірити фінансовий журнал.");return;}
+            FinanceVoiceClarification.Step step=FinanceVoiceClarification.process(context,sourceId,utterance);
+            if(step!=null){
+                if(step.command==null){listener.onFinished(true,step.reply);return;}
+                command=step.command;clarified=true;
+            }
+        }
+        FinanceVoiceCommands.Entry request=FinanceVoiceCommands.parse(command);
         if(request==null){listener.onFinished(false,"Не розпізнав фінансовий запис.");return;}
+        final boolean clearClarification=clarified;
         try(FinanceLedger ledger=new FinanceLedger(context)){
             net.zetetic.database.sqlcipher.SQLiteDatabase db=ledger.getWritableDatabase();
             db.beginTransaction();try{
@@ -50,6 +66,7 @@ public final class FinanceManagerController {
             ledger.setSetting("finance_last_at:"+source,Long.toString(capturedAt));
             db.setTransactionSuccessful();
             }finally{db.endTransaction();}
+            if(clearClarification)FinanceVoiceClarification.clear(context,sourceId);
             listener.onFinished(true,ledger.receipt(commandId,utterance));
         }catch(IllegalArgumentException e){listener.onFinished(false,e.getMessage());}
         catch(RuntimeException e){listener.onFinished(false,"Не вдалося зберегти фінансовий запис.");}
