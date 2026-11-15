@@ -27,19 +27,28 @@ public final class FinanceActivity extends Activity {
         for(String name:new String[]{"Огляд","Операції","План","Звіти"})button(name,()->{tab=name;show();});
         if(tab.equals("План")){planning();return;}
         if(tab.equals("Звіти")){text(ledger.monthlyReport());text(FinanceInsights.report(ledger));text(FinanceFx.valuation(ledger));button("Оновити курси НБУ",()->{Toast.makeText(this,"Отримую курси НБУ…",Toast.LENGTH_SHORT).show();new Thread(()->{String message;try(FinanceLedger db=new FinanceLedger(getApplicationContext())){FinanceFx.refresh(db);message="Курси оновлено";}catch(Exception e){message="НБУ недоступний. Попередні курси збережено з датою.";}final String result=message;runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()){Toast.makeText(this,result,Toast.LENGTH_LONG).show();show();}});},"finance-fx").start();});button("Експорт CSV",()->{Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.setType("text/csv");i.addCategory(Intent.CATEGORY_OPENABLE);i.putExtra(Intent.EXTRA_TITLE,"jarvis-finance.csv");startActivityForResult(i,71);});return;}
+        if(!tab.equals("Операції")){
         text(ledger.report());text(FinanceInsights.reminders(ledger));
         button("Увімкнути / вимкнути нагадування",()->{boolean enable=!ledger.setting("reminders","false").equals("true");ledger.setSetting("reminders",Boolean.toString(enable));if(enable)FinanceReminderJob.schedule(this);Toast.makeText(this,enable?"Нагадування ввімкнено. Дозволь сповіщення Джарвіса в Android.":"Нагадування вимкнено",Toast.LENGTH_LONG).show();});
         button("Додати рахунок",()->form("Новий рахунок",new String[]{"Назва","Валюта (UAH)","Поточний залишок (можна пропустити)"},values->ledger.account(values[0],values[1].trim().isEmpty()?"UAH":values[1].trim().toUpperCase(Locale.ROOT),values[2])));
         button("Витрата",()->entry(false));button("Дохід / чайові",()->entry(true));
         button("Переказ",()->pickAccount(from->pickAccount(to->form("Переказ",new String[]{"Сума"},v->ledger.transfer(from,to,FinanceLedger.minor(v[0]))))));
+        return;
+        }
+        button("Всі операції",()->{query="";show();});
         button("Пошук операцій",()->form("Пошук",new String[]{"Категорія або нотатка"},v->query=v[0]));
         if(lastDeleted!=null)button("Відновити останнє видалення",()->{ledger.restore(lastDeleted);lastDeleted=null;show();});
         text("Операції · натисни для дій");
-        try(Cursor c=ledger.getReadableDatabase().rawQuery("SELECT e.id,e.amount,a.currency,e.category,a.name,e.happened FROM entries e JOIN accounts a ON a.id=e.account WHERE e.deleted=0 AND (e.category LIKE ? OR e.note LIKE ?) ORDER BY e.happened DESC LIMIT 100",new String[]{"%"+query+"%","%"+query+"%"})){
+        try(Cursor c=ledger.getReadableDatabase().rawQuery("SELECT e.id,e.amount,a.currency,e.category,a.name,e.happened,e.kind FROM entries e JOIN accounts a ON a.id=e.account WHERE e.deleted=0 AND (e.category LIKE ? OR e.note LIKE ?) ORDER BY e.happened DESC LIMIT 100",new String[]{"%"+query+"%","%"+query+"%"})){
             while(c.moveToNext()){
                 final String id=c.getString(0);String label=FinanceLedger.money(c.getLong(1))+" "+c.getString(2)+" · "+c.getString(3)+" · "+c.getString(4)+" · "+android.text.format.DateFormat.format("dd.MM.yyyy",c.getLong(5));
-                button(label,()->new AlertDialog.Builder(this).setTitle(label).setItems(new String[]{"Редагувати","Видалити"},(dialog,index)->{
-                    if(index==0)form("Редагувати",new String[]{"Нова сума","Категорія"},v->ledger.edit(id,v[0],v[1]));
+                final String kind=c.getString(6);
+                final String[] actions=kind.equals("expense")?new String[]{"Редагувати","Повернення покупки","Видалити"}:
+                    kind.equals("income")?new String[]{"Редагувати","Видалити"}:new String[]{"Видалити"};
+                button(label,()->new AlertDialog.Builder(this).setTitle(label).setItems(actions,(dialog,index)->{
+                    String choice=actions[index];
+                    if(choice.equals("Редагувати"))form("Редагувати",new String[]{"Нова сума","Категорія"},v->ledger.edit(id,v[0],v[1]));
+                    else if(choice.equals("Повернення покупки"))form("Отримане повернення",new String[]{"Сума повернення"},v->ledger.refund(id,v[0]));
                     else new AlertDialog.Builder(this).setTitle("Видалити операцію?").setMessage(label+"\nПереказ буде скасовано з обох рахунків.").setNegativeButton("Ні",null).setPositiveButton("Видалити",(d,w)->{try{ledger.remove(id);lastDeleted=id;show();}catch(Exception ex){error(ex);}}).show();
                 }).show());
             }
@@ -55,7 +64,7 @@ public final class FinanceActivity extends Activity {
                 String detail=c.getString(1)+" · "+FinanceLedger.money(c.getLong(3))+" "+c.getString(2)+" · "+c.getString(4);
                 if(c.getString(0).equals("budget")){
                     long start=java.time.LocalDate.now().withDayOfMonth(1).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
-                    try(Cursor spent=ledger.getReadableDatabase().rawQuery("SELECT COALESCE(-SUM(e.amount),0) FROM entries e JOIN accounts a ON a.id=e.account WHERE e.deleted=0 AND e.kind='expense' AND a.currency=? AND (e.category=? OR ?='') AND e.happened>=?",new String[]{c.getString(2),c.getString(5),c.getString(5),""+start})){
+                    try(Cursor spent=ledger.getReadableDatabase().rawQuery("SELECT COALESCE(-SUM(e.amount),0) FROM entries e JOIN accounts a ON a.id=e.account WHERE e.deleted=0 AND e.kind IN ('expense','refund') AND a.currency=? AND (e.category=? OR ?='') AND e.happened>=? AND e.happened<?",new String[]{c.getString(2),c.getString(5),c.getString(5),""+start,""+(System.currentTimeMillis()+1L)})){
                         spent.moveToFirst();detail+="\nВитрачено: "+FinanceLedger.money(spent.getLong(0))+" · Залишилось: "+FinanceLedger.money(c.getLong(3)-spent.getLong(0));
                     }
                 }
