@@ -39,6 +39,7 @@ public final class FinanceLedger extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE fx_transfers(id TEXT PRIMARY KEY, from_account INTEGER NOT NULL REFERENCES accounts(id), to_account INTEGER NOT NULL REFERENCES accounts(id), from_minor INTEGER NOT NULL CHECK(from_minor>0), to_minor INTEGER NOT NULL CHECK(to_minor>0), fee_minor INTEGER NOT NULL CHECK(fee_minor>=0), happened INTEGER NOT NULL)");
         db.execSQL("CREATE TABLE crypto_positions(symbol TEXT PRIMARY KEY, quantity TEXT NOT NULL, value_uah TEXT, valued_on TEXT)");
         db.execSQL("CREATE TABLE finance_shifts(id TEXT PRIMARY KEY, label TEXT NOT NULL, captured INTEGER NOT NULL, hours TEXT)");
+        db.execSQL("CREATE TABLE finance_aliases(alias TEXT PRIMARY KEY, account INTEGER NOT NULL REFERENCES accounts(id))");
         db.execSQL("CREATE TABLE settlement_history(id INTEGER PRIMARY KEY AUTOINCREMENT, entry_id TEXT UNIQUE NOT NULL REFERENCES entries(id), plan_id TEXT NOT NULL, before_progress INTEGER NOT NULL, after_progress INTEGER NOT NULL, before_due TEXT NOT NULL, after_due TEXT NOT NULL, reversed INTEGER NOT NULL DEFAULT 0)");
         db.execSQL("ALTER TABLE plans ADD COLUMN budget_period TEXT NOT NULL DEFAULT 'month'");
         db.execSQL("ALTER TABLE plans ADD COLUMN recurrence_unit TEXT NOT NULL DEFAULT 'month'");
@@ -183,6 +184,27 @@ public final class FinanceLedger extends SQLiteOpenHelper {
             v.put("opening_at",System.currentTimeMillis());
         }
         return getWritableDatabase().insertOrThrow("accounts",null,v);
+    }
+    public void addAlias(long account,String alias){
+        currency(account);
+        String name=alias==null?"":alias.trim().toLowerCase(java.util.Locale.forLanguageTag("uk-UA"));
+        if(name.isEmpty()||name.length()>45||name.contains("\n")||name.contains("\r"))
+            throw new IllegalArgumentException("Вкажи короткий псевдонім рахунку");
+        ContentValues v=new ContentValues();v.put("alias",name);v.put("account",account);
+        getWritableDatabase().insertOrThrow("finance_aliases",null,v);
+    }
+    public long resolveAccount(String name){
+        if(name==null||name.trim().isEmpty())throw new IllegalArgumentException("Вкажи рахунок");
+        String query=name.trim().toLowerCase(java.util.Locale.forLanguageTag("uk-UA"));
+        long found=-1;
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT DISTINCT a.id FROM accounts a LEFT JOIN finance_aliases v ON v.account=a.id WHERE LOWER(a.name)=? OR v.alias=?",new String[]{query,query})){
+            while(c.moveToNext()){
+                if(found!=-1)throw new IllegalArgumentException("Назва неоднозначна. Вкажи точний рахунок");
+                found=c.getLong(0);
+            }
+        }
+        if(found<0)throw new IllegalArgumentException("Не знайшов рахунок. Налаштуй псевдонім у розділі «Фінанси»");
+        return found;
     }
     public void record(String id,long account,long amount,String kind,String category,String note,long date){
         if(amount<=0)throw new IllegalArgumentException("Сума повинна бути більшою за нуль");
