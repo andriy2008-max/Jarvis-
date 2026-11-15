@@ -39,6 +39,7 @@ public final class FinanceLedger extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE fx_transfers(id TEXT PRIMARY KEY, from_account INTEGER NOT NULL REFERENCES accounts(id), to_account INTEGER NOT NULL REFERENCES accounts(id), from_minor INTEGER NOT NULL CHECK(from_minor>0), to_minor INTEGER NOT NULL CHECK(to_minor>0), fee_minor INTEGER NOT NULL CHECK(fee_minor>=0), happened INTEGER NOT NULL)");
         db.execSQL("CREATE TABLE crypto_positions(symbol TEXT PRIMARY KEY, quantity TEXT NOT NULL, value_uah TEXT, valued_on TEXT)");
         db.execSQL("CREATE TABLE settlement_history(id INTEGER PRIMARY KEY AUTOINCREMENT, entry_id TEXT UNIQUE NOT NULL REFERENCES entries(id), plan_id TEXT NOT NULL, before_progress INTEGER NOT NULL, after_progress INTEGER NOT NULL, before_due TEXT NOT NULL, after_due TEXT NOT NULL, reversed INTEGER NOT NULL DEFAULT 0)");
+        db.execSQL("ALTER TABLE plans ADD COLUMN budget_period TEXT NOT NULL DEFAULT 'month'");
         db.execSQL("ALTER TABLE plans ADD COLUMN recurrence_unit TEXT NOT NULL DEFAULT 'month'");
         db.execSQL("ALTER TABLE plans ADD COLUMN recurrence_every INTEGER NOT NULL DEFAULT 0");
         db.execSQL("ALTER TABLE plans ADD COLUMN recurrence_anchor INTEGER NOT NULL DEFAULT 0");
@@ -225,10 +226,15 @@ public final class FinanceLedger extends SQLiteOpenHelper {
         getWritableDatabase().execSQL("UPDATE entries SET deleted=1 WHERE id=? OR group_id=(SELECT group_id FROM entries WHERE id=?)",new Object[]{id,id});
     }
     public void plan(String type,String name,String currency,String amount,String due,String category){
+        plan(type,name,currency,amount,due,category,"month");
+    }
+    public void plan(String type,String name,String currency,String amount,String due,String category,String period){
+        if(!java.util.Arrays.asList("week","month").contains(period))
+            throw new IllegalArgumentException("Період бюджету: тиждень або місяць");
         if(!java.util.Arrays.asList("budget","goal","payment","owed","owing").contains(type)||name.trim().isEmpty()||!currency.matches("[A-Z]{3}"))throw new IllegalArgumentException("Перевір назву й валюту");
         long value=minor(amount);if(value<=0)throw new IllegalArgumentException("Сума має бути додатною");
         if(!due.isEmpty())try{java.time.LocalDate.parse(due);}catch(RuntimeException e){throw new IllegalArgumentException("Дата: РРРР-ММ-ДД");}
-        ContentValues v=new ContentValues();v.put("id",UUID.randomUUID().toString());v.put("type",type);v.put("name",name.trim());v.put("currency",currency);v.put("amount",value);v.put("due",due);v.put("category",category);
+        ContentValues v=new ContentValues();v.put("id",UUID.randomUUID().toString());v.put("type",type);v.put("name",name.trim());v.put("currency",currency);v.put("amount",value);v.put("due",due);v.put("category",category);v.put("budget_period",period);
         getWritableDatabase().insertOrThrow("plans",null,v);
     }
     /** Editing a plan cannot invalidate any confirmed settlements or goal reservations. */
