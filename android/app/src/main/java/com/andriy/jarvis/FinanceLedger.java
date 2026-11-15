@@ -2,13 +2,23 @@ package com.andriy.jarvis;
 
 import android.content.*;
 import android.database.Cursor;
-import android.database.sqlite.*;
+import net.zetetic.database.sqlcipher.SQLiteDatabase;
+import net.zetetic.database.sqlcipher.SQLiteOpenHelper;
 import java.math.BigDecimal;
 import java.util.UUID;
 
 /** Local ledger. Amounts are integer minor units; transfers commit atomically. */
 public final class FinanceLedger extends SQLiteOpenHelper {
-    public FinanceLedger(Context c){super(c.getApplicationContext(),"jarvis-finance.db",null,5);}
+    static {System.loadLibrary("sqlcipher");}
+    /**
+     * Independent encrypted file; legacy plaintext journal remains intact until
+     * the migration transaction, referential-integrity checks and commit succeed.
+     */
+    public FinanceLedger(Context c){
+        super(c.getApplicationContext(),"jarvis-finance-secure.db",FinanceSecureKey.password(c),
+            null,6,0,null,null,true);
+        FinanceLegacyMigration.migrate(c,this);
+    }
     public void onConfigure(SQLiteDatabase db){db.setForeignKeyConstraintsEnabled(true);}
     public void onCreate(SQLiteDatabase db){
         db.execSQL("CREATE TABLE accounts(id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL, currency TEXT NOT NULL, opening INTEGER, opening_at INTEGER NOT NULL DEFAULT 0)");
@@ -17,6 +27,7 @@ public final class FinanceLedger extends SQLiteOpenHelper {
         createPlanning(db);
         createSettlements(db);
         createAdvanced(db);
+        createTrading(db);
     }
     private void createPlanning(SQLiteDatabase db){
         db.execSQL("CREATE TABLE plans(id TEXT PRIMARY KEY, type TEXT NOT NULL, name TEXT NOT NULL, currency TEXT NOT NULL, amount INTEGER NOT NULL CHECK(amount>0), progress INTEGER NOT NULL DEFAULT 0 CHECK(progress>=0), due TEXT NOT NULL, category TEXT NOT NULL)");
@@ -27,6 +38,7 @@ public final class FinanceLedger extends SQLiteOpenHelper {
         if(old<3)createSettlements(db);
         if(old<4)db.execSQL("ALTER TABLE accounts ADD COLUMN opening_at INTEGER NOT NULL DEFAULT 0");
         if(old<5)createAdvanced(db);
+        if(old<6)createTrading(db);
     }
     private void createSettlements(SQLiteDatabase db){
         db.execSQL("CREATE TABLE allocations(id TEXT PRIMARY KEY, plan TEXT NOT NULL REFERENCES plans(id), account INTEGER NOT NULL REFERENCES accounts(id), amount INTEGER NOT NULL CHECK(amount>0))");
@@ -47,6 +59,10 @@ public final class FinanceLedger extends SQLiteOpenHelper {
         db.execSQL("ALTER TABLE plans ADD COLUMN recurrence_anchor INTEGER NOT NULL DEFAULT 0");
         // Keep original interval_months for compatibility with existing plans.
         db.execSQL("UPDATE plans SET recurrence_every=interval_months, recurrence_anchor=CASE WHEN due!='' THEN CAST(substr(due,9,2) AS INTEGER) ELSE 0 END WHERE interval_months>0");
+    }
+    private void createTrading(SQLiteDatabase db){
+        db.execSQL("CREATE TABLE crypto_trades(id TEXT PRIMARY KEY, symbol TEXT NOT NULL, action TEXT NOT NULL CHECK(action IN ('buy','sell')), quantity TEXT NOT NULL, price_uah_minor INTEGER NOT NULL CHECK(price_uah_minor>=0), fee_uah_minor INTEGER NOT NULL DEFAULT 0 CHECK(fee_uah_minor>=0), account INTEGER REFERENCES accounts(id), happened INTEGER NOT NULL)");
+        db.execSQL("CREATE INDEX crypto_trades_symbol_time ON crypto_trades(symbol,happened)");
     }
     public long balance(long account){
         try(Cursor c=getReadableDatabase().rawQuery("SELECT a.opening+COALESCE(SUM(CASE WHEN e.deleted=0 AND (a.opening_at=0 OR e.happened>=a.opening_at) THEN e.amount ELSE 0 END),0) FROM accounts a LEFT JOIN entries e ON a.id=e.account WHERE a.id=? GROUP BY a.id",new String[]{""+account})){
