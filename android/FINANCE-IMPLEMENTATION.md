@@ -16,7 +16,7 @@ Branch: `feature/finance-local-ledger`. Native finance ledger inside Jarvis (Pix
 - `tools/finance/test_schema.py`: SQLite schema, balance cutoff migration, amount accounting and refund tests.
 - `FinanceVoiceCommandsTest` and `FinanceVoiceFollowupsTest`: strict Ukrainian parsing and amount correction cases.
 - `.github/workflows/finance-contracts.yml`: isolated Python + javac contract suite **and** full Android `compileDebugJavaWithJavac` compilation; no APK packaging or signing.
-- Verified on GitHub Actions: SQLite schema and voice parser jobs **passed**, and full Android Java compile-only job **passed** (2026-11-15 run #17; follow-up run verifies subsequent changes). This is not a physical-device or APK acceptance test.
+- Verified on GitHub Actions: SQLite schema and voice parser jobs **passed**, and full Android Java compile-only job **passed** again after the latest finance source changes (2026-11-15 run #23). This is not a physical-device or APK acceptance test.
 
 ## Pending before daily-use/release claims
 - Signed release build by explicit user request, live Pixel and Watch7 end-to-end tests (including microphone, retransmission, lock screen and app staying open). Compile-only passed; device behavior remains unverified.
