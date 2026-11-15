@@ -2,7 +2,7 @@ package com.andriy.jarvis;
 
 import android.content.Context;
 import android.database.Cursor;
-import android.database.sqlite.SQLiteDatabase;
+import net.zetetic.database.sqlcipher.SQLiteDatabase;
 import java.time.*;
 import java.util.List;
 
