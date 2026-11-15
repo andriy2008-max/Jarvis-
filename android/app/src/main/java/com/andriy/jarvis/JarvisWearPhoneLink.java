@@ -349,7 +349,7 @@ public final class JarvisWearPhoneLink {
             if (JarvisWearProtocol.SYNC.equals(pendingType)) clearPending();
         }
         final boolean financeRequest=(JarvisWearProtocol.ASSISTANT.equals(type)||JarvisWearProtocol.COMMAND.equals(type))&&
-            (FinanceVoiceCommands.parse(text)!=null || FinanceVoiceFollowups.parse(text)!=null);
+            (FinanceVoiceCommands.parse(text)!=null || FinanceVoiceFollowups.parse(text)!=null || FinanceBatchCommands.looksLikeBatch(text));
         if(financeRequest && !FinanceWatchQueue.firstId(context).isEmpty() &&
             !text.equals(FinanceWatchQueue.first(context))){
             boolean added=FinanceWatchQueue.add(context,text);
