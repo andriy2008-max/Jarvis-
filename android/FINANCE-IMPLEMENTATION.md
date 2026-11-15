@@ -15,10 +15,11 @@ Branch: `feature/finance-local-ledger`. Native finance ledger inside Jarvis (Pix
 ## Automated contract checks
 - `tools/finance/test_schema.py`: SQLite schema, balance cutoff migration, amount accounting and refund tests.
 - `FinanceVoiceCommandsTest` and `FinanceVoiceFollowupsTest`: strict Ukrainian parsing and amount correction cases.
-- `.github/workflows/finance-contracts.yml`: isolated Python + javac contract suite; **does not build APK**. Check CI run status before describing the tests as passed.
+- `.github/workflows/finance-contracts.yml`: isolated Python + javac contract suite **and** full Android `compileDebugJavaWithJavac` compilation; no APK packaging or signing.
+- Verified on GitHub Actions: SQLite schema and voice parser jobs **passed**, and full Android Java compile-only job **passed** (2026-11-15 run #17). This is not a physical-device or APK acceptance test.
 
 ## Pending before daily-use/release claims
-- Whole Android app and Wear dependency compilation, signed release build by explicit user request, live Pixel and Watch7 end-to-end tests (including microphone, retransmission, lock screen and app staying open).
+- Signed release build by explicit user request, live Pixel and Watch7 end-to-end tests (including microphone, retransmission, lock screen and app staying open). Compile-only passed; device behavior remains unverified.
 - Full natural-language/slash-command and interactive clarification coverage, amount words, multi-entry tips per shift and hours, persistent multi-command watch queue, and explicit cancellation.
 - User-controlled opening balance effective-date input/reconciliation, cross-currency transfers with actual FX rate and fees, crypto amount/valuation.
 - Weekly and daily recurring schedules, quiet hours, consolidated notification quotas and digests, richer filters and visual charts, spending audit and scenario forecasting.
