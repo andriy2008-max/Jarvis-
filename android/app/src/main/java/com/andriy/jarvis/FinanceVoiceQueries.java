@@ -20,17 +20,17 @@ public final class FinanceVoiceQueries {
         return s.matches("^(?:відкрий|покажи|відкрити|показати) (?:мої )?(?:фінанси|фінансовий менеджер)$");
     }
     public static boolean matches(String voice){
-        String s=normalize(voice);
-        if(s.isEmpty())return false;
-        if(s.startsWith("скільки ")&&(s.contains("чайов")||s.contains("чаєв")))return true;
-        if(s.matches("^(?:який|покажи|скажи|скільки|мій|мої|що з|скільки в мене|скільки у мене).*\\b(?:баланс|залишок|грошей|кошти)\\b.*"))return true;
-        if(s.matches("^(?:скільки|покажи|які) .*\\b(?:витратив|витрачено|витрати|заробив|отримав|доходи|дохід)\\b.*"))return true;
-        if(s.matches("^(?:які|покажи|що з|скільки).*\\b(?:платежі|платіж|нагадування|бюджет|бюджетом|бюджету)\\b.*"))return true;
-        return s.equals("фінансовий звіт")||s.equals("звіт фінанси");
+        return FinanceVoiceQueryMatcher.matches(normalize(voice));
     }
     public static String answer(FinanceLedger ledger,String voice){
         String s=normalize(voice);
         if(!matches(voice))return null;
+        if(s.contains("собіварт"))return FinanceCryptoTrades.costBasis(ledger);
+        if(s.contains("крипто"))return FinanceCryptoTrades.history(ledger);
+        if(s.contains("капітал")||s.contains("фінансовий стан"))return FinanceNetWorth.report(ledger);
+        if(s.contains("подушк"))return FinanceHealth.report(ledger);
+        if(s.contains("змін")&&(s.contains("чайов")||s.contains("чаєв")))return FinanceShifts.report(ledger);
+        if(s.contains("курс"))return FinanceFx.valuation(ledger);
         if(s.contains("чайов")||s.contains("чаєв"))return tips(ledger,s);
         if(s.contains("платіж")||s.contains("платеж")||s.contains("нагадування")){
             String events=FinanceInsights.reminders(ledger);
