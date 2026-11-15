@@ -4,4 +4,5 @@
     <exclude domain="database" path="jarvis-finance.db" />
     <exclude domain="database" path="jarvis-finance.db-wal" />
     <exclude domain="database" path="jarvis-finance.db-shm" />
+    <exclude domain="sharedpref" path="finance_watch_queue.xml" />
 </full-backup-content>
