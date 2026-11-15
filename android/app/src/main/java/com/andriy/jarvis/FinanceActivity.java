@@ -67,6 +67,7 @@ public final class FinanceActivity extends Activity {
             text(FinanceHealth.report(ledger));
             text(FinanceInsights.report(ledger));
             text(FinanceFx.valuation(ledger));
+            button("Чистий капітал · усі валюти",()->showInfo(FinanceNetWorth.report(ledger)));
             text(FinanceAssets.positions(ledger));
             button("Історія криптоугод",()->showInfo(FinanceCryptoTrades.history(ledger)));
             button("Собівартість крипто (FIFO)",()->showInfo(FinanceCryptoTrades.costBasis(ledger)));
