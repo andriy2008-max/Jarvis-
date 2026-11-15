@@ -14,7 +14,7 @@ public final class FinanceLegacyMigration {
     private static final String DONE="done";
     private static final String[] TABLES={
         "accounts","plans","finance_shifts","entries","allocations","settings","receipts",
-        "audit","fx_transfers","crypto_positions","settlement_history","finance_aliases"
+        "audit","fx_transfers","crypto_positions","settlement_history","finance_aliases","finance_reconciliations"
     };
     private FinanceLegacyMigration(){}
     public static synchronized void migrate(Context c,FinanceLedger target){
