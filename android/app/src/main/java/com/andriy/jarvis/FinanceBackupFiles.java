@@ -33,14 +33,28 @@ public final class FinanceBackupFiles {
     public static void restore(Context c,Uri file,char[] password)throws Exception{
         byte[] original;
         try(InputStream in=c.getContentResolver().openInputStream(file)){original=read(in);}
-        try(FinanceLedger ledger=new FinanceLedger(c)){
-            // Fail closed: loss of free disk space means no import at all.
-            byte[] previous=FinanceBackup.export(ledger,password);
-            try(FileOutputStream out=c.openFileOutput(PREVIOUS,Context.MODE_PRIVATE)){
-                out.write(previous);
-                out.getFD().sync();
-            }finally{Arrays.fill(previous,(byte)0);}
-            FinanceBackup.restore(ledger,password,original);
+        try{
+            // Invalid passwords/files never overwrite the last working rollback snapshot.
+            FinanceBackup.validate(password,original);
+            try(FinanceLedger ledger=new FinanceLedger(c)){
+                android.database.sqlite.SQLiteDatabase db=ledger.getWritableDatabase();
+                db.beginTransaction();
+                try{
+                    byte[] previous=FinanceBackup.export(ledger,password);
+                    try{
+                        File temporary=c.getFileStreamPath(PREVIOUS+".tmp");
+                        File target=c.getFileStreamPath(PREVIOUS);
+                        try(FileOutputStream out=c.openFileOutput(PREVIOUS+".tmp",Context.MODE_PRIVATE)){
+                            out.write(previous);out.getFD().sync();
+                        }
+                        java.nio.file.Files.move(temporary.toPath(),target.toPath(),
+                            java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    }finally{Arrays.fill(previous,(byte)0);}
+                    FinanceBackup.restore(ledger,password,original);
+                    db.setTransactionSuccessful();
+                }finally{db.endTransaction();}
+            }
         }finally{Arrays.fill(original,(byte)0);}
     }
     public static boolean hasPrevious(Context c){return c.getFileStreamPath(PREVIOUS).isFile();}
