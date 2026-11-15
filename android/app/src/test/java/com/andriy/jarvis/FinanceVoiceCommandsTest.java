@@ -48,6 +48,9 @@ public final class FinanceVoiceCommandsTest {
         yes(FinanceVoiceCommands.parse("/видалити 85")==null);
         yes(FinanceVoiceCommands.parse("/витрата")==null);
         yes("який баланс".equals(FinanceSlashCommands.expand("/баланс")));
+        test("витрата кава 85 з рахунку моно",FinanceVoiceCommands.Kind.EXPENSE,"85","Їжа → Кафе","моно");
+        test("запиши витрату 1800 на заправку з монобанку",FinanceVoiceCommands.Kind.EXPENSE,"1800","Транспорт → Пальне","монобанк");
+        test("чайові 650 з рахунку картка роботи",FinanceVoiceCommands.Kind.INCOME,"650","чай","картка роботи");
         System.out.println("PASS FinanceVoiceCommandsTest");
     }
 }
