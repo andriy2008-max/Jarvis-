@@ -133,4 +133,21 @@ class LedgerSchemaTest(unittest.TestCase):
   self.assertIn('FinanceLegacyMigration.migrate',ledger)
   self.assertIn('AndroidKeyStore',key)
   self.assertIn('AES/GCM/NoPadding',key)
+ def test_reconciliation_audit_survives_and_prevents_double_count(self):
+  self.db.execute("INSERT INTO finance_reconciliations VALUES('r1',1,10000,0,12000,2000,3000)")
+  self.db.execute("UPDATE accounts SET opening=12000, opening_at=2000 WHERE id=1")
+  self.db.execute("INSERT INTO entries(id,account,amount,category,note,happened,kind) VALUES('before',1,-2000,'Їжа','',1999,'expense')")
+  self.db.execute("INSERT INTO entries(id,account,amount,category,note,happened,kind) VALUES('after',1,-1000,'Їжа','',2001,'expense')")
+  balance=self.db.execute("SELECT opening+COALESCE(SUM(CASE WHEN e.deleted=0 AND e.happened>=opening_at THEN amount ELSE 0 END),0) FROM accounts a LEFT JOIN entries e ON e.account=a.id WHERE a.id=1").fetchone()[0]
+  self.assertEqual(balance,11000)
+  self.assertEqual(self.db.execute("SELECT previous_opening,previous_cutoff,observed_minor FROM finance_reconciliations").fetchone(),(10000,0,12000))
+ def test_watch_voice_queue_is_keystore_encrypted_in_source(self):
+  import pathlib
+  root=pathlib.Path(__file__).resolve().parents[2]
+  queue=(root/'android/app/src/main/java/com/andriy/jarvis/FinanceWatchQueue.java').read_text()
+  vault=(root/'android/app/src/main/java/com/andriy/jarvis/FinanceWatchVault.java').read_text()
+  self.assertIn('FinanceWatchVault.protect',queue)
+  self.assertIn('FinanceWatchVault.reveal',queue)
+  self.assertIn('AndroidKeyStore',vault)
+  self.assertIn('AES/GCM/NoPadding',vault)
 if __name__=='__main__':unittest.main()
