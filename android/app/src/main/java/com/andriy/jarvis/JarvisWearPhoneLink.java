@@ -328,7 +328,7 @@ public final class JarvisWearPhoneLink {
         if(JarvisWearProtocol.SYNC.equals(type)&&!busy()){
             android.content.SharedPreferences queue=context.getSharedPreferences("finance_watch_queue",Context.MODE_PRIVATE);
             String queued=queue.getString("text","");
-            if(!queue.getString("id","").isEmpty()&&FinanceVoiceCommands.parse(queued)!=null){send(JarvisWearProtocol.ASSISTANT,queued,cb);return;}
+            if(!queue.getString("id","").isEmpty()&&(FinanceVoiceCommands.parse(queued)!=null || FinanceVoiceFollowups.parse(queued)!=null)){send(JarvisWearProtocol.ASSISTANT,queued,cb);return;}
         }
         // User voice takes priority over the 10-second background heartbeat.
         // It can preempt both an in-flight node lookup and an ACK wait.
