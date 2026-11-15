@@ -1,7 +1,7 @@
 package com.andriy.jarvis;
 
 import android.database.Cursor;
-import android.database.sqlite.SQLiteDatabase;
+import net.zetetic.database.sqlcipher.SQLiteDatabase;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
