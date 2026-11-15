@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: read
+  issues: write
+  pull-requests: write
 
 jobs:
   apk:
@@ -160,3 +162,16 @@ jobs:
         if: always()
         shell: bash
         run: rm -f "$RUNNER_TEMP/jarvis-stable.jks"
+      - name: Report verified compact APK artifact to release PR
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run="https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if [ "${{ job.status }}" = "success" ]; then
+            message="✅ Signed ARM64 APK 0.1.33 complete; certificate verified. Download artifact: $run (Artifacts → JARVIS-0.1.33-stable-arm64-APK)."
+          else
+            message="⚠️ ARM64 APK 0.1.33 workflow did not finish successfully: $run"
+          fi
+          gh pr comment 8 --repo "$GITHUB_REPOSITORY" --body "$message" || true
