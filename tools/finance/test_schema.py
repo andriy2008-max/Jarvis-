@@ -112,4 +112,25 @@ class LedgerSchemaTest(unittest.TestCase):
    self.db.execute("INSERT INTO finance_aliases VALUES('монобанк',1)")
   with self.assertRaises(sqlite3.IntegrityError):
    self.db.execute("INSERT INTO finance_aliases VALUES('готівка',99)")
+ def test_v6_crypto_trades_and_cash_journal_integrity(self):
+  tables={r[0] for r in self.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+  self.assertIn('crypto_trades',tables)
+  self.db.execute("INSERT INTO crypto_trades(id,symbol,action,quantity,price_uah_minor,fee_uah_minor,account,happened) VALUES('t1','BTC','buy','0.125',125000,500,1,100)")
+  self.db.execute("INSERT INTO entries(id,account,amount,category,note,happened,kind,group_id) VALUES('t1:asset',1,-125000,'Криптоактиви','',100,'asset','t1')")
+  self.db.execute("INSERT INTO entries(id,account,amount,category,note,happened,kind,group_id) VALUES('t1:fee',1,-500,'Комісії','',100,'expense','t1')")
+  self.assertEqual(self.db.execute("SELECT SUM(amount) FROM entries WHERE group_id='t1'").fetchone()[0],-125500)
+  self.assertEqual(self.db.execute("SELECT COALESCE(-SUM(amount),0) FROM entries WHERE kind IN ('expense','refund')").fetchone()[0],500)
+  with self.assertRaises(sqlite3.IntegrityError):
+   self.db.execute("INSERT INTO crypto_trades(id,symbol,action,quantity,price_uah_minor,fee_uah_minor,account,happened) VALUES('t2','BTC','mine','1',50,0,1,100)")
+  with self.assertRaises(sqlite3.IntegrityError):
+   self.db.execute("INSERT INTO crypto_trades(id,symbol,action,quantity,price_uah_minor,fee_uah_minor,account,happened) VALUES('t3','BTC','buy','1',50,0,999,100)")
+ def test_sqlcipher_driver_is_not_plaintext(self):
+  import pathlib
+  root=pathlib.Path(__file__).resolve().parents[2]
+  ledger=(root/'android/app/src/main/java/com/andriy/jarvis/FinanceLedger.java').read_text()
+  key=(root/'android/app/src/main/java/com/andriy/jarvis/FinanceSecureKey.java').read_text()
+  self.assertIn('net.zetetic.database.sqlcipher.SQLiteOpenHelper',ledger)
+  self.assertIn('FinanceLegacyMigration.migrate',ledger)
+  self.assertIn('AndroidKeyStore',key)
+  self.assertIn('AES/GCM/NoPadding',key)
 if __name__=='__main__':unittest.main()
