@@ -18,9 +18,10 @@ public final class FinanceBatchCommands {
             .replaceFirst("^(?:(?:джарвіс|джарвис|jarvis)[,\\s:-]*)?(?:запиши|додай|занеси)\\s+витрати\\s+","")
             .replaceAll("[.!?]+$","").trim();
         String suffix="";
-        if(s.endsWith(" позавчора")){suffix=" позавчора";s=s.substring(0,s.length()-9).trim();}
-        else if(s.endsWith(" вчора")){suffix=" вчора";s=s.substring(0,s.length()-6).trim();}
-        else if(s.endsWith(" сьогодні")){suffix=" сьогодні";s=s.substring(0,s.length()-8).trim();}
+        if(s.endsWith(" позавчора"))suffix=" позавчора";
+        else if(s.endsWith(" вчора"))suffix=" вчора";
+        else if(s.endsWith(" сьогодні"))suffix=" сьогодні";
+        if(!suffix.isEmpty())s=s.substring(0,s.length()-suffix.length()).trim();
         String[] segments=s.split("\\s+і\\s+");
         if(segments.length<2||segments.length>5)return null;
         List<FinanceVoiceCommands.Entry> result=new ArrayList<>();
