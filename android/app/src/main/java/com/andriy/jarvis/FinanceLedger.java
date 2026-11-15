@@ -8,10 +8,10 @@ import java.util.UUID;
 
 /** Local ledger. Amounts are integer minor units; transfers commit atomically. */
 public final class FinanceLedger extends SQLiteOpenHelper {
-    public FinanceLedger(Context c){super(c.getApplicationContext(),"jarvis-finance.db",null,3);}
+    public FinanceLedger(Context c){super(c.getApplicationContext(),"jarvis-finance.db",null,4);}
     public void onConfigure(SQLiteDatabase db){db.setForeignKeyConstraintsEnabled(true);}
     public void onCreate(SQLiteDatabase db){
-        db.execSQL("CREATE TABLE accounts(id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL, currency TEXT NOT NULL, opening INTEGER)");
+        db.execSQL("CREATE TABLE accounts(id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL, currency TEXT NOT NULL, opening INTEGER, opening_at INTEGER NOT NULL DEFAULT 0)");
         db.execSQL("CREATE TABLE entries(id TEXT PRIMARY KEY, account INTEGER NOT NULL REFERENCES accounts(id), amount INTEGER NOT NULL, category TEXT NOT NULL, note TEXT NOT NULL, happened INTEGER NOT NULL, kind TEXT NOT NULL, group_id TEXT, deleted INTEGER NOT NULL DEFAULT 0)");
         db.execSQL("CREATE INDEX entries_date ON entries(happened)");
         createPlanning(db);
@@ -21,7 +21,11 @@ public final class FinanceLedger extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE plans(id TEXT PRIMARY KEY, type TEXT NOT NULL, name TEXT NOT NULL, currency TEXT NOT NULL, amount INTEGER NOT NULL CHECK(amount>0), progress INTEGER NOT NULL DEFAULT 0 CHECK(progress>=0), due TEXT NOT NULL, category TEXT NOT NULL)");
         db.execSQL("CREATE TABLE audit(id INTEGER PRIMARY KEY, entry_id TEXT NOT NULL, event TEXT NOT NULL, happened INTEGER NOT NULL, previous_amount INTEGER)");
     }
-    public void onUpgrade(SQLiteDatabase db,int old,int next){if(old<2)createPlanning(db);if(old<3)createSettlements(db);}
+    public void onUpgrade(SQLiteDatabase db,int old,int next){
+        if(old<2)createPlanning(db);
+        if(old<3)createSettlements(db);
+        if(old<4)db.execSQL("ALTER TABLE accounts ADD COLUMN opening_at INTEGER NOT NULL DEFAULT 0");
+    }
     private void createSettlements(SQLiteDatabase db){
         db.execSQL("CREATE TABLE allocations(id TEXT PRIMARY KEY, plan TEXT NOT NULL REFERENCES plans(id), account INTEGER NOT NULL REFERENCES accounts(id), amount INTEGER NOT NULL CHECK(amount>0))");
         db.execSQL("CREATE TABLE settings(name TEXT PRIMARY KEY,value TEXT NOT NULL)");
@@ -29,7 +33,7 @@ public final class FinanceLedger extends SQLiteOpenHelper {
         db.execSQL("ALTER TABLE plans ADD COLUMN interval_months INTEGER NOT NULL DEFAULT 0");
     }
     public long balance(long account){
-        try(Cursor c=getReadableDatabase().rawQuery("SELECT a.opening+COALESCE(SUM(CASE WHEN e.deleted=0 THEN e.amount ELSE 0 END),0) FROM accounts a LEFT JOIN entries e ON a.id=e.account WHERE a.id=? GROUP BY a.id",new String[]{""+account})){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT a.opening+COALESCE(SUM(CASE WHEN e.deleted=0 AND (a.opening_at=0 OR e.happened>a.opening_at) THEN e.amount ELSE 0 END),0) FROM accounts a LEFT JOIN entries e ON a.id=e.account WHERE a.id=? GROUP BY a.id",new String[]{""+account})){
             if(!c.moveToFirst()||c.isNull(0))throw new IllegalArgumentException("Спочатку звір залишок рахунку");return c.getLong(0);
         }
     }
@@ -79,10 +83,11 @@ public final class FinanceLedger extends SQLiteOpenHelper {
     public long account(String name,String currency,String opening){
         if(name.trim().isEmpty()||!currency.matches("[A-Z]{3}"))throw new IllegalArgumentException("Вкажи назву та код валюти");
         ContentValues v=new ContentValues();v.put("name",name.trim());v.put("currency",currency);
-        if(!opening.trim().isEmpty())v.put("opening",minor(opening));
-        long id=getWritableDatabase().insertOrThrow("accounts",null,v);
-        if(setting("default_account","").isEmpty())setSetting("default_account",Long.toString(id));
-        return id;
+        if(!opening.trim().isEmpty()){
+            v.put("opening",minor(opening));
+            v.put("opening_at",System.currentTimeMillis());
+        }
+        return getWritableDatabase().insertOrThrow("accounts",null,v);
     }
     public void record(String id,long account,long amount,String kind,String category,String note,long date){
         if(amount<=0)throw new IllegalArgumentException("Сума повинна бути більшою за нуль");
@@ -190,7 +195,7 @@ public final class FinanceLedger extends SQLiteOpenHelper {
     }
     public String report(){
         StringBuilder out=new StringBuilder();
-        try(Cursor c=getReadableDatabase().rawQuery("SELECT a.name,a.currency,a.opening,COALESCE(SUM(CASE WHEN e.deleted=0 THEN e.amount ELSE 0 END),0) FROM accounts a LEFT JOIN entries e ON e.account=a.id GROUP BY a.id",null)){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT a.name,a.currency,a.opening,COALESCE(SUM(CASE WHEN e.deleted=0 AND (a.opening_at=0 OR e.happened>a.opening_at) THEN e.amount ELSE 0 END),0) FROM accounts a LEFT JOIN entries e ON e.account=a.id GROUP BY a.id",null)){
             while(c.moveToNext())out.append(c.getString(0)).append(": ").append(c.isNull(2)?"залишок невідомий":money(Math.addExact(c.getLong(2),c.getLong(3)))+" "+c.getString(1)).append("\n");
         }
         try(Cursor c=getReadableDatabase().rawQuery("SELECT a.currency,e.kind,SUM(e.amount) FROM entries e JOIN accounts a ON a.id=e.account WHERE e.deleted=0 AND e.kind IN ('expense','income','refund') GROUP BY a.currency,e.kind",null)){
