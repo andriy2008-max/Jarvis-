@@ -334,7 +334,7 @@ public final class JarvisWearPhoneLink {
         if(JarvisWearProtocol.SYNC.equals(type)&&!busy()){
             String queued=FinanceWatchQueue.first(context);
             if(!FinanceWatchQueue.firstId(context).isEmpty()&&
-                (FinanceVoiceCommands.parse(queued)!=null || FinanceVoiceFollowups.parse(queued)!=null)){
+                (FinanceVoiceCommands.parse(queued)!=null || FinanceVoiceFollowups.parse(queued)!=null || FinanceBatchCommands.looksLikeBatch(queued))){
                 send(JarvisWearProtocol.ASSISTANT,queued,cb);return;
             }
         }
