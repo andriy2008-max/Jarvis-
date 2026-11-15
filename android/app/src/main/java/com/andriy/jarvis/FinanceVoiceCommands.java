@@ -39,7 +39,9 @@ public final class FinanceVoiceCommands {
 
     public static Entry parse(String voice) {
         if(voice==null||voice.length()>230)return null;
-        String s=voice.toLowerCase(Locale.forLanguageTag("uk-UA")).trim()
+        String expanded=FinanceSlashCommands.expand(voice);
+        if(expanded==null)return null;
+        String s=FinanceNumberWords.normalize(expanded.toLowerCase(Locale.forLanguageTag("uk-UA")).trim())
             .replaceAll("[.!?]+$","");
         int daysAgo=s.endsWith(" позавчора")?2:s.endsWith(" вчора")?1:0;
         s=s.replaceFirst("\\s+(?:позавчора|вчора|сьогодні)$","").trim();
@@ -91,7 +93,10 @@ public final class FinanceVoiceCommands {
         java.util.regex.Matcher number=Pattern.compile("(?<![0-9])([0-9]+(?:[,.][0-9]{1,2})?)(?![0-9])").matcher(s);
         if(!number.find())return null;
         String amount=number.group(1).replace(',','.');int begin=number.start(),end=number.end();if(number.find())return null;
-        try{if(new java.math.BigDecimal(amount).signum()<=0)return null;}catch(RuntimeException e){return null;}
+        try{
+            java.math.BigDecimal value=new java.math.BigDecimal(amount);
+            if(value.signum()<=0||value.compareTo(new java.math.BigDecimal("999999"))>0)return null;
+        }catch(RuntimeException e){return null;}
         String descriptor=(s.substring(0,begin)+" "+s.substring(end)).replaceFirst("^(?:(?:запиши|додай)\\s+)?(?:витрата|витрату|витратив|витратила|дохід|отримав)[: ]*", "").replaceAll("\\b(?:грн|гривень|гривні)\\b", "").trim();
         descriptor=descriptor.replaceFirst("^(?:на|за|від)\\s+","").trim();
         if(descriptor.isEmpty())return null;
