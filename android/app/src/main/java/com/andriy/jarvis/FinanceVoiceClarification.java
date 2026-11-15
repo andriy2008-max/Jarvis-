@@ -30,8 +30,9 @@ public final class FinanceVoiceClarification {
     }
     public static boolean maybeReply(String voice){
         String s=clean(voice);
-        return s.matches("^\\d{1,6}(?:[,.]\\d{1,2})?(?:\\s*(?:грн|гривень))?$")||
-            s.matches("^[\\p{L}'ʼ -]{2,70}$");
+        if(normNumber(s)!=null||s.equals("скасуй")||s.equals("відміна")||s.equals("не треба"))return true;
+        return s.length()<70&&(FinanceVoiceCommands.parse("витрата 1 "+s)!=null||
+            FinanceVoiceCommands.parse("дохід 1 "+s)!=null);
     }
     public static synchronized boolean pending(Context c,String source){
         String raw=prefs(c).getString(key(source),"");
@@ -59,6 +60,10 @@ public final class FinanceVoiceClarification {
         String normalized=clean(utterance);
         if(normalized.isEmpty())return null;
         if(pending(c,source)){
+            if(FinanceVoiceCommands.parse(normalized)!=null){
+                clear(c,source);
+                return null;
+            }
             if(normalized.equals("скасуй")||normalized.equals("відміна")||normalized.equals("не треба")){
                 clear(c,source);return new Step(null,"Незавершений фінансовий запис скасовано. Гроші не списано.");
             }
