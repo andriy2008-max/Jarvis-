@@ -107,6 +107,8 @@ public final class FinanceActivity extends Activity {
         button("Тижневий фінансовий дайджест · увімкнути / вимкнути",()->toggleFinanceSetting("digest_weekly"));
         button("Місячний фінансовий дайджест · увімкнути / вимкнути",()->toggleFinanceSetting("digest_monthly"));
         button("Додати рахунок",this::newAccount);
+        button("Додати голосовий псевдонім рахунку",()->pickAccount(id->form("Новий псевдонім",
+            new String[]{"Наприклад: монобанк, картка роботи"},v->ledger.addAlias(id,v[0]))));
         button("Звірити баланс рахунку",()->pickAccount(id->form("Фактично на рахунку",new String[]{"Сума за даними банку або готівка"},v->{
             String comparison=FinanceAssets.difference(ledger,id,v[0]);
             new AlertDialog.Builder(this).setTitle("Підтвердити звірку?").setMessage(comparison)
