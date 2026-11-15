@@ -3,10 +3,30 @@ source=(pathlib.Path(__file__).resolve().parents[2]/'android/app/src/main/java/c
 class LedgerSchemaTest(unittest.TestCase):
  def setUp(self):
   self.db=sqlite3.connect(':memory:');self.db.execute('PRAGMA foreign_keys=ON')
-  for sql in re.findall(r'db.execSQL\("((?:CREATE |ALTER )[^"]+)"\)',source):self.db.execute(sql)
-  self.db.execute("INSERT INTO accounts VALUES(1,'Готівка','UAH',10000)")
+  for sql in re.findall(r'db.execSQL\("((?:CREATE |ALTER )[^"]+)"\)',source):
+   if sql.startswith('ALTER TABLE accounts ADD COLUMN'):continue
+   self.db.execute(sql)
+  self.db.execute("INSERT INTO accounts(id,name,currency,opening) VALUES(1,'Готівка','UAH',10000)")
  def add(self,id,account=1,amount=-8500,group=None):
   self.db.execute('INSERT INTO entries VALUES(?,?,?,?,?,?,?,?,0)',(id,account,amount,'Їжа','',1,'expense',group))
+ def test_opening_balance_cutoff(self):
+  self.db.execute("UPDATE accounts SET opening_at=1000 WHERE id=1")
+  self.add('historical',amount=-5000)
+  self.db.execute("INSERT INTO entries VALUES('current',1,-1000,'Їжа','',1001,'expense',NULL,0)")
+  balance=self.db.execute("SELECT a.opening+COALESCE(SUM(CASE WHEN e.deleted=0 AND (a.opening_at=0 OR e.happened>a.opening_at) THEN e.amount ELSE 0 END),0) FROM accounts a LEFT JOIN entries e ON a.id=e.account WHERE a.id=1 GROUP BY a.id").fetchone()[0]
+  self.assertEqual(balance,9000)
+ def test_migration_adds_cutoff_without_erasing_accounts(self):
+  db=sqlite3.connect(':memory:')
+  db.execute("CREATE TABLE accounts(id INTEGER PRIMARY KEY,name TEXT,currency TEXT,opening INTEGER)")
+  db.execute("INSERT INTO accounts VALUES(1,'Готівка','UAH',5000)")
+  db.execute("ALTER TABLE accounts ADD COLUMN opening_at INTEGER NOT NULL DEFAULT 0")
+  self.assertEqual(db.execute("SELECT opening,opening_at FROM accounts").fetchone(),(5000,0))
+  db.close()
+ def test_refund_keeps_earned_income_separate(self):
+  self.add('purchase',amount=-8500)
+  self.db.execute("INSERT INTO entries VALUES('refund',1,2500,'Їжа','Повернення:purchase',2,'refund',NULL,0)")
+  r=self.db.execute("SELECT COALESCE(-SUM(amount),0) FROM entries WHERE kind IN ('expense','refund')").fetchone()[0]
+  self.assertEqual(r,6000)
  def test_exact_amount(self):
   self.add('a');self.assertEqual(self.db.execute('SELECT opening+amount FROM accounts JOIN entries ON account=accounts.id').fetchone()[0],1500)
  def test_duplicate_id_rejected(self):
@@ -15,7 +35,7 @@ class LedgerSchemaTest(unittest.TestCase):
  def test_unknown_account_rejected(self):
   with self.assertRaises(sqlite3.IntegrityError):self.add('a',99)
  def test_transfer_conservation(self):
-  self.db.execute("INSERT INTO accounts VALUES(2,'Картка','UAH',NULL)")
+  self.db.execute("INSERT INTO accounts(id,name,currency,opening) VALUES(2,'Картка','UAH',NULL)")
   self.add('out',1,-2000,'g');self.add('in',2,2000,'g')
   self.assertEqual(self.db.execute('SELECT SUM(amount) FROM entries').fetchone()[0],0)
  def test_group_removal(self):
@@ -34,7 +54,7 @@ class LedgerSchemaTest(unittest.TestCase):
   except sqlite3.IntegrityError:pass
   self.assertEqual(self.db.execute('SELECT id FROM entries').fetchone()[0],'keep')
  def test_unknown_balance_preserved(self):
-  self.db.execute("INSERT INTO accounts VALUES(2,'Карта','UAH',NULL)")
+  self.db.execute("INSERT INTO accounts(id,name,currency,opening) VALUES(2,'Карта','UAH',NULL)")
   self.assertIsNone(self.db.execute('SELECT opening FROM accounts WHERE id=2').fetchone()[0])
  def test_receipt_unique(self):
   self.db.execute("INSERT INTO receipts VALUES('watch:1','витрата кава 85','ok')")
