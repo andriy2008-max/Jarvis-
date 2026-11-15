@@ -34,10 +34,9 @@ public final class FinanceLegacyMigration {
             SQLiteDatabase encrypted=target.getWritableDatabase();
             encrypted.beginTransaction();
             try{
-                for(String table:TABLES){
-                    if(!exists(legacy,table))continue;
-                    // The encrypted target has not been used by the app before migration.
-                    encrypted.delete(table,null,null);
+                for(int n=TABLES.length-1;n>=0;n--){
+                    // A previous interrupted attempt could have written data before a crash.
+                    encrypted.delete(TABLES[n],null,null);
                 }
                 for(String table:TABLES){
                     if(!exists(legacy,table))continue;
