@@ -55,6 +55,19 @@ public final class FinanceActivity extends Activity {
         text(ledger.report());text(FinanceInsights.reminders(ledger));
         button("Увімкнути / вимкнути нагадування",()->{boolean enable=!ledger.setting("reminders","false").equals("true");ledger.setSetting("reminders",Boolean.toString(enable));if(enable)FinanceReminderJob.schedule(this);else FinanceReminderJob.cancel(this);Toast.makeText(this,enable?"Нагадування ввімкнено. Дозволь сповіщення Джарвіса в Android.":"Нагадування вимкнено",Toast.LENGTH_LONG).show();});
         button("Додати рахунок",this::newAccount);
+        button("Швидко записати текстом",()->form("Витрата / дохід",new String[]{"Наприклад: кава 85 або чайові 650 готівкою"},v->{
+            String voice=v[0].trim();
+            if(voice.matches("(?iu)^кава\\s+[0-9]+(?:[,.][0-9]{1,2})?$"))voice="витрата "+voice;
+            final String[] error={null};
+            FinanceManagerController.start(this,voice,new FinanceManagerController.Listener(){
+                public void onProgress(String message){}
+                public void onFinished(boolean success,String message){
+                    if(!success)error[0]=message;
+                    else Toast.makeText(FinanceActivity.this,message,Toast.LENGTH_LONG).show();
+                }
+            });
+            if(error[0]!=null)throw new IllegalArgumentException(error[0]);
+        }));
         button("Витрата",()->entry(false));button("Дохід / чайові",()->entry(true));
         button("Переказ",()->pickAccount(from->pickAccount(to->form("Переказ",new String[]{"Сума"},v->ledger.transfer(from,to,FinanceLedger.minor(v[0]))))));
         return;
