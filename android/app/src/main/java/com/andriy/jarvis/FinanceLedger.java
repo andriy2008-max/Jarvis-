@@ -161,7 +161,7 @@ public final class FinanceLedger extends SQLiteOpenHelper {
     public String monthlyReport(){
         long start=java.time.LocalDate.now().withDayOfMonth(1).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
         StringBuilder b=new StringBuilder("Поточний місяць\n");
-        try(Cursor c=getReadableDatabase().rawQuery("SELECT a.currency,e.kind,e.category,SUM(e.amount) FROM entries e JOIN accounts a ON a.id=e.account WHERE e.deleted=0 AND e.kind IN ('expense','income') AND e.happened>=? GROUP BY a.currency,e.kind,e.category ORDER BY ABS(SUM(e.amount)) DESC",new String[]{""+start})){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT a.currency,e.kind,e.category,SUM(e.amount) FROM entries e JOIN accounts a ON a.id=e.account WHERE e.deleted=0 AND e.kind IN ('expense','income','refund') AND e.happened>=? AND e.happened<=? GROUP BY a.currency,e.kind,e.category ORDER BY ABS(SUM(e.amount)) DESC",new String[]{""+start,""+System.currentTimeMillis()})){
             while(c.moveToNext())b.append(c.getString(2)).append(" · ").append(money(c.getLong(3))).append(" ").append(c.getString(0)).append("\n");
         }return b.toString();
     }
@@ -170,8 +170,18 @@ public final class FinanceLedger extends SQLiteOpenHelper {
         try(Cursor c=getReadableDatabase().rawQuery("SELECT a.name,a.currency,a.opening,COALESCE(SUM(CASE WHEN e.deleted=0 THEN e.amount ELSE 0 END),0) FROM accounts a LEFT JOIN entries e ON e.account=a.id GROUP BY a.id",null)){
             while(c.moveToNext())out.append(c.getString(0)).append(": ").append(c.isNull(2)?"залишок невідомий":money(Math.addExact(c.getLong(2),c.getLong(3)))+" "+c.getString(1)).append("\n");
         }
-        try(Cursor c=getReadableDatabase().rawQuery("SELECT a.currency,e.kind,SUM(e.amount) FROM entries e JOIN accounts a ON a.id=e.account WHERE e.deleted=0 AND e.kind IN ('expense','income') GROUP BY a.currency,e.kind",null)){
-            while(c.moveToNext())out.append(c.getString(1).equals("income")?"Доходи: ":"Витрати: ").append(money(c.getLong(2))).append(" ").append(c.getString(0)).append("\n");
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT a.currency,e.kind,SUM(e.amount) FROM entries e JOIN accounts a ON a.id=e.account WHERE e.deleted=0 AND e.kind IN ('expense','income','refund') GROUP BY a.currency,e.kind",null)){
+            while(c.moveToNext())out.append(c.getString(1).equals("income")?"Доходи: ":c.getString(1).equals("refund")?"Повернення: ":"Витрати: ").append(money(c.getLong(2))).append(" ").append(c.getString(0)).append("\n");
+        }
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT id,name,currency FROM accounts",null)){
+            while(c.moveToNext()){
+                try{
+                    long reserved=Math.subtractExact(balance(c.getLong(0)),available(c.getLong(0)));
+                    if(reserved>0)out.append(c.getString(1)).append(" · на цілі: ").append(money(reserved))
+                        .append(" · доступно: ").append(money(available(c.getLong(0))))
+                        .append(" ").append(c.getString(2)).append("\n");
+                }catch(IllegalArgumentException ignored){/* opening balance unknown */}
+            }
         }
         return out.length()==0?"Додай перший рахунок. Невідомий залишок можна пропустити.":out.toString();
     }
