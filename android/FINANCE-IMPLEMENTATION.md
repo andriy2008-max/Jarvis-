@@ -1,51 +1,55 @@
-# JARVIS Finance — чекліст коду незбірної версії (2026-11-15)
+# JARVIS Finance — checklist of the UNBUILT development version
+Date: 2026-11-15  
+Branch: `feature/finance-local-ledger` · Draft PR #4.  
+**APK has NOT been built, installed or signed in this development cycle. Stable `main` has not been updated.**
 
-**Гілка:** `feature/finance-local-ledger`, draft PR #4. **APK не зібрано, `main` не змінено.** Pixel зберігає облік; Galaxy Watch7 надсилає команди через Wear Data Layer. Статус функції — кандидат для тестування, не підтверджений реліз.
+## Included in the current source (not yet installed)
 
-## Реалізовано в коді
+- [x] Native Finance on the phone, separate from the former external Money Manager UI/API route; four tabs: Overview, Operations, Plan, Reports.
+- [x] First-account setup prompt, known/unknown opening amounts and explicit default account for voice.
+- [x] SQLite schema v5, preserving existing data through onUpgrade; integer minor units and capture-time balance cutoff, no phantom income from opening amounts.
+- [x] Accounts and saved voice aliases, expenses, income, tips, refunds linked to original purchases, own-account transfers with atomic database operations.
+- [x] Confirmed cash reconciliation with previous records kept in history; reconciliation date is the moment of confirmation, NOT arbitrary historical cutoff entry.
+- [x] Cross-currency exchange with exact debit and credit amounts and optional separate expense for fees; never substitutes an NBU rate for the actual exchange.
+- [x] Manual crypto positions retain exact quantity and optional manually provided UAH price plus valuation date; no auto trading or live crypto price feed.
+- [x] Expense/income voice commands with known categories and explicitly marked account suffixes, including Ukrainian number words.
+- [x] Voice record dates today/yesterday/day before yesterday, bound to capture time; last-entry correction `не 85, а 95` with a 3-minute same-device window.
+- [x] Explicit multi-expense phrase `запиши витрати кава 85 і таксі 250`, 2–5 items, all-or-nothing commit and single immutable receipt ID.
+- [x] Allowlisted slash aliases for entries, balance, summary, budgets and payments; nonimplemented slash actions do not silently mutate data.
+- [x] Phone as sole ledger; Watch7 sends immutable request IDs. Locally persisted FIFO queue of up to 20 financial records; retries on foreground heartbeat, acknowledges success and releases definitively rejected entries without blocking later ones.
+- [x] Safe cancellation of clearly unsent Watch7 queue entries. Already-sent or uncertain commands require checking the Pixel journal before reversal.
+- [x] Operations journal with search and filters: account, category/note, kind, date period and amount bounds; audited editing, confirmed delete and restore.
+- [x] Monthly and weekly budgets with spent/remaining calculations that account for linked refunds.
+- [x] Goals and nonduplicating cash reservations; release reserves, partial receivable/payable settlements; actual principal payments stay separate from earned income.
+- [x] Payment recurrence daily/weekly/monthly/yearly, original-day anchoring across short months and leap years, explicit confirmation before posting; safe undo of the most recent settlement where v5 history exists.
+- [x] Grouped shift tips across cash/card accounts with exact split sum, optional entered work hours and an hourly summary.
+- [x] Period reports (today/week/month/previous month), top categories, cash-flow breakdown, recorded-tips totals, six-month UAH bar chart and textual data.
+- [x] Evidence-bounded audit of possible duplicates/anomalies, conditional percentage-cut scenario, known upcoming payments, UAH financial-health view and emergency-buffer estimate only with sufficient history.
+- [x] Optional generic payment reminders, opt-in weekly/monthly digests, configurable quiet hours and at most 3 financial notifications/day; lock-screen text excludes transaction amounts.
+- [x] Dated manual NBU rate refresh and separate UAH valuation (no invented rate).
+- [x] Encrypted password-protected JFB v5 portable backups with v2–v4 restore compatibility, asynchronous file I/O and encrypted automatic pre-restore safety snapshot. CSV export remains available.
+- [x] Android credential gate on Finance screen, FLAG_SECURE, re-authentication after backgrounding and lock-screen voice report opt-in.
+- [x] Plaintext working finance database and cached Watch requests excluded from ordinary Android cloud/device-transfer backups; **this does NOT encrypt the live SQLite database**.
 
-### Рахунки й операції
-- [x] SQLite-схема **v5**; точні суми в мінорних одиницях, окремі рахунки й валюти; міграції старих версій.
-- [x] Фактичний залишок і звірка балансу з контрольним моментом та журналом змін; минулі записи не спотворюють новий контрольний залишок.
-- [x] Доходи, витрати, окремо чайові, перекази в одній валюті, повернення покупок, редагування й перевірене відновлення видалених записів.
-- [x] Обмін **двох різних валют** за фактично відданою/отриманою сумою, з окремою комісією; обидві сторони виконуються атомарно.
-- [x] Ручний реєстр кількості криптоактивів і датованої оцінки UAH. Оцінка не видається за поточний курс або реальну торговельну операцію.
-- [x] Групові чайові за зміну, готівка + картка = підсумок, необов'язкові години й гривні за годину.
+## Verified automatically on GitHub (not on physical devices)
+- [x] `tools/finance/test_schema.py`: SQLite schema/FK/cutoff/refund/FX/settlement/shift/alias contracts.
+- [x] Java parser tests for finance entries, amount correction, Ukrainian number words, slash aliases, multi-expense batches.
+- [x] Java recurrence calendar tests for leap days and month boundaries.
+- [x] Whole Android **`compileDebugJavaWithJavac`** passes, including the Wear dependencies; no APK packaging or signing.
+- Passing CI: **GitHub Actions run #139**, 2026-11-15, using CI-only validation PR #6: `https://github.com/andriy2008-max/Jarvis-/actions/runs/43751628511`.
 
-### Планування та аналітика
-- [x] Тижневі/місячні бюджети з урахуванням повернень, фінансові цілі, резерви та їхнє звільнення.
-- [x] Борги та зобов’язання, часткові платежі, повторення раз на N днів/тижнів/місяців/років, коректний календарний перехід.
-- [x] Скасування останнього проведеного внеску з відновленням прогресу/дати, перевірка пов’язаних повернень і захист від небезпечного видалення плану.
-- [x] Звіти за день/тиждень/місяць/попередній місяць, категорії, бюджетні пороги, сценарне скорочення витрат, пошук повторів і великих витрат.
-- [x] Нативний доступний графік чистих витрат за **6 місяців** в одній валюті, без змішування інших валют.
-- [x] Нагадування про платежі, тихі години, обмеження кількості сповіщень, бюджетні пороги та тижневий/місячний дайджест.
+## Still unverified / not fully implemented
+- [ ] No real Pixel or Galaxy Watch7 integration test, including locked screen, microphone, app lifecycle, retransmission, 20-item queue and notification delivery. Runtime correctness is not established by compilation.
+- [ ] No APK build, signing, installation or upgrade-migration smoke test; no release versionCode bump.
+- [ ] The **working SQLite database itself is not encrypted at rest**. Portable backups are encrypted. Rooted devices carry additional data-exposure risks.
+- [ ] Complete open-ended natural-language dialog, multiple-turn confirmation and all slash commands from the original specification are not implemented. Supported voice commands are deterministic and conservative.
+- [ ] Fully configurable opening-balance historical cutoff and transaction-level retrospective reconciliation are not complete (current-time snapshots work).
+- [ ] Crypto trades/cost basis/history, live market pricing, automated bank integration, and mixed-currency full net-worth conversion are not implemented.
+- [ ] Watch queue processing is not guaranteed when the watch app is closed; background heartbeat currently works while the companion link is alive.
+- [ ] Encrypted pre-restore snapshot and v2–v5 restore path have not been tested end-to-end on real devices.
+- [ ] Advanced per-transaction tags, multi-merchant learning, complete shift expense attribution, audit advice and confidence-based forecasting are incomplete.
+- [ ] A small UAH-only bar chart is included; a multi-currency interactive graph suite is not.
+- [ ] Independently confirmed hardware-based offline Ukrainian speech recognition is not available yet.
+- [ ] Synchronization of simultaneously changing finance data on multiple phones is outside the single-Pixel-ledger architecture.
 
-### Голос, годинник, безпека
-- [x] Українські суми цифрами або підтримуваними словами, явні команди та скінченний набір `/команд`.
-- [x] Запис кількох витрат в одному повідомленні (атомарно), уточнення останньої суми голосом, питання про баланс/витрати/доходи/чайові/бюджети.
-- [x] Запити про сьогодні, вчора, позавчора, поточний/минулий тиждень або місяць.
-- [x] Черга фінансових голосових запитів на Watch7 до 20 штук, незмінні ідентифікатори, повторне надсилання й захист від повторного проведення на Pixel.
-- [x] Доступ до фінансів через захист пристрою; заборона екранних знімків; озвучування конфіденційних сум на заблокованому Pixel вимкнене за замовчуванням.
-- [x] Файл резервної копії **JFB v5** із паролем і AES-GCM, імпорт старих v2–v4, перевірка цілісності **до** модифікації бази, фоновий файловий ввід-вивід та зашифрована контрольна копія перед імпортом.
-- [x] Plaintext SQLite не включається в автоматичні Android cloud/transfer backups.
-
-## Автоматична перевірка
-- [x] Python SQLite contract tests: схема v5, міграція, цілісність коштів, FX і комісія, історія погашення та чайові за зміну.
-- [x] JVM-тести українського парсера й голосового виправлення суми.
-- [x] Повна компіляція Android Java без пакування APK — GitHub Actions **№110**, успішно, 2026-11-15. Це **не** інструментальні тести на телефоні.
-
-## Не можна позначати як перевірене до тестів на реальних пристроях
-- [ ] Реальний Pixel: створення/звірка рахунку, витрата, переказ і валютний обмін, повернення покупок, перезапуск програми.
-- [ ] Watch7: мікрофон, відправлення пакета з кількома витратами, зникнення мережі, ACK, повторна відправка, відмова й скасування.
-- [ ] План: часткова сплата, автоматична наступна дата, скасування останнього внеску, повернення резерву.
-- [ ] Відновлення копій JFB v2–v5 на пристрої з помилковим/правильним паролем, аварійне повернення попереднього стану.
-- [ ] Фонові обмеження Android, поведінка при блокуванні телефона, доступність тексту, сповіщення, енергозбереження годинника.
-
-## Залишкові обмеження (не приховувати)
-- [ ] Незалежне SQLCipher-подібне **шифрування робочої бази** не впроваджено. База зберігається в приватному credential-protected Android-сховищі; переносні копії зашифровані.
-- [ ] Повністю офлайн-українське розпізнавання мовлення не підтверджено завантаженою й протестованою моделлю для Pixel/Watch7.
-- [ ] Необмежений природномовний діалог з довільними уточненнями не реалізований: фінансові записи використовують контрольований парсер і явні підтвердження.
-- [ ] Власна минула дата звірки залишку та повноцінний журнал купівлі/продажу криптоактивів із прибутком/податками не реалізовані.
-- [ ] Без реальної збірки, підпису і приймального тесту не можна об'єднувати це в `main` або називати функцію готовою до щоденного використання.
-
-**Безпечна поведінка:** планові витрати не списуються з рахунків без підтвердження; валютний обмін фіксує фактичні дві суми; відмова/відсутність відповіді з годинника не означає успішне проведення; у разі сумнівів перевіряй журнал операцій на Pixel.
+**Release guard:** Do not merge this draft feature to `main` or call it production-ready until device tests and security checks are complete. The next APK should be assembled only after an explicit user command.
