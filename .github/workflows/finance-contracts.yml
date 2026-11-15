@@ -1,0 +1,39 @@
+name: JARVIS Finance contracts (no APK)
+
+on:
+  push:
+    branches:
+      - feature/finance-local-ledger
+    paths:
+      - android/app/src/main/java/com/andriy/jarvis/Finance*.java
+      - android/app/src/test/java/com/andriy/jarvis/FinanceVoiceCommandsTest.java
+      - tools/finance/**
+      - .github/workflows/finance-contracts.yml
+  pull_request:
+    paths:
+      - android/app/src/main/java/com/andriy/jarvis/Finance*.java
+      - android/app/src/test/java/com/andriy/jarvis/FinanceVoiceCommandsTest.java
+      - tools/finance/**
+  workflow_dispatch:
+
+jobs:
+  finance-schema-and-voice:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: SQLite ledger schema and migration tests
+        run: python3 tools/finance/test_schema.py
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Ukrainian finance command parser contracts
+        run: |
+          mkdir -p /tmp/jarvis-finance-tests
+          javac -encoding UTF-8 -d /tmp/jarvis-finance-tests \
+            android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceVoiceCommands.java \
+            android/app/src/test/java/com/andriy/jarvis/FinanceVoiceCommandsTest.java
+          java -cp /tmp/jarvis-finance-tests com.andriy.jarvis.FinanceVoiceCommandsTest
