@@ -69,6 +69,7 @@ public final class FinanceActivity extends Activity {
             text(FinanceFx.valuation(ledger));
             text(FinanceAssets.positions(ledger));
             button("Історія криптоугод",()->showInfo(FinanceCryptoTrades.history(ledger)));
+            button("Собівартість крипто (FIFO)",()->showInfo(FinanceCryptoTrades.costBasis(ledger)));
             button("Підсумки змін і чайових",()->showInfo(FinanceShifts.report(ledger)));
             button("Аудит витрат і повторів",()->showInfo(FinanceAnalytics.audit(ledger)));
             button("Сценарій: зменшення витрат на N%",()->form("Сценарій без змін у бюджеті",
