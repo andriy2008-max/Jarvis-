@@ -54,6 +54,8 @@ public final class FinanceActivity extends Activity {
         for(String name:new String[]{"Огляд","Операції","План","Звіти"})button(name,()->{tab=name;show();});
         if(tab.equals("План")){planning();return;}
         if(tab.equals("Звіти")){
+            FinanceBarChart chart=new FinanceBarChart(this,ledger);
+            body.addView(chart,new LinearLayout.LayoutParams(-1,(int)(240*getResources().getDisplayMetrics().density)));
             text(FinanceAnalytics.report(ledger,"month"));
             button("Звіт: сьогодні",()->showInfo(FinanceAnalytics.report(ledger,"today")));
             button("Звіт: тиждень",()->showInfo(FinanceAnalytics.report(ledger,"week")));
