@@ -27,7 +27,7 @@ public final class FinanceManagerController {
         FinanceVoiceCommands.Entry request=FinanceVoiceCommands.parse(utterance);
         if(request==null){listener.onFinished(false,"Не розпізнав фінансовий запис.");return;}
         try(FinanceLedger ledger=new FinanceLedger(context)){
-            android.database.sqlite.SQLiteDatabase db=ledger.getWritableDatabase();
+            net.zetetic.database.sqlcipher.SQLiteDatabase db=ledger.getWritableDatabase();
             db.beginTransaction();try{
             String previous=ledger.receipt(commandId,utterance);if(previous!=null){listener.onFinished(true,previous);return;}
             long account=-1;
