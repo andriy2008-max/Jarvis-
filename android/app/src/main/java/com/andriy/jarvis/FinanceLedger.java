@@ -62,6 +62,7 @@ public final class FinanceLedger extends SQLiteOpenHelper {
     }
     private void createTrading(SQLiteDatabase db){
         db.execSQL("CREATE TABLE crypto_trades(id TEXT PRIMARY KEY, symbol TEXT NOT NULL, action TEXT NOT NULL CHECK(action IN ('buy','sell')), quantity TEXT NOT NULL, price_uah_minor INTEGER NOT NULL CHECK(price_uah_minor>=0), fee_uah_minor INTEGER NOT NULL DEFAULT 0 CHECK(fee_uah_minor>=0), account INTEGER REFERENCES accounts(id), happened INTEGER NOT NULL)");
+        db.execSQL("CREATE TABLE finance_reconciliations(id TEXT PRIMARY KEY, account INTEGER NOT NULL REFERENCES accounts(id), previous_opening INTEGER, previous_cutoff INTEGER NOT NULL, observed_minor INTEGER NOT NULL, effective_at INTEGER NOT NULL, captured_at INTEGER NOT NULL)");
         db.execSQL("CREATE INDEX crypto_trades_symbol_time ON crypto_trades(symbol,happened)");
     }
     public long balance(long account){
