@@ -41,16 +41,19 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/FinanceCalendar.java \
             android/app/src/main/java/com/andriy/jarvis/FinanceBatchCommands.java \
             android/app/src/main/java/com/andriy/jarvis/FinanceCryptoFifo.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceVoiceQueryMatcher.java \
             android/app/src/test/java/com/andriy/jarvis/FinanceVoiceCommandsTest.java \
             android/app/src/test/java/com/andriy/jarvis/FinanceVoiceFollowupsTest.java \
             android/app/src/test/java/com/andriy/jarvis/FinanceCalendarTest.java \
             android/app/src/test/java/com/andriy/jarvis/FinanceBatchCommandsTest.java \
-            android/app/src/test/java/com/andriy/jarvis/FinanceCryptoFifoTest.java
+            android/app/src/test/java/com/andriy/jarvis/FinanceCryptoFifoTest.java \
+            android/app/src/test/java/com/andriy/jarvis/FinanceVoiceQueryMatcherTest.java
           java -cp /tmp/jarvis-finance-tests com.andriy.jarvis.FinanceVoiceCommandsTest
           java -cp /tmp/jarvis-finance-tests com.andriy.jarvis.FinanceVoiceFollowupsTest
           java -cp /tmp/jarvis-finance-tests com.andriy.jarvis.FinanceCalendarTest
           java -cp /tmp/jarvis-finance-tests com.andriy.jarvis.FinanceBatchCommandsTest
           java -cp /tmp/jarvis-finance-tests com.andriy.jarvis.FinanceCryptoFifoTest
+          java -cp /tmp/jarvis-finance-tests com.andriy.jarvis.FinanceVoiceQueryMatcherTest
 
   android-compile-only:
     runs-on: ubuntu-latest
