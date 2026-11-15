@@ -63,6 +63,7 @@
         android:usesCleartextTraffic="false"
         android:allowBackup="true"
         android:supportsRtl="true">
+        <activity android:name=".FinanceActivity" android:exported="false" />
         <!-- Data Layer: same package and signing key on watch + phone required.
              Only the phone handles /request; the watch listens for /reply in foreground. -->
         <service

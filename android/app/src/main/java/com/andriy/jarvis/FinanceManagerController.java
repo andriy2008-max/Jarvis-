@@ -61,37 +61,23 @@ public final class FinanceManagerController {
     public static void start(Context context,String utterance,Listener listener) {
         if(listener==null)return;
         FinanceVoiceCommands.Entry request=FinanceVoiceCommands.parse(utterance);
-        if(request==null){
-            listener.onFinished(false,"Не розпізнав суму або категорію. " +
-                "Спробуй «Запиши витрату 350 гривень на харчування».");return;
-        }
-        if(context.getPackageManager().hasSystemFeature(
-            android.content.pm.PackageManager.FEATURE_WATCH)){
-            listener.onFinished(false,"Фінансовий запис виконується на телефоні.");return;
-        }
-        synchronized(FinanceManagerController.class){
-            if(active!=null){listener.onFinished(false,
-                "Попередня операція ще виконується. Не створюватиму дублікат.");return;}
-        }
-        Intent launch=context.getPackageManager().getLaunchIntentForPackage(PACKAGE);
-        if(launch==null){
-            listener.onFinished(false,
-                "Не встановлено «Менеджер фінансів» (com.freeman.moneymanager).");return;
-        }
-        JarvisPhoneModeManager.Lease lease=JarvisPhoneModeManager.acquireForCommand(context);
-        if(!lease.granted){listener.onFinished(false,lease.message);return;}
-        try {
-            context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-        } catch(RuntimeException error) {
-            JarvisPhoneModeManager.releaseForCommand(lease,false);
-            listener.onFinished(false,"Android не зміг відкрити «Менеджер фінансів».");return;
-        }
-        FinanceManagerController task=new FinanceManagerController(context,request,listener,lease);
-        synchronized(FinanceManagerController.class){active=task;}
-        listener.onProgress("Відкриваю «Менеджер фінансів» для "+
-            (request.kind==FinanceVoiceCommands.Kind.EXPENSE?"витрати":"доходу")+
-            " "+request.amount+" грн...");
-        HANDLER.postDelayed(task.tick,700L);
+        if(request==null){listener.onFinished(false,"Не розпізнав фінансовий запис.");return;}
+        try(FinanceLedger ledger=new FinanceLedger(context)){
+            long account=-1;
+            try(android.database.Cursor c=ledger.getReadableDatabase().rawQuery(
+                request.account==null?"SELECT id FROM accounts":"SELECT id FROM accounts WHERE lower(name)=lower(?)",
+                request.account==null?null:new String[]{request.account})){
+                if(c.moveToFirst()){account=c.getLong(0);if(request.account==null&&c.moveToNext())account=-1;}
+            }
+            if(account<0){listener.onFinished(false,"Відкрий Фінанси у Джарвісі та додай рахунок або вкажи його назву в команді.");return;}
+            if(!ledger.currency(account).equals("UAH")){listener.onFinished(false,"Голосовий запис гривень потребує рахунку UAH.");return;}
+            if(request.category.equals("борг")||request.category.equals("крипта")){
+                listener.onFinished(false,"Для боргів та активів потрібен окремий тип обліку. Запис не створено.");return;
+            }
+            ledger.record(java.util.UUID.randomUUID().toString(),account,FinanceLedger.minor(request.amount),
+                request.kind==FinanceVoiceCommands.Kind.EXPENSE?"expense":"income",request.category,utterance,System.currentTimeMillis());
+            listener.onFinished(true,"✅ "+request.amount+" ₴ · "+request.category+" · сьогодні. Записано у Джарвісі.");
+        }catch(RuntimeException e){listener.onFinished(false,"Не вдалося зберегти фінансовий запис.");}
     }
     private void move(Stage next,String status){
         stage=next;

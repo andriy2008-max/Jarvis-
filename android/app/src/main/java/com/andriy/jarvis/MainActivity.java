@@ -887,8 +887,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             new LinearLayout.LayoutParams(-1,dp(46));
         telegramParams.topMargin=dp(7);
         content.addView(telegramTab,telegramParams);
-        Button financeApiTab=secondaryButton("💰 Менеджер фінансів · API",
-            ()->startActivity(new Intent(this,FinanceApiSettingsActivity.class)));
+        Button financeApiTab=secondaryButton("💰 Фінанси",
+            ()->startActivity(new Intent(this,FinanceActivity.class)));
         LinearLayout.LayoutParams financeApiParams=
             new LinearLayout.LayoutParams(-1,dp(46));
         financeApiParams.topMargin=dp(7);
