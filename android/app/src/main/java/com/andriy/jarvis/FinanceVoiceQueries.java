@@ -43,7 +43,7 @@ public final class FinanceVoiceQueries {
         return ledger.report();
     }
     private static String period(FinanceLedger ledger,String words,boolean income){
-        Period selected=periodFor(words);
+        Period selected=periodFor(words,true);
         String label=selected.label;long from=selected.from,to=selected.to;
         StringBuilder result=new StringBuilder(income?"Доходи ":"Чисті витрати ").append(label).append(":\n");
         boolean found=false;
@@ -84,7 +84,7 @@ public final class FinanceVoiceQueries {
             label=title;
         }
     }
-    private static Period periodFor(String words){
+    private static Period periodFor(String words,boolean monthlyByDefault){
         LocalDate today=LocalDate.now();
         if(words.contains("позавчора"))return new Period(today.minusDays(2),today.minusDays(1),"позавчора");
         if(words.contains("вчора"))return new Period(today.minusDays(1),today,"вчора");
@@ -98,6 +98,8 @@ public final class FinanceVoiceQueries {
         if(words.contains("тижд"))
             return new Period(today.minusDays(today.getDayOfWeek().getValue()-1L),null,"цього тижня");
         if(words.contains("місяц"))return new Period(today.withDayOfMonth(1),null,"цього місяця");
-        return new Period(today,null,"сьогодні");
+        return monthlyByDefault?
+            new Period(today.withDayOfMonth(1),null,"цього місяця"):
+            new Period(today,null,"сьогодні");
     }
 }
