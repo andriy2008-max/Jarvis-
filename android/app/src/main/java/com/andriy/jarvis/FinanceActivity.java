@@ -117,6 +117,9 @@ public final class FinanceActivity extends Activity {
             });
             if(error[0]!=null)throw new IllegalArgumentException(error[0]);
         }));
+        button("Чайові за зміну · розділити між рахунками",()->pickAccount(cashAccount->pickAccount(cardAccount->
+            form("Чайові за зміну",new String[]{"Назва зміни","Всього чайових","Готівкою","На картку","Години роботи (необов'язково)"},
+                v->FinanceShifts.tips(ledger,v[0],v[1],v[2],v[3],cashAccount,cardAccount,v[4])))));
         button("Витрата",()->entry(false));button("Дохід / чайові",()->entry(true));
         button("Переказ",()->pickAccount(from->pickAccount(to->form("Переказ",new String[]{"Сума"},v->ledger.transfer(from,to,FinanceLedger.minor(v[0]))))));
         return;
@@ -157,19 +160,23 @@ public final class FinanceActivity extends Activity {
         String[] types={"budget","goal","payment","owed","owing"};
         String[] labels={"Бюджет на місяць","Ціль","Майбутній платіж","Мені винні","Я винен"};
         for(int n=0;n<types.length;n++){final String type=types[n],label=labels[n];button("Додати: "+label,()->form(label,new String[]{"Назва","Валюта (UAH)","Сума","Дата РРРР-ММ-ДД (необов'язково)","Категорія (для бюджету)"},v->ledger.plan(type,v[0],v[1].isEmpty()?"UAH":v[1].toUpperCase(Locale.ROOT),v[2],v[3],v[4])));}
+        button("Додати тижневий бюджет",()->form("Тижневий бюджет",
+            new String[]{"Назва","Валюта (UAH)","Сума","Категорія (необов'язково)"},
+            v->ledger.plan("budget",v[0],v[1].trim().isEmpty()?"UAH":v[1].trim().toUpperCase(Locale.ROOT),
+                v[2],"",v[3],"week")));
         text("Плани не змінюють фактичні залишки. Борги тут — початковий реєстр зобов’язань.");
-        try(Cursor c=ledger.getReadableDatabase().rawQuery("SELECT type,name,currency,amount,due,category,id,progress,interval_months FROM plans ORDER BY due,name",null)){
+        try(Cursor c=ledger.getReadableDatabase().rawQuery("SELECT type,name,currency,amount,due,category,id,progress,interval_months,budget_period,recurrence_unit,recurrence_every FROM plans ORDER BY due,name",null)){
             while(c.moveToNext()){
                 String detail=c.getString(1)+" · "+FinanceLedger.money(c.getLong(3))+" "+c.getString(2)+" · "+c.getString(4);
                 if(c.getString(0).equals("budget")){
-                    long start=java.time.LocalDate.now().withDayOfMonth(1).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
-                    try(Cursor spent=ledger.getReadableDatabase().rawQuery("SELECT COALESCE(-SUM(e.amount),0) FROM entries e JOIN accounts a ON a.id=e.account WHERE e.deleted=0 AND e.kind IN ('expense','refund') AND a.currency=? AND (e.category=? OR ?='') AND e.happened>=? AND e.happened<?",new String[]{c.getString(2),c.getString(5),c.getString(5),""+start,""+(System.currentTimeMillis()+1L)})){
-                        spent.moveToFirst();detail+="\nВитрачено: "+FinanceLedger.money(spent.getLong(0))+" · Залишилось: "+FinanceLedger.money(c.getLong(3)-spent.getLong(0));
-                    }
+                    long spent=FinanceAnalytics.spent(ledger,c.getString(2),c.getString(5),c.getString(9));
+                    detail+="\n"+(c.getString(9).equals("week")?"Тиждень":"Місяць")+
+                        " · витрачено: "+FinanceLedger.money(spent)+" · залишилось: "+
+                        FinanceLedger.money(Math.subtractExact(c.getLong(3),spent));
                 }
                 String id=c.getString(6),type=c.getString(0);
                 detail+="\nВиконано: "+FinanceLedger.money(c.getLong(7));
-                if(type.equals("payment"))detail+=" · Інтервал: "+c.getInt(8)+" міс.";
+                if(type.equals("payment"))detail+=" · Повтор: "+c.getInt(11)+" "+c.getString(10);
                 final String summary=detail;
                 final String planName=c.getString(1),planAmount=FinanceLedger.money(c.getLong(3)),planDue=c.getString(4),planCategory=c.getString(5);
                 ArrayList<String> possible=new ArrayList<>();
