@@ -38,10 +38,13 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/FinanceVoiceFollowups.java \
             android/app/src/main/java/com/andriy/jarvis/FinanceSlashCommands.java \
             android/app/src/main/java/com/andriy/jarvis/FinanceNumberWords.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceCalendar.java \
             android/app/src/test/java/com/andriy/jarvis/FinanceVoiceCommandsTest.java \
-            android/app/src/test/java/com/andriy/jarvis/FinanceVoiceFollowupsTest.java
+            android/app/src/test/java/com/andriy/jarvis/FinanceVoiceFollowupsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/FinanceCalendarTest.java
           java -cp /tmp/jarvis-finance-tests com.andriy.jarvis.FinanceVoiceCommandsTest
           java -cp /tmp/jarvis-finance-tests com.andriy.jarvis.FinanceVoiceFollowupsTest
+          java -cp /tmp/jarvis-finance-tests com.andriy.jarvis.FinanceCalendarTest
 
   android-compile-only:
     runs-on: ubuntu-latest
