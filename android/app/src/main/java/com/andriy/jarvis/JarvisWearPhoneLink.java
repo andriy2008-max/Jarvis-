@@ -469,8 +469,10 @@ public final class JarvisWearPhoneLink {
         try {
             JSONObject data = new JSONObject(new String(event.getData(),StandardCharsets.UTF_8));
             if (!pendingId.equals(data.optString("id"))) return;
-            if(data.optBoolean("ok",false)&&pendingId.equals(FinanceWatchQueue.firstId(context)))
-                FinanceWatchQueue.acknowledge(context,pendingId);
+            if(pendingId.equals(FinanceWatchQueue.firstId(context))){
+                if(data.optBoolean("ok",false))FinanceWatchQueue.acknowledge(context,pendingId);
+                else FinanceWatchQueue.rejected(context,pendingId);
+            }
             final String type = pendingType;
             final Callback cb = pendingCallback;
             final boolean ok = data.optBoolean("ok",false);
