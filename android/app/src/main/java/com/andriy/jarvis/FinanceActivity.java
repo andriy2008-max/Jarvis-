@@ -27,6 +27,7 @@ public final class FinanceActivity extends Activity {
     protected void onDestroy(){if(backupPassword!=null)Arrays.fill(backupPassword,'\0');if(ledger!=null)ledger.close();super.onDestroy();}
     private void text(String value){TextView t=new TextView(this);t.setText(value);t.setTextColor(Color.WHITE);t.setTextSize(18);t.setPadding(12,12,12,12);body.addView(t);}
     private void button(String label,Runnable action){Button b=new Button(this);b.setText(label);body.addView(b);b.setOnClickListener(v->action.run());}
+    private void showInfo(String value){new AlertDialog.Builder(this).setMessage(value).setPositiveButton("ОК",null).show();}
     private void error(Exception e){new AlertDialog.Builder(this).setMessage(e instanceof IllegalArgumentException?e.getMessage():"Не вдалося зберегти. Перевір дані.").setPositiveButton("ОК",null).show();}
     private void show(){
         if(!unlocked)return;
@@ -50,7 +51,41 @@ public final class FinanceActivity extends Activity {
         button("Резервна копія",()->backup(false));button("Відновити копію",()->new AlertDialog.Builder(this).setTitle("Замінити фінансові дані?").setMessage("Спершу збережи поточну резервну копію. Відновлення замінить рахунки, операції та плани.").setNegativeButton("Скасувати",null).setPositiveButton("Продовжити",(d,w)->backup(true)).show());
         for(String name:new String[]{"Огляд","Операції","План","Звіти"})button(name,()->{tab=name;show();});
         if(tab.equals("План")){planning();return;}
-        if(tab.equals("Звіти")){text(ledger.monthlyReport());text(FinanceInsights.report(ledger));text(FinanceFx.valuation(ledger));text(FinanceAssets.positions(ledger));button("Оновити курси НБУ",()->{Toast.makeText(this,"Отримую курси НБУ…",Toast.LENGTH_SHORT).show();new Thread(()->{String message;try(FinanceLedger db=new FinanceLedger(getApplicationContext())){FinanceFx.refresh(db);message="Курси оновлено";}catch(Exception e){message="НБУ недоступний. Попередні курси збережено з датою.";}final String result=message;runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()){Toast.makeText(this,result,Toast.LENGTH_LONG).show();show();}});},"finance-fx").start();});button("Експорт CSV",()->{Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.setType("text/csv");i.addCategory(Intent.CATEGORY_OPENABLE);i.putExtra(Intent.EXTRA_TITLE,"jarvis-finance.csv");pickingDocument=true;startActivityForResult(i,71);});return;}
+        if(tab.equals("Звіти")){
+            text(FinanceAnalytics.report(ledger,"month"));
+            button("Звіт: сьогодні",()->showInfo(FinanceAnalytics.report(ledger,"today")));
+            button("Звіт: тиждень",()->showInfo(FinanceAnalytics.report(ledger,"week")));
+            button("Звіт: минулий місяць",()->showInfo(FinanceAnalytics.report(ledger,"previous_month")));
+            text(FinanceAnalytics.budgets(ledger));
+            text(FinanceAnalytics.knownPayments(ledger));
+            text(FinanceInsights.report(ledger));
+            text(FinanceFx.valuation(ledger));
+            text(FinanceAssets.positions(ledger));
+            button("Підсумки змін і чайових",()->showInfo(FinanceShifts.report(ledger)));
+            button("Аудит витрат і повторів",()->showInfo(FinanceAnalytics.audit(ledger)));
+            button("Сценарій: зменшення витрат на N%",()->form("Сценарій без змін у бюджеті",
+                new String[]{"Скоротити витрати на N%"},v->showInfo(FinanceAnalytics.scenario(ledger,Integer.parseInt(v[0])))));
+            button("Оновити курси НБУ",()->{
+                Toast.makeText(this,"Отримую курси НБУ…",Toast.LENGTH_SHORT).show();
+                new Thread(()->{
+                    String message;
+                    try(FinanceLedger db=new FinanceLedger(getApplicationContext())){
+                        FinanceFx.refresh(db);message="Курси оновлено";
+                    }catch(Exception e){message="НБУ недоступний. Попередні курси збережено з датою.";}
+                    final String result=message;
+                    runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()){
+                        Toast.makeText(this,result,Toast.LENGTH_LONG).show();show();
+                    }});
+                },"finance-fx").start();
+            });
+            button("Експорт CSV",()->{
+                Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                i.setType("text/csv");i.addCategory(Intent.CATEGORY_OPENABLE);
+                i.putExtra(Intent.EXTRA_TITLE,"jarvis-finance.csv");pickingDocument=true;
+                startActivityForResult(i,71);
+            });
+            return;
+        }
         if(!tab.equals("Операції")){
         text(ledger.report());text(FinanceInsights.reminders(ledger));
         button("Увімкнути / вимкнути нагадування",()->{boolean enable=!ledger.setting("reminders","false").equals("true");ledger.setSetting("reminders",Boolean.toString(enable));if(enable)FinanceReminderJob.schedule(this);else FinanceReminderJob.cancel(this);Toast.makeText(this,enable?"Нагадування ввімкнено. Дозволь сповіщення Джарвіса в Android.":"Нагадування вимкнено",Toast.LENGTH_LONG).show();});
