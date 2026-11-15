@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   apk:
@@ -183,3 +185,17 @@ jobs:
         if: always()
         shell: bash
         run: rm -f "$RUNNER_TEMP/jarvis-stable.jks"
+      - name: Report build result and GitHub run ID on release candidate PR
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if [ "${{ job.status }}" = "success" ]; then
+            body="✅ APK 0.1.33 stable signing, package verification, artifact upload and prerelease succeeded. Run: $run_url. Download: https://github.com/$GITHUB_REPOSITORY/releases/download/v0.1.33/JARVIS-0.1.33-stable.apk"
+          else
+            body="❌ APK 0.1.33 workflow was not successful (job=${{ job.status }}). Inspect steps and logs: $run_url. Do not distribute an unverified APK."
+          fi
+          gh pr comment 8 --repo "$GITHUB_REPOSITORY" --body "$body"
