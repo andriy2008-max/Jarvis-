@@ -104,4 +104,12 @@ class LedgerSchemaTest(unittest.TestCase):
   self.db.execute("INSERT INTO entries(id,account,amount,category,note,happened,kind,group_id) VALUES('card',2,3500,'чай','',2000,'income','shift1')")
   self.assertEqual(self.db.execute("SELECT SUM(amount) FROM entries WHERE group_id='shift1'").fetchone()[0],10000)
   self.assertEqual(self.db.execute("SELECT COUNT(*) FROM finance_shifts").fetchone()[0],1)
+ def test_account_aliases_integrity(self):
+  cols={r[1] for r in self.db.execute("PRAGMA table_info(finance_aliases)")}
+  self.assertTrue({'alias','account'}.issubset(cols))
+  self.db.execute("INSERT INTO finance_aliases VALUES('монобанк',1)")
+  with self.assertRaises(sqlite3.IntegrityError):
+   self.db.execute("INSERT INTO finance_aliases VALUES('монобанк',1)")
+  with self.assertRaises(sqlite3.IntegrityError):
+   self.db.execute("INSERT INTO finance_aliases VALUES('готівка',99)")
 if __name__=='__main__':unittest.main()
