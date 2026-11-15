@@ -1,4 +1,4 @@
-name: JARVIS 0.1.33 Finance stable APK
+name: JARVIS 0.1.33 compact arm64 APK
 
 # One-off explicit user-authorized build from the release candidate branch.
 on:
@@ -7,9 +7,7 @@ on:
       - release/jarvis-0.1.33-finance
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+  contents: read
 
 jobs:
   apk:
@@ -96,7 +94,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "stable" = stable ]; then
-            gradle -p android --no-daemon --stacktrace :app:assembleRelease
+            gradle -p android --no-daemon --stacktrace :app:assembleRelease -PjarvisArm64Only
           else
             gradle -p android --no-daemon --stacktrace :app:assembleDebug
           fi
@@ -109,7 +107,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "stable" = stable ]; then
-            gradle -p android --no-daemon --rerun-tasks --stacktrace :app:assembleRelease
+            gradle -p android --no-daemon --rerun-tasks --stacktrace :app:assembleRelease -PjarvisArm64Only
           else
             gradle -p android --no-daemon --rerun-tasks --stacktrace :app:assembleDebug
           fi
@@ -151,51 +149,14 @@ jobs:
       - name: Upload verified APK as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: JARVIS-${{ env.JARVIS_VERSION_NAME }}-stable-APK
+          name: JARVIS-${{ env.JARVIS_VERSION_NAME }}-stable-arm64-APK
           path: |
             android/dist/JARVIS-${{ env.JARVIS_VERSION_NAME }}-stable.apk
             android/dist/JARVIS-${{ env.JARVIS_VERSION_NAME }}-stable.sha256
             android/RELEASE-0.1.33-FINANCE-CHECKLIST.md
             android/RELEASE-0.1.33-JARVIS-CHANGES-CHECKLIST.md
           if-no-files-found: error
-      - name: Publish stable signed APK to direct GitHub release
-        if: github.ref == 'refs/heads/release/jarvis-0.1.33-finance'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          test -s "android/dist/JARVIS-$JARVIS_VERSION_NAME-stable.apk"
-          # A version tag is immutable: do not overwrite older release packages.
-          if gh release view "v$JARVIS_VERSION_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            echo "::error::Release v$JARVIS_VERSION_NAME already exists. Bump versionCode and versionName."
-            exit 1
-          fi
-          gh release create "v$JARVIS_VERSION_NAME" \
-            "android/dist/JARVIS-$JARVIS_VERSION_NAME-stable.apk" \
-            "android/dist/JARVIS-$JARVIS_VERSION_NAME-stable.sha256" \
-            "android/RELEASE-0.1.33-FINANCE-CHECKLIST.md" \
-            "android/RELEASE-0.1.33-JARVIS-CHANGES-CHECKLIST.md" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "JARVIS $JARVIS_VERSION_NAME — Finance release candidate" \
-            --prerelease \
-            --notes "Signed stable JARVIS Finance v6 candidate. Pixel and Galaxy Watch7 hardware verification remains necessary."
       - name: Clean up signing material
         if: always()
         shell: bash
         run: rm -f "$RUNNER_TEMP/jarvis-stable.jks"
-      - name: Report build result and GitHub run ID on release candidate PR
-        if: always()
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          run_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          if [ "${{ job.status }}" = "success" ]; then
-            body="✅ APK 0.1.33 stable signing, package verification, artifact upload and prerelease succeeded. Run: $run_url. Download: https://github.com/$GITHUB_REPOSITORY/releases/download/v0.1.33/JARVIS-0.1.33-stable.apk"
-          else
-            body="❌ APK 0.1.33 workflow was not successful (job=${{ job.status }}). Inspect steps and logs: $run_url. Do not distribute an unverified APK."
-          fi
-          gh pr comment 8 --repo "$GITHUB_REPOSITORY" --body "$body"
