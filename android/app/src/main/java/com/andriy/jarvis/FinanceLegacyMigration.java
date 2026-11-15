@@ -24,7 +24,9 @@ public final class FinanceLegacyMigration {
         android.content.SharedPreferences prefs=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE);
         if(prefs.getBoolean(DONE,false)){
             // A previous successful import may have crashed before removing the old file.
-            context.deleteDatabase(OLD);return;
+            if(!context.deleteDatabase(OLD)&&old.exists())
+                throw new IllegalStateException("Захищена база готова, але старий файл не видалено.");
+            return;
         }
         // The old file must survive every failure. An incomplete secure transaction is retried.
         android.database.sqlite.SQLiteDatabase legacy=null;
@@ -74,7 +76,8 @@ public final class FinanceLegacyMigration {
             throw new IllegalStateException("Не вдалося безпечно зашифрувати фінансову базу. Стара база збережена.",e);
         }finally{if(legacy!=null)legacy.close();}
         // Only after successful encrypted commit and persistent completion marker.
-        context.deleteDatabase(OLD);
+        if(!context.deleteDatabase(OLD)&&old.exists())
+            throw new IllegalStateException("Не вдалося видалити незашифровану попередню базу.");
     }
     private static boolean exists(android.database.sqlite.SQLiteDatabase db,String table){
         try(Cursor c=db.rawQuery("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",new String[]{table})){
