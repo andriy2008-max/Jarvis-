@@ -25,17 +25,39 @@ public final class FinanceAssets {
                 " "+ledger.currency(account)+" як фактичний залишок на поточний момент?";
         }
     }
+    /** A bank balance is the state at the exact capture instant. */
     public static void reconcile(FinanceLedger ledger,long account,String observed){
-        long actual=FinanceLedger.minor(observed);
+        reconcileAtTime(ledger,account,FinanceLedger.minor(observed),System.currentTimeMillis());
+    }
+    /**
+     * Historic balance describes the END of the specified calendar day.
+     * Exclude every transaction up to midnight after that day; preserve them in journal.
+     */
+    public static void reconcileAt(FinanceLedger ledger,long account,String observed,String day){
+        java.time.LocalDate selected;
+        try{selected=LocalDate.parse(day.trim());}
+        catch(RuntimeException e){throw new IllegalArgumentException("Дата має бути РРРР-ММ-ДД");}
+        if(!selected.isBefore(LocalDate.now()))
+            throw new IllegalArgumentException("Історичну звірку можна зробити лише за минулий день");
+        long cutoff=selected.plusDays(1).atStartOfDay(java.time.ZoneId.systemDefault())
+            .toInstant().toEpochMilli();
+        reconcileAtTime(ledger,account,FinanceLedger.minor(observed),cutoff);
+    }
+    private static void reconcileAtTime(FinanceLedger ledger,long account,long observed,long cutoff){
+        long now=System.currentTimeMillis();
+        if(cutoff<0||cutoff>now)throw new IllegalArgumentException("Контрольна дата не може бути в майбутньому");
         SQLiteDatabase db=ledger.getWritableDatabase();db.beginTransaction();try{
-            try(Cursor c=db.rawQuery("SELECT opening FROM accounts WHERE id=?",new String[]{""+account})){
+            try(Cursor c=db.rawQuery("SELECT opening,opening_at FROM accounts WHERE id=?",new String[]{""+account})){
                 if(!c.moveToFirst())throw new IllegalArgumentException("Рахунок не знайдено");
                 Long previous=c.isNull(0)?null:c.getLong(0);
+                long previousDate=c.getLong(1);
+                db.execSQL("INSERT INTO finance_reconciliations VALUES(?,?,?,?,?,?,?)",
+                    new Object[]{UUID.randomUUID().toString(),account,previous,previousDate,observed,cutoff,now});
                 db.execSQL("INSERT INTO audit(entry_id,event,happened,previous_amount) VALUES(?,?,?,?)",
-                    new Object[]{"account:"+account,"balance-reconciliation",System.currentTimeMillis(),previous});
+                    new Object[]{"account:"+account,"balance-reconciliation",now,previous});
             }
             db.execSQL("UPDATE accounts SET opening=?,opening_at=? WHERE id=?",
-                new Object[]{actual,System.currentTimeMillis(),account});
+                new Object[]{observed,cutoff,account});
             db.setTransactionSuccessful();
         }finally{db.endTransaction();}
     }
