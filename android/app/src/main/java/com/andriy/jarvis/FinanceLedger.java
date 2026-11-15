@@ -80,7 +80,9 @@ public final class FinanceLedger extends SQLiteOpenHelper {
         if(name.trim().isEmpty()||!currency.matches("[A-Z]{3}"))throw new IllegalArgumentException("Вкажи назву та код валюти");
         ContentValues v=new ContentValues();v.put("name",name.trim());v.put("currency",currency);
         if(!opening.trim().isEmpty())v.put("opening",minor(opening));
-        return getWritableDatabase().insertOrThrow("accounts",null,v);
+        long id=getWritableDatabase().insertOrThrow("accounts",null,v);
+        if(setting("default_account","").isEmpty())setSetting("default_account",Long.toString(id));
+        return id;
     }
     public void record(String id,long account,long amount,String kind,String category,String note,long date){
         if(amount<=0)throw new IllegalArgumentException("Сума повинна бути більшою за нуль");
@@ -90,6 +92,25 @@ public final class FinanceLedger extends SQLiteOpenHelper {
     private void insert(SQLiteDatabase db,String id,long account,long amount,String kind,String cat,String note,long date,String group){
         ContentValues v=new ContentValues();v.put("id",id);v.put("account",account);v.put("amount",amount);v.put("kind",kind);v.put("category",cat);v.put("note",note);v.put("happened",date);v.put("group_id",group);
         db.insertOrThrow("entries",null,v);
+    }
+    /** Refund against an existing expense; does not count as earned income. */
+    public void refund(String expenseId,String value){
+        long amount=minor(value);
+        if(amount<=0)throw new IllegalArgumentException("Сума повернення має бути додатною");
+        SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{
+            try(Cursor c=db.rawQuery("SELECT account,amount,category FROM entries WHERE id=? AND kind='expense' AND deleted=0",new String[]{expenseId})){
+                if(!c.moveToFirst())throw new IllegalArgumentException("Початкову витрату не знайдено");
+                long original=Math.negateExact(c.getLong(1));
+                String reference="Повернення:"+expenseId;
+                long refunded;
+                try(Cursor sums=db.rawQuery("SELECT COALESCE(SUM(amount),0) FROM entries WHERE kind='refund' AND note=? AND deleted=0",new String[]{reference})){
+                    sums.moveToFirst();refunded=sums.getLong(0);
+                }
+                if(amount>Math.subtractExact(original,refunded))throw new IllegalArgumentException("Сума перевищує залишок покупки");
+                insert(db,UUID.randomUUID().toString(),c.getLong(0),amount,"refund",c.getString(2),reference,System.currentTimeMillis(),null);
+            }
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
     }
     public void transfer(long from,long to,long amount){
         if(from==to||amount<=0)throw new IllegalArgumentException("Перевір рахунки й суму");
@@ -107,6 +128,9 @@ public final class FinanceLedger extends SQLiteOpenHelper {
     public void remove(String id){
         try(Cursor c=getReadableDatabase().rawQuery("SELECT group_id FROM entries WHERE id=?",new String[]{id})){
             if(c.moveToFirst()&&c.getString(0)!=null&&c.getString(0).startsWith("plan:"))throw new IllegalArgumentException("Це погашення плану. Видалення потребує звірки прогресу.");
+        }
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT 1 FROM entries WHERE kind='refund' AND deleted=0 AND note=? LIMIT 1",new String[]{"Повернення:"+id})){
+            if(c.moveToFirst())throw new IllegalArgumentException("Спочатку скасуй пов’язані повернення покупки");
         }
         getWritableDatabase().execSQL("UPDATE entries SET deleted=1 WHERE id=? OR group_id=(SELECT group_id FROM entries WHERE id=?)",new Object[]{id,id});
     }
