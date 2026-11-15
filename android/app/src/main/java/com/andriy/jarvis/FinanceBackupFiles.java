@@ -37,7 +37,7 @@ public final class FinanceBackupFiles {
             // Invalid passwords/files never overwrite the last working rollback snapshot.
             FinanceBackup.validate(password,original);
             try(FinanceLedger ledger=new FinanceLedger(c)){
-                android.database.sqlite.SQLiteDatabase db=ledger.getWritableDatabase();
+                net.zetetic.database.sqlcipher.SQLiteDatabase db=ledger.getWritableDatabase();
                 db.beginTransaction();
                 try{
                     byte[] previous=FinanceBackup.export(ledger,password);
