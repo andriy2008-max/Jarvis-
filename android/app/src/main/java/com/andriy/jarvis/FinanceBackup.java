@@ -2,7 +2,7 @@ package com.andriy.jarvis;
 
 import android.content.ContentValues;
 import android.database.Cursor;
-import android.database.sqlite.SQLiteDatabase;
+import net.zetetic.database.sqlcipher.SQLiteDatabase;
 import org.json.*;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
