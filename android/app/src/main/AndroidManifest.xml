@@ -62,6 +62,8 @@
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:usesCleartextTraffic="false"
         android:allowBackup="true"
+        android:fullBackupContent="@xml/jarvis_finance_backup_rules"
+        android:dataExtractionRules="@xml/jarvis_finance_extraction_rules"
         android:supportsRtl="true">
         <service android:name=".FinanceReminderJob" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="false" />
         <activity android:name=".FinanceActivity" android:exported="false" />
