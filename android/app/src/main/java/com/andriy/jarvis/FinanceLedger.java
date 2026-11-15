@@ -197,10 +197,14 @@ public final class FinanceLedger extends SQLiteOpenHelper {
         if(name==null||name.trim().isEmpty())throw new IllegalArgumentException("Вкажи рахунок");
         String query=name.trim().toLowerCase(java.util.Locale.forLanguageTag("uk-UA"));
         long found=-1;
-        try(Cursor c=getReadableDatabase().rawQuery("SELECT DISTINCT a.id FROM accounts a LEFT JOIN finance_aliases v ON v.account=a.id WHERE LOWER(a.name)=? OR v.alias=?",new String[]{query,query})){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT a.id,a.name,v.alias FROM accounts a LEFT JOIN finance_aliases v ON v.account=a.id",null)){
             while(c.moveToNext()){
-                if(found!=-1)throw new IllegalArgumentException("Назва неоднозначна. Вкажи точний рахунок");
-                found=c.getLong(0);
+                if(c.getString(1).equalsIgnoreCase(query)||
+                    (c.getString(2)!=null&&c.getString(2).equalsIgnoreCase(query))){
+                    if(found!=-1&&found!=c.getLong(0))
+                        throw new IllegalArgumentException("Назва неоднозначна. Вкажи точний рахунок");
+                    found=c.getLong(0);
+                }
             }
         }
         if(found<0)throw new IllegalArgumentException("Не знайшов рахунок. Налаштуй псевдонім у розділі «Фінанси»");
