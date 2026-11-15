@@ -15,6 +15,10 @@ public final class FinanceManagerController {
     public static synchronized void start(Context context,String utterance,String commandId,long capturedAt,Listener listener) {
         if(listener==null)return;
         if(capturedAt<=0||capturedAt>System.currentTimeMillis()+300000L){listener.onFinished(false,"Перевір дату й час годинника.");return;}
+        if(FinanceBatchCommands.looksLikeBatch(utterance)){
+            FinanceBatchController.start(context,utterance,commandId,capturedAt,listener);
+            return;
+        }
         FinanceVoiceFollowups.Correction correction=FinanceVoiceFollowups.parse(utterance);
         if(correction!=null){
             FinanceCorrectionController.start(context,utterance,commandId,capturedAt,correction,listener);
