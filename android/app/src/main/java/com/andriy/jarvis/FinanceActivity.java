@@ -110,6 +110,16 @@ public final class FinanceActivity extends Activity {
         button("Додати рахунок",this::newAccount);
         button("Додати голосовий псевдонім рахунку",()->pickAccount(id->form("Новий псевдонім",
             new String[]{"Наприклад: монобанк, картка роботи"},v->ledger.addAlias(id,v[0]))));
+        button("Звірити залишок на історичну дату",()->pickAccount(account->
+            form("Історична звірка · залишок на КІНЕЦЬ дня",
+                new String[]{"Фактично було на рахунку","Дата РРРР-ММ-ДД"},
+                v->new AlertDialog.Builder(this).setTitle("Підтвердити історичний залишок?")
+                    .setMessage("Записи до кінця вказаного дня залишаться в історії, але повторно не впливатимуть на поточний залишок. Операції після цієї дати будуть враховані.")
+                    .setNegativeButton("Ні",null)
+                    .setPositiveButton("Звірити",(dialog,which)->{
+                        try{FinanceAssets.reconcileAt(ledger,account,v[0],v[1]);show();}
+                        catch(Exception error){error(error);}
+                    }).show())));
         button("Звірити баланс рахунку",()->pickAccount(id->form("Фактично на рахунку",new String[]{"Сума за даними банку або готівка"},v->{
             String comparison=FinanceAssets.difference(ledger,id,v[0]);
             new AlertDialog.Builder(this).setTitle("Підтвердити звірку?").setMessage(comparison)
