@@ -52,6 +52,6 @@ public final class FinanceManagerController {
             }finally{db.endTransaction();}
             listener.onFinished(true,ledger.receipt(commandId,utterance));
         }catch(IllegalArgumentException e){listener.onFinished(false,e.getMessage());}
-        }catch(RuntimeException e){listener.onFinished(false,"Не вдалося зберегти фінансовий запис.");}
+        catch(RuntimeException e){listener.onFinished(false,"Не вдалося зберегти фінансовий запис.");}
     }
 }
