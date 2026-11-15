@@ -43,13 +43,8 @@ public final class FinanceVoiceQueries {
         return ledger.report();
     }
     private static String period(FinanceLedger ledger,String words,boolean income){
-        LocalDate today=LocalDate.now();LocalDate first=today.withDayOfMonth(1);
-        String label="цього місяця";
-        if(words.contains("сьогодні")){first=today;label="сьогодні";}
-        else if(words.contains("вчора")){first=today.minusDays(1);label="вчора";}
-        else if(words.contains("тижд")){first=today.minusDays(today.getDayOfWeek().getValue()-1L);label="цього тижня";}
-        long from=first.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
-        long to=words.contains("вчора")?today.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli():System.currentTimeMillis()+1L;
+        Period selected=periodFor(words);
+        String label=selected.label;long from=selected.from,to=selected.to;
         StringBuilder result=new StringBuilder(income?"Доходи ":"Чисті витрати ").append(label).append(":\n");
         boolean found=false;
         try(Cursor c=ledger.getReadableDatabase().rawQuery(
@@ -66,13 +61,8 @@ public final class FinanceVoiceQueries {
         return result.toString();
     }
     private static String tips(FinanceLedger ledger,String words){
-        LocalDate today=LocalDate.now();
-        LocalDate first=words.contains("вчора")?today.minusDays(1):
-            words.contains("тижд")?today.minusDays(today.getDayOfWeek().getValue()-1L):
-            words.contains("місяц")?today.withDayOfMonth(1):today;
-        long from=first.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
-        long to=words.contains("вчора")?today.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli():
-            System.currentTimeMillis()+1L;
+        Period selected=periodFor(words);
+        long from=selected.from,to=selected.to;
         StringBuilder out=new StringBuilder("Чайові за вибраний період:\n");boolean any=false;
         try(Cursor c=ledger.getReadableDatabase().rawQuery(
             "SELECT a.currency,SUM(e.amount) FROM entries e JOIN accounts a ON e.account=a.id "+
@@ -85,27 +75,29 @@ public final class FinanceVoiceQueries {
         }
         return any?out.toString():"Записів чайових за цей період немає.";
     }
-    private static String budgets(FinanceLedger ledger){
-        long start=LocalDate.now().withDayOfMonth(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
-        long now=System.currentTimeMillis()+1L;
-        StringBuilder out=new StringBuilder("Місячні бюджети:\n");boolean any=false;
-        try(Cursor budgets=ledger.getReadableDatabase().rawQuery("SELECT name,category,currency,amount FROM plans WHERE type='budget' ORDER BY name",null)){
-            while(budgets.moveToNext()){
-                any=true;long spent=0;
-                try(Cursor c=ledger.getReadableDatabase().rawQuery(
-                    "SELECT COALESCE(-SUM(e.amount),0) FROM entries e JOIN accounts a ON a.id=e.account "+
-                    "WHERE e.deleted=0 AND e.kind IN ('expense','refund') AND a.currency=? "+
-                    "AND (e.category=? OR ?='') AND e.happened>=? AND e.happened<?",
-                    new String[]{budgets.getString(2),budgets.getString(1),budgets.getString(1),""+start,""+now})){
-                    if(c.moveToFirst())spent=c.getLong(0);
-                }
-                out.append(budgets.getString(0)).append(": ").append(FinanceLedger.money(spent))
-                    .append(" із ").append(FinanceLedger.money(budgets.getLong(3)))
-                    .append(" ").append(budgets.getString(2));
-                if(spent>budgets.getLong(3))out.append(" · перевищено на ").append(FinanceLedger.money(spent-budgets.getLong(3)));
-                out.append("\n");
-            }
+    private static final class Period {
+        final long from,to;final String label;
+        Period(LocalDate first,LocalDate end,String title){
+            ZoneId zone=ZoneId.systemDefault();
+            from=first.atStartOfDay(zone).toInstant().toEpochMilli();
+            to=end==null?System.currentTimeMillis()+1L:end.atStartOfDay(zone).toInstant().toEpochMilli();
+            label=title;
         }
-        return any?out.toString():"Бюджетів ще немає. Створи бюджет у розділі «План».";
+    }
+    private static Period periodFor(String words){
+        LocalDate today=LocalDate.now();
+        if(words.contains("позавчора"))return new Period(today.minusDays(2),today.minusDays(1),"позавчора");
+        if(words.contains("вчора"))return new Period(today.minusDays(1),today,"вчора");
+        if(words.contains("минул")&&words.contains("місяц"))
+            return new Period(today.withDayOfMonth(1).minusMonths(1),today.withDayOfMonth(1),"минулого місяця");
+        if(words.contains("минул")&&words.contains("тижд")){
+            LocalDate monday=today.minusDays(today.getDayOfWeek().getValue()-1L);
+            return new Period(monday.minusWeeks(1),monday,"минулого тижня");
+        }
+        if(words.contains("сьогодні"))return new Period(today,null,"сьогодні");
+        if(words.contains("тижд"))
+            return new Period(today.minusDays(today.getDayOfWeek().getValue()-1L),null,"цього тижня");
+        if(words.contains("місяц"))return new Period(today.withDayOfMonth(1),null,"цього місяця");
+        return new Period(today,null,"сьогодні");
     }
 }
