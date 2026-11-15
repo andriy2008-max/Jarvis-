@@ -4970,7 +4970,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (!isWatchDevice && FinanceVoiceQueries.matches(raw)) {
             String response;
             try(FinanceLedger l=new FinanceLedger(this)){
-                response=FinanceVoiceQueries.answer(l,raw);
+                android.app.KeyguardManager km=(android.app.KeyguardManager)getSystemService(KEYGUARD_SERVICE);
+                if(km!=null&&km.isDeviceLocked()&&!l.setting("finance_voice_locked","false").equals("true")){
+                    response="Розблокуй телефон для фінансового звіту.";
+                }else response=FinanceVoiceQueries.answer(l,raw);
             }catch(Exception e){response="Не вдалося прочитати фінансовий звіт.";}
             appendDialogue("Джарвіс",response);
             setStatus(response);
