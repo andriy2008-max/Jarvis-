@@ -2,6 +2,11 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="database" path="jarvis-finance.db" />
+        <exclude domain="database" path="jarvis-finance-secure.db" />
+        <exclude domain="database" path="jarvis-finance-secure.db-wal" />
+        <exclude domain="database" path="jarvis-finance-secure.db-shm" />
+        <exclude domain="sharedpref" path="finance_secure_key.xml" />
+        <exclude domain="sharedpref" path="finance_secure_migration.xml" />
         <exclude domain="database" path="jarvis-finance.db-wal" />
         <exclude domain="database" path="jarvis-finance.db-shm" />
         <exclude domain="sharedpref" path="finance_watch_queue.xml" />
@@ -9,6 +14,11 @@
     </cloud-backup>
     <device-transfer>
         <exclude domain="database" path="jarvis-finance.db" />
+        <exclude domain="database" path="jarvis-finance-secure.db" />
+        <exclude domain="database" path="jarvis-finance-secure.db-wal" />
+        <exclude domain="database" path="jarvis-finance-secure.db-shm" />
+        <exclude domain="sharedpref" path="finance_secure_key.xml" />
+        <exclude domain="sharedpref" path="finance_secure_migration.xml" />
         <exclude domain="database" path="jarvis-finance.db-wal" />
         <exclude domain="database" path="jarvis-finance.db-shm" />
         <exclude domain="sharedpref" path="finance_watch_queue.xml" />
