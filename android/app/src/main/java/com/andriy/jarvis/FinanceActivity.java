@@ -41,6 +41,11 @@ public final class FinanceActivity extends Activity {
                 text("Для голосових витрат вибери типовий рахунок. До вибору Джарвіс не записуватиме операції навмання.");
             }
         }
+        button("Дозволити / заборонити озвучування балансу при блокуванні",()->{
+            boolean allow=!ledger.setting("finance_voice_locked","false").equals("true");
+            ledger.setSetting("finance_voice_locked",Boolean.toString(allow));
+            Toast.makeText(this,allow?"Озвучування при блокуванні дозволено":"Суми при блокуванні приховані",Toast.LENGTH_LONG).show();
+        });
         button("Рахунок для голосових команд",()->pickAccount(id->{ledger.setSetting("default_account",""+id);Toast.makeText(this,"Типовий рахунок збережено",Toast.LENGTH_SHORT).show();}));
         button("Резервна копія",()->backup(false));button("Відновити копію",()->new AlertDialog.Builder(this).setTitle("Замінити фінансові дані?").setMessage("Спершу збережи поточну резервну копію. Відновлення замінить рахунки, операції та плани.").setNegativeButton("Скасувати",null).setPositiveButton("Продовжити",(d,w)->backup(true)).show());
         for(String name:new String[]{"Огляд","Операції","План","Звіти"})button(name,()->{tab=name;show();});
