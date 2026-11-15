@@ -25,6 +25,11 @@ public final class JarvisWearMessageReceiver extends WearableListenerService {
 
         if((JarvisWearProtocol.ASSISTANT.equals(action)||JarvisWearProtocol.COMMAND.equals(action)) && FinanceVoiceQueries.matches(request.optString("text",""))){
             try(FinanceLedger ledger=new FinanceLedger(this)){
+                android.app.KeyguardManager lock=(android.app.KeyguardManager)getSystemService(KEYGUARD_SERVICE);
+                if(lock!=null&&lock.isDeviceLocked()&&!ledger.setting("finance_voice_locked","false").equals("true")){
+                    sendReply(node,id,false,"Для озвучування фінансових сум розблокуй Pixel.","",false,null);
+                    return;
+                }
                 sendReply(node,id,true,FinanceVoiceQueries.answer(ledger,request.optString("text","")),"",false,null);
             }catch(Exception e){
                 sendReply(node,id,false,"Не вдалося отримати фінансовий звіт.","",false,null);
