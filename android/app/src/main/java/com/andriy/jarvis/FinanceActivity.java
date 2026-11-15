@@ -9,7 +9,7 @@ import java.util.*;
 
 /** Native finance screen backed by the same ledger as voice commands. */
 public final class FinanceActivity extends Activity {
-    private FinanceLedger ledger; private LinearLayout body; private String tab="Огляд"; private String query=""; private boolean unlocked=false,authenticating=false,pickingDocument=false; private String lastDeleted; private char[] backupPassword;
+    private FinanceLedger ledger; private LinearLayout body; private String tab="Огляд"; private String query=""; private boolean unlocked=false,authenticating=false,pickingDocument=false,backupRunning=false; private String lastDeleted; private char[] backupPassword;
     public void onCreate(Bundle state){super.onCreate(state);
         getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
         ledger=new FinanceLedger(this);authenticate();
@@ -48,7 +48,9 @@ public final class FinanceActivity extends Activity {
             Toast.makeText(this,allow?"Озвучування при блокуванні дозволено":"Суми при блокуванні приховані",Toast.LENGTH_LONG).show();
         });
         button("Рахунок для голосових команд",()->pickAccount(id->{ledger.setSetting("default_account",""+id);Toast.makeText(this,"Типовий рахунок збережено",Toast.LENGTH_SHORT).show();}));
-        button("Резервна копія",()->backup(false));button("Відновити копію",()->new AlertDialog.Builder(this).setTitle("Замінити фінансові дані?").setMessage("Спершу збережи поточну резервну копію. Відновлення замінить рахунки, операції та плани.").setNegativeButton("Скасувати",null).setPositiveButton("Продовжити",(d,w)->backup(true)).show());
+        button("Резервна копія",()->backup(false));
+        if(FinanceBackupFiles.hasPrevious(this))
+            button("Повернути стан перед останнім відновленням",this::recoverPrevious);button("Відновити копію",()->new AlertDialog.Builder(this).setTitle("Замінити фінансові дані?").setMessage("Спершу збережи поточну резервну копію. Відновлення замінить рахунки, операції та плани.").setNegativeButton("Скасувати",null).setPositiveButton("Продовжити",(d,w)->backup(true)).show());
         for(String name:new String[]{"Огляд","Операції","План","Звіти"})button(name,()->{tab=name;show();});
         if(tab.equals("План")){planning();return;}
         if(tab.equals("Звіти")){
@@ -228,7 +230,33 @@ public final class FinanceActivity extends Activity {
             }
         }
     }
+    private void recoverPrevious(){
+        if(backupRunning){showInfo("Завершується попередня операція з файлом.");return;}
+        EditText field=new EditText(this);
+        field.setHint("Пароль, введений під час останнього відновлення");
+        field.setInputType(129);
+        new AlertDialog.Builder(this).setTitle("Відновити попередній стан?")
+            .setMessage("Поточний журнал буде замінено попередньою зашифрованою копією.")
+            .setView(field).setNegativeButton("Скасувати",null)
+            .setPositiveButton("Відновити",(d,w)->{
+                char[] secret=field.getText().toString().toCharArray();
+                backupRunning=true;
+                new Thread(()->{
+                    String error=null;
+                    try{FinanceBackupFiles.undoRestore(getApplicationContext(),secret);}
+                    catch(Exception e){error="Не вдалося відновити попередній стан. Перевір пароль.";}
+                    finally{Arrays.fill(secret,'\\0');}
+                    final String issue=error;
+                    runOnUiThread(()->{backupRunning=false;
+                        if(isFinishing()||isDestroyed())return;
+                        if(issue==null){Toast.makeText(this,"Попередній стан відновлено",Toast.LENGTH_LONG).show();show();}
+                        else showInfo(issue);
+                    });
+                },"finance-recover").start();
+            }).show();
+    }
     private void backup(boolean restore){
+        if(backupRunning){showInfo("Фінансовий файл ще обробляється.");return;}
         EditText field=new EditText(this);field.setHint("Пароль копії, мінімум 10 символів");field.setInputType(129);
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle(restore?"Пароль для відновлення":"Збережи пароль: без нього копію не відновити").setView(field).setNegativeButton("Скасувати",null).setPositiveButton("Далі",null).create();
         dialog.setOnShowListener(d->dialog.getButton(-1).setOnClickListener(v->{if(field.length()<10){field.setError("Мінімум 10 символів");return;}backupPassword=field.getText().toString().toCharArray();dialog.dismiss();Intent i=new Intent(restore?Intent.ACTION_OPEN_DOCUMENT:Intent.ACTION_CREATE_DOCUMENT);i.setType("application/octet-stream");i.addCategory(Intent.CATEGORY_OPENABLE);i.putExtra(Intent.EXTRA_TITLE,"jarvis-finance.jfb");pickingDocument=true;startActivityForResult(i,restore?73:72);}));dialog.show();
@@ -240,13 +268,30 @@ public final class FinanceActivity extends Activity {
         if(request==72||request==73){
             if(result!=RESULT_OK||data==null||data.getData()==null){if(backupPassword!=null)Arrays.fill(backupPassword,'\0');backupPassword=null;return;}
             if(backupPassword==null){error(new IllegalArgumentException("Повтори дію: пароль не зберігається після перезапуску"));return;}
-            try{
-                if(request==72){byte[] bytes=FinanceBackup.export(ledger,backupPassword);try(java.io.OutputStream out=getContentResolver().openOutputStream(data.getData())){if(out==null)throw new java.io.IOException();out.write(bytes);}}
-                else {try(java.io.InputStream in=getContentResolver().openInputStream(data.getData());java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream()){
-                    if(in==null)throw new java.io.IOException();byte[] buf=new byte[8192];int count;while((count=in.read(buf))!=-1){if(out.size()+count>20*1024*1024)throw new IllegalArgumentException("Копія завелика");out.write(buf,0,count);}FinanceBackup.restore(ledger,backupPassword,out.toByteArray());}}
-                Toast.makeText(this,request==72?"Копію збережено":"Дані відновлено",Toast.LENGTH_LONG).show();show();
-            }catch(Exception e){new AlertDialog.Builder(this).setMessage("Не вдалося виконати дію. Перевір пароль і файл копії. Незавершене відновлення не змінює дані.").setPositiveButton("ОК",null).show();}
-            finally{Arrays.fill(backupPassword,'\0');backupPassword=null;}return;
+            final char[] password=backupPassword;backupPassword=null;
+            final android.net.Uri uri=data.getData();
+            final boolean importing=request==73;
+            backupRunning=true;
+            Toast.makeText(this,"Обробка зашифрованої копії…",Toast.LENGTH_SHORT).show();
+            new Thread(()->{
+                String problem=null;
+                try{
+                    if(importing)FinanceBackupFiles.restore(getApplicationContext(),uri,password);
+                    else FinanceBackupFiles.save(getApplicationContext(),uri,password);
+                }catch(Exception e){
+                    problem="Операція не виконана. Перевір пароль, формат і вільне місце. Дані не повинні змінитися при помилці.";
+                }finally{Arrays.fill(password,'\\0');}
+                final String error=problem;
+                runOnUiThread(()->{
+                    backupRunning=false;
+                    if(isFinishing()||isDestroyed())return;
+                    if(error==null){
+                        Toast.makeText(this,importing?"Дані відновлено; попередній стан збережено":"Копію збережено",Toast.LENGTH_LONG).show();
+                        show();
+                    }else showInfo(error);
+                });
+            },"finance-backup").start();
+            return;
         }
         if(request==71&&result==RESULT_OK&&data!=null&&data.getData()!=null){
             try(java.io.OutputStream out=getContentResolver().openOutputStream(data.getData())){
