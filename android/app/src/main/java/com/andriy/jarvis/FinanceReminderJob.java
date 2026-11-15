@@ -4,6 +4,10 @@ import android.app.job.*;
 import android.content.*;
 public final class FinanceReminderJob extends JobService {
     public static void schedule(Context c){JobScheduler scheduler=(JobScheduler)c.getSystemService(JOB_SCHEDULER_SERVICE);if(scheduler!=null)scheduler.schedule(new JobInfo.Builder(7834,new ComponentName(c,FinanceReminderJob.class)).setPeriodic(24L*60*60*1000).setPersisted(true).build());}
+    public static void cancel(Context c){
+        JobScheduler scheduler=(JobScheduler)c.getSystemService(JOB_SCHEDULER_SERVICE);
+        if(scheduler!=null)scheduler.cancel(7834);
+    }
     public boolean onStartJob(JobParameters params){
         new Thread(()->{try(FinanceLedger l=new FinanceLedger(this)){
             String day=java.time.LocalDate.now().toString();
