@@ -33,7 +33,7 @@ public final class FinanceLedger extends SQLiteOpenHelper {
         db.execSQL("ALTER TABLE plans ADD COLUMN interval_months INTEGER NOT NULL DEFAULT 0");
     }
     public long balance(long account){
-        try(Cursor c=getReadableDatabase().rawQuery("SELECT a.opening+COALESCE(SUM(CASE WHEN e.deleted=0 AND (a.opening_at=0 OR e.happened>a.opening_at) THEN e.amount ELSE 0 END),0) FROM accounts a LEFT JOIN entries e ON a.id=e.account WHERE a.id=? GROUP BY a.id",new String[]{""+account})){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT a.opening+COALESCE(SUM(CASE WHEN e.deleted=0 AND (a.opening_at=0 OR e.happened>=a.opening_at) THEN e.amount ELSE 0 END),0) FROM accounts a LEFT JOIN entries e ON a.id=e.account WHERE a.id=? GROUP BY a.id",new String[]{""+account})){
             if(!c.moveToFirst()||c.isNull(0))throw new IllegalArgumentException("Спочатку звір залишок рахунку");return c.getLong(0);
         }
     }
@@ -195,7 +195,7 @@ public final class FinanceLedger extends SQLiteOpenHelper {
     }
     public String report(){
         StringBuilder out=new StringBuilder();
-        try(Cursor c=getReadableDatabase().rawQuery("SELECT a.name,a.currency,a.opening,COALESCE(SUM(CASE WHEN e.deleted=0 AND (a.opening_at=0 OR e.happened>a.opening_at) THEN e.amount ELSE 0 END),0) FROM accounts a LEFT JOIN entries e ON e.account=a.id GROUP BY a.id",null)){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT a.name,a.currency,a.opening,COALESCE(SUM(CASE WHEN e.deleted=0 AND (a.opening_at=0 OR e.happened>=a.opening_at) THEN e.amount ELSE 0 END),0) FROM accounts a LEFT JOIN entries e ON e.account=a.id GROUP BY a.id",null)){
             while(c.moveToNext())out.append(c.getString(0)).append(": ").append(c.isNull(2)?"залишок невідомий":money(Math.addExact(c.getLong(2),c.getLong(3)))+" "+c.getString(1)).append("\n");
         }
         try(Cursor c=getReadableDatabase().rawQuery("SELECT a.currency,e.kind,SUM(e.amount) FROM entries e JOIN accounts a ON a.id=e.account WHERE e.deleted=0 AND e.kind IN ('expense','income','refund') GROUP BY a.currency,e.kind",null)){
