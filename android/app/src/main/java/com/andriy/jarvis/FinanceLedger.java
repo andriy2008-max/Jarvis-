@@ -38,7 +38,7 @@ public final class FinanceLedger extends SQLiteOpenHelper {
     private void createAdvanced(SQLiteDatabase db){
         db.execSQL("CREATE TABLE fx_transfers(id TEXT PRIMARY KEY, from_account INTEGER NOT NULL REFERENCES accounts(id), to_account INTEGER NOT NULL REFERENCES accounts(id), from_minor INTEGER NOT NULL CHECK(from_minor>0), to_minor INTEGER NOT NULL CHECK(to_minor>0), fee_minor INTEGER NOT NULL CHECK(fee_minor>=0), happened INTEGER NOT NULL)");
         db.execSQL("CREATE TABLE crypto_positions(symbol TEXT PRIMARY KEY, quantity TEXT NOT NULL, value_uah TEXT, valued_on TEXT)");
-        db.execSQL("CREATE TABLE settlement_history(id INTEGER PRIMARY KEY AUTOINCREMENT, entry_id TEXT UNIQUE NOT NULL REFERENCES entries(id), plan_id TEXT NOT NULL, before_progress INTEGER NOT NULL, after_progress INTEGER NOT NULL, before_due TEXT NOT NULL, after_due TEXT NOT NULL)");
+        db.execSQL("CREATE TABLE settlement_history(id INTEGER PRIMARY KEY AUTOINCREMENT, entry_id TEXT UNIQUE NOT NULL REFERENCES entries(id), plan_id TEXT NOT NULL, before_progress INTEGER NOT NULL, after_progress INTEGER NOT NULL, before_due TEXT NOT NULL, after_due TEXT NOT NULL, reversed INTEGER NOT NULL DEFAULT 0)");
         db.execSQL("ALTER TABLE plans ADD COLUMN recurrence_unit TEXT NOT NULL DEFAULT 'month'");
         db.execSQL("ALTER TABLE plans ADD COLUMN recurrence_every INTEGER NOT NULL DEFAULT 0");
         db.execSQL("ALTER TABLE plans ADD COLUMN recurrence_anchor INTEGER NOT NULL DEFAULT 0");
@@ -56,28 +56,100 @@ public final class FinanceLedger extends SQLiteOpenHelper {
     public void settle(String id,long account,String value){
         long amount=minor(value);if(amount<=0)throw new IllegalArgumentException("Вкажи додатну суму");
         SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{
-            try(Cursor c=db.rawQuery("SELECT type,name,currency,amount,progress,due,category,interval_months FROM plans WHERE id=?",new String[]{id})){
+            try(Cursor c=db.rawQuery("SELECT type,name,currency,amount,progress,due,category,recurrence_unit,recurrence_every,recurrence_anchor FROM plans WHERE id=?",new String[]{id})){
                 if(!c.moveToFirst())throw new IllegalArgumentException("План не знайдено");
-                String type=c.getString(0);if(type.equals("budget"))throw new IllegalArgumentException("Бюджет не потребує внесків");
+                String type=c.getString(0);
+                if(type.equals("budget"))throw new IllegalArgumentException("Бюджет не потребує внесків");
                 if(!currency(account).equals(c.getString(2)))throw new IllegalArgumentException("Валюти рахунку та плану мають збігатися");
-                long left=Math.subtractExact(c.getLong(3),c.getLong(4));if(amount>left)throw new IllegalArgumentException("Сума перевищує залишок плану");
+                long before=c.getLong(4),target=c.getLong(3),left=Math.subtractExact(target,before);
+                if(amount>left)throw new IllegalArgumentException("Сума перевищує залишок плану");
+                String beforeDue=c.getString(5),afterDue=beforeDue;
+                String entryId=null;
                 if(type.equals("goal")){
                     if(amount>available(account))throw new IllegalArgumentException("Недостатньо незарезервованих коштів");
                     db.execSQL("INSERT INTO allocations VALUES(?,?,?,?)",new Object[]{UUID.randomUUID().toString(),id,account,amount});
                 }else{
-                    String kind=type.equals("payment")?"expense":"debt";
-                    insert(db,UUID.randomUUID().toString(),account,type.equals("owed")?amount:-amount,kind,c.getString(6),c.getString(1),System.currentTimeMillis(),"plan:"+id);
+                    entryId=UUID.randomUUID().toString();
+                    insert(db,entryId,account,type.equals("owed")?amount:-amount,
+                        type.equals("payment")?"expense":"debt",c.getString(6),c.getString(1),
+                        System.currentTimeMillis(),"plan:"+id);
                 }
-                long progress=Math.addExact(c.getLong(4),amount);
-                if(type.equals("payment")&&progress==c.getLong(3)&&c.getInt(7)>0&&!c.getString(5).isEmpty()){
-                    db.execSQL("UPDATE plans SET progress=0,due=? WHERE id=?",new Object[]{java.time.LocalDate.parse(c.getString(5)).plusMonths(c.getInt(7)).toString(),id});
-                }else db.execSQL("UPDATE plans SET progress=? WHERE id=?",new Object[]{progress,id});
-            }db.setTransactionSuccessful();
+                long after=Math.addExact(before,amount);
+                if(type.equals("payment")&&after==target&&c.getInt(8)>0&&!beforeDue.isEmpty()){
+                    afterDue=nextDue(beforeDue,c.getString(7),c.getInt(8),c.getInt(9));
+                    after=0;
+                }
+                db.execSQL("UPDATE plans SET progress=?,due=? WHERE id=?",new Object[]{after,afterDue,id});
+                if(entryId!=null)db.execSQL(
+                    "INSERT INTO settlement_history(entry_id,plan_id,before_progress,after_progress,before_due,after_due) VALUES(?,?,?,?,?,?)",
+                    new Object[]{entryId,id,before,after,beforeDue,afterDue});
+            }
+            db.setTransactionSuccessful();
         }finally{db.endTransaction();}
     }
-    public void recurrence(String id,int months){
-        if(months<0||months>120)throw new IllegalArgumentException("Інтервал: 0–120 місяців");
-        getWritableDatabase().execSQL("UPDATE plans SET interval_months=? WHERE id=? AND type='payment'",new Object[]{months,id});
+    static String nextDue(String date,String unit,int step,int anchor){
+        if(step<=0||step>3650)throw new IllegalArgumentException("Некоректна періодичність");
+        java.time.LocalDate previous=java.time.LocalDate.parse(date);
+        if("day".equals(unit))return previous.plusDays(step).toString();
+        if("week".equals(unit))return previous.plusWeeks(step).toString();
+        if(!"month".equals(unit)&&!"year".equals(unit))
+            throw new IllegalArgumentException("Періодичність: день, тиждень, місяць або рік");
+        long months="year".equals(unit)?Math.multiplyExact((long)step,12):step;
+        java.time.YearMonth next=java.time.YearMonth.from(previous).plusMonths(months);
+        return next.atDay(Math.min(anchor>0?anchor:previous.getDayOfMonth(),next.lengthOfMonth())).toString();
+    }
+    public void recurrence(String id,int months){recurrence(id,"month",months);}
+    public void recurrence(String id,String unit,int every){
+        if(every<0||every>365||!java.util.Arrays.asList("day","week","month","year").contains(unit))
+            throw new IllegalArgumentException("Перевір інтервал та тип повторення");
+        SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{
+            db.execSQL("UPDATE plans SET recurrence_unit=?,recurrence_every=?,interval_months=?,recurrence_anchor=CASE WHEN recurrence_anchor=0 AND due!='' THEN CAST(substr(due,9,2) AS INTEGER) ELSE recurrence_anchor END WHERE id=? AND type='payment'",
+                new Object[]{unit,every,unit.equals("month")?every:unit.equals("year")?every*12:0,id});
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+    }
+    /** Only the most recent posted settlement can be reversed, atomically with its plan progress. */
+    public void undoSettlement(String entryId){
+        SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{
+            try(Cursor c=db.rawQuery("SELECT h.plan_id,h.before_progress,h.after_progress,h.before_due,h.after_due FROM settlement_history h JOIN entries e ON e.id=h.entry_id WHERE h.entry_id=? AND h.reversed=0 AND e.deleted=0",new String[]{entryId})){
+                if(!c.moveToFirst())throw new IllegalArgumentException("Цей внесок не має історії для безпечного скасування");
+                String planId=c.getString(0),dueBefore=c.getString(3),dueAfter=c.getString(4);
+                try(Cursor latest=db.rawQuery("SELECT entry_id FROM settlement_history WHERE plan_id=? AND reversed=0 ORDER BY id DESC LIMIT 1",new String[]{planId})){
+                    if(!latest.moveToFirst()||!entryId.equals(latest.getString(0)))
+                        throw new IllegalArgumentException("Спочатку скасуй пізніші внески цього плану");
+                }
+                try(Cursor p=db.rawQuery("SELECT progress,due FROM plans WHERE id=?",new String[]{planId})){
+                    if(!p.moveToFirst()||p.getLong(0)!=c.getLong(2)||!dueAfter.equals(p.getString(1)))
+                        throw new IllegalArgumentException("План змінився після внеску; потрібна ручна звірка");
+                }
+                db.execSQL("UPDATE entries SET deleted=1 WHERE id=?",new Object[]{entryId});
+                db.execSQL("UPDATE plans SET progress=?,due=? WHERE id=?",new Object[]{c.getLong(1),dueBefore,planId});
+                db.execSQL("UPDATE settlement_history SET reversed=1 WHERE entry_id=?",new Object[]{entryId});
+            }
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
+    }
+    /** Release previously reserved goal money without creating a fake expense/income. */
+    public void releaseGoal(String planId,long account,String value){
+        long remaining=minor(value);if(remaining<=0)throw new IllegalArgumentException("Сума має бути додатною");
+        SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{
+            long reserved;
+            try(Cursor c=db.rawQuery("SELECT COALESCE(SUM(amount),0) FROM allocations WHERE plan=? AND account=?",new String[]{planId,""+account})){
+                c.moveToFirst();reserved=c.getLong(0);
+            }
+            if(remaining>reserved)throw new IllegalArgumentException("Не можна звільнити більше за резерв");
+            long original=remaining;
+            try(Cursor c=db.rawQuery("SELECT id,amount FROM allocations WHERE plan=? AND account=? ORDER BY rowid DESC",new String[]{planId,""+account})){
+                while(c.moveToNext()&&remaining>0){
+                    long take=Math.min(remaining,c.getLong(1));
+                    if(take==c.getLong(1))db.delete("allocations","id=?",new String[]{c.getString(0)});
+                    else db.execSQL("UPDATE allocations SET amount=? WHERE id=?",new Object[]{c.getLong(1)-take,c.getString(0)});
+                    remaining-=take;
+                }
+            }
+            db.execSQL("UPDATE plans SET progress=progress-? WHERE id=? AND type='goal' AND progress>=?",new Object[]{original,planId,original});
+            db.setTransactionSuccessful();
+        }finally{db.endTransaction();}
     }
     public void deletePlan(String id){
         SQLiteDatabase db=getWritableDatabase();db.beginTransaction();try{
