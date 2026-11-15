@@ -89,6 +89,16 @@ public final class FinanceActivity extends Activity {
         if(!tab.equals("Операції")){
         text(ledger.report());text(FinanceInsights.reminders(ledger));
         button("Увімкнути / вимкнути нагадування",()->{boolean enable=!ledger.setting("reminders","false").equals("true");ledger.setSetting("reminders",Boolean.toString(enable));if(enable)FinanceReminderJob.schedule(this);else FinanceReminderJob.cancel(this);Toast.makeText(this,enable?"Нагадування ввімкнено. Дозволь сповіщення Джарвіса в Android.":"Нагадування вимкнено",Toast.LENGTH_LONG).show();});
+        button("Тихі години для фінансових сповіщень",()->formWithDefaults("Тихі години · 24-годинний формат",
+            new String[]{"Початок HH:MM","Кінець HH:MM"},
+            new String[]{ledger.setting("quiet_start","22:00"),ledger.setting("quiet_end","08:00")},
+            v->{
+                try{java.time.LocalTime.parse(v[0]);java.time.LocalTime.parse(v[1]);}
+                catch(RuntimeException e){throw new IllegalArgumentException("Введи час як 22:00 або 08:00");}
+                ledger.setSetting("quiet_start",v[0]);ledger.setSetting("quiet_end",v[1]);
+            }));
+        button("Тижневий фінансовий дайджест · увімкнути / вимкнути",()->toggleFinanceSetting("digest_weekly"));
+        button("Місячний фінансовий дайджест · увімкнути / вимкнути",()->toggleFinanceSetting("digest_monthly"));
         button("Додати рахунок",this::newAccount);
         button("Звірити баланс рахунку",()->pickAccount(id->form("Фактично на рахунку",new String[]{"Сума за даними банку або готівка"},v->{
             String comparison=FinanceAssets.difference(ledger,id,v[0]);
@@ -150,6 +160,11 @@ public final class FinanceActivity extends Activity {
                 }).show());
             }
         }
+    }
+    private void toggleFinanceSetting(String key){
+        boolean enabled=!ledger.setting(key,"false").equals("true");
+        ledger.setSetting(key,Boolean.toString(enabled));
+        Toast.makeText(this,enabled?"Увімкнено":"Вимкнено",Toast.LENGTH_SHORT).show();
     }
     private void newAccount(){
         formWithDefaults("Новий рахунок",new String[]{"Назва (готівка або картка)","Валюта (UAH)","Залишок на сьогодні (необов’язково)"},
