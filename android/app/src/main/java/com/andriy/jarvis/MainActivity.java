@@ -888,7 +888,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
         telegramParams.topMargin=dp(7);
         content.addView(telegramTab,telegramParams);
         Button financeApiTab=secondaryButton("💰 Фінанси",
-            ()->startActivity(new Intent(this,FinanceActivity.class)));
+            ()-> {
+                if(isWatchDevice){setStatus("Фінансовий журнал зберігається на телефоні. Записуй витрати голосом через годинник.");return;}
+                startActivity(new Intent(this,FinanceActivity.class));
+            });
         LinearLayout.LayoutParams financeApiParams=
             new LinearLayout.LayoutParams(-1,dp(46));
         financeApiParams.topMargin=dp(7);
@@ -4960,6 +4963,20 @@ public final class MainActivity extends Activity implements RecognitionListener 
             else setStatus("Фінансовий запис виконується. Скажи «Скасуй витрату», щоб зупинити.");
             return;
         }
+        if (!isWatchDevice && FinanceVoiceQueries.open(raw)) {
+            startActivity(new Intent(this,FinanceActivity.class));
+            return;
+        }
+        if (!isWatchDevice && FinanceVoiceQueries.matches(raw)) {
+            String response;
+            try(FinanceLedger l=new FinanceLedger(this)){
+                response=FinanceVoiceQueries.answer(l,raw);
+            }catch(Exception e){response="Не вдалося прочитати фінансовий звіт.";}
+            appendDialogue("Джарвіс",response);
+            setStatus(response);
+            if(voiceEnabled)speakReply(response);
+            return;
+        }
         if (!isWatchDevice && FinanceVoiceCommands.parse(raw)!=null) {
             FinanceManagerController.start(this,raw,new FinanceManagerController.Listener(){
                 @Override public void onProgress(String detail){setStatus(detail);}
@@ -4967,7 +4984,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     if(isFinishing()||isDestroyed())return;
                     appendDialogue("Джарвіс",detail);
                     setStatus(detail);
-                    if(!ok && voiceEnabled)speakReply(detail);
+                    if(voiceEnabled)speakReply(detail);
                 }
             });
             return;
