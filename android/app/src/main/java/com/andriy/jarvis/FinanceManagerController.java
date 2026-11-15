@@ -31,9 +31,11 @@ public final class FinanceManagerController {
             if(request.category.equals("борг")||request.category.equals("крипта")){
                 listener.onFinished(false,"Для боргів та активів потрібен окремий тип обліку. Запис не створено.");return;
             }
+            long effectiveTime=java.time.Instant.ofEpochMilli(capturedAt).atZone(java.time.ZoneId.systemDefault())
+                .minusDays(request.daysAgo).toInstant().toEpochMilli();
             ledger.record(commandId,account,FinanceLedger.minor(request.amount),
-                request.kind==FinanceVoiceCommands.Kind.EXPENSE?"expense":"income",request.category,utterance,capturedAt);
-            String reply="✅ "+request.amount+" ₴ · "+request.category+" · "+java.time.Instant.ofEpochMilli(capturedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDate()+". Записано у Джарвісі.";
+                request.kind==FinanceVoiceCommands.Kind.EXPENSE?"expense":"income",request.category,utterance,effectiveTime);
+            String reply="✅ "+request.amount+" ₴ · "+request.category+" · "+java.time.Instant.ofEpochMilli(effectiveTime).atZone(java.time.ZoneId.systemDefault()).toLocalDate()+". Записано у Джарвісі.";
             ledger.receipt(commandId,utterance,reply);db.setTransactionSuccessful();
             }finally{db.endTransaction();}
             listener.onFinished(true,ledger.receipt(commandId,utterance));
