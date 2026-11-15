@@ -24,7 +24,7 @@ public final class FinanceActivity extends Activity {
     }
     @Override protected void onStart(){super.onStart();if(ledger!=null&&!unlocked&&!authenticating&&!pickingDocument)authenticate();}
     @Override protected void onStop(){if(!pickingDocument&&!authenticating)unlocked=false;super.onStop();}
-    protected void onDestroy(){if(backupPassword!=null)Arrays.fill(backupPassword,'\\0');if(ledger!=null)ledger.close();super.onDestroy();}
+    protected void onDestroy(){if(backupPassword!=null)Arrays.fill(backupPassword,'\0');if(ledger!=null)ledger.close();super.onDestroy();}
     private void text(String value){TextView t=new TextView(this);t.setText(value);t.setTextColor(Color.WHITE);t.setTextSize(18);t.setPadding(12,12,12,12);body.addView(t);}
     private void button(String label,Runnable action){Button b=new Button(this);b.setText(label);body.addView(b);b.setOnClickListener(v->action.run());}
     private void error(Exception e){new AlertDialog.Builder(this).setMessage(e instanceof IllegalArgumentException?e.getMessage():"Не вдалося зберегти. Перевір дані.").setPositiveButton("ОК",null).show();}
