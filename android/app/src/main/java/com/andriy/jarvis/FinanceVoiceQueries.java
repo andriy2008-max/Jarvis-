@@ -20,6 +20,7 @@ public final class FinanceVoiceQueries {
     public static boolean matches(String voice){
         String s=normalize(voice);
         if(s.isEmpty())return false;
+        if(s.startsWith("скільки ")&&(s.contains("чайов")||s.contains("чаєв")))return true;
         if(s.matches("^(?:який|покажи|скажи|скільки|мій|мої|що з|скільки в мене|скільки у мене).*\\b(?:баланс|залишок|грошей|кошти)\\b.*"))return true;
         if(s.matches("^(?:скільки|покажи|які) .*\\b(?:витратив|витрачено|витрати|заробив|отримав|доходи|дохід)\\b.*"))return true;
         if(s.matches("^(?:які|покажи|що з|скільки).*\\b(?:платежі|платіж|нагадування|бюджет|бюджетом|бюджету)\\b.*"))return true;
@@ -28,6 +29,7 @@ public final class FinanceVoiceQueries {
     public static String answer(FinanceLedger ledger,String voice){
         String s=normalize(voice);
         if(!matches(voice))return null;
+        if(s.contains("чайов")||s.contains("чаєв"))return tips(ledger,s);
         if(s.contains("платіж")||s.contains("платеж")||s.contains("нагадування")){
             String events=FinanceInsights.reminders(ledger);
             return events.isEmpty()?"Немає внесених найближчих платежів на 3 дні.":events;
@@ -60,6 +62,26 @@ public final class FinanceVoiceQueries {
         }
         if(!found)result.append("Записів немає.");
         return result.toString();
+    }
+    private static String tips(FinanceLedger ledger,String words){
+        LocalDate today=LocalDate.now();
+        LocalDate first=words.contains("вчора")?today.minusDays(1):
+            words.contains("тижд")?today.minusDays(today.getDayOfWeek().getValue()-1L):
+            words.contains("місяц")?today.withDayOfMonth(1):today;
+        long from=first.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        long to=words.contains("вчора")?today.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli():
+            System.currentTimeMillis()+1L;
+        StringBuilder out=new StringBuilder("Чайові за вибраний період:\n");boolean any=false;
+        try(Cursor c=ledger.getReadableDatabase().rawQuery(
+            "SELECT a.currency,SUM(e.amount) FROM entries e JOIN accounts a ON e.account=a.id "+
+            "WHERE e.deleted=0 AND e.kind='income' AND e.category IN ('чай','Чайові') "+
+            "AND e.happened>=? AND e.happened<? GROUP BY a.currency",
+            new String[]{""+from,""+to})){
+            while(c.moveToNext()){
+                any=true;out.append(FinanceLedger.money(c.getLong(1))).append(" ").append(c.getString(0)).append("\n");
+            }
+        }
+        return any?out.toString():"Записів чайових за цей період немає.";
     }
     private static String budgets(FinanceLedger ledger){
         long start=LocalDate.now().withDayOfMonth(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
