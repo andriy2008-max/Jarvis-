@@ -5,11 +5,13 @@
         <exclude domain="database" path="jarvis-finance.db-wal" />
         <exclude domain="database" path="jarvis-finance.db-shm" />
         <exclude domain="sharedpref" path="finance_watch_queue.xml" />
+        <exclude domain="file" path="finance-pre-restore.jfb" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="database" path="jarvis-finance.db" />
         <exclude domain="database" path="jarvis-finance.db-wal" />
         <exclude domain="database" path="jarvis-finance.db-shm" />
         <exclude domain="sharedpref" path="finance_watch_queue.xml" />
+        <exclude domain="file" path="finance-pre-restore.jfb" />
     </device-transfer>
 </data-extraction-rules>
