@@ -77,6 +77,10 @@ public final class FinanceVoiceCommands {
         // The category must still be an exact known category; never create
         // a different expense by guessing an unrelated free-text category.
         String note=null;
+        // A trailing memo marker with no content is an incomplete command,
+        // not the note text itself.
+        if(descriptor.matches("(?s).*\\s+(?:примітка|примітку|коментар|коментарем|опис)$"))
+            return null;
         Matcher memo=Pattern.compile(
             "^(.*?)\\s+(?:примітка|примітку|коментар|коментарем|опис)\\s+(.+)$")
             .matcher(descriptor);
