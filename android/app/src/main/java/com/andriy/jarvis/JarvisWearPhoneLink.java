@@ -81,8 +81,9 @@ public final class JarvisWearPhoneLink {
     public JarvisWearPhoneLink(Context context) {
         this.context = context.getApplicationContext();
         this.messageClient = Wearable.getMessageClient(this.context);
-        listenerRegistration = messageClient.addListener(replies,
-            Uri.parse("wear://*" + JarvisWearProtocol.REPLY), MessageClient.FILTER_LITERAL);
+        // onReply accepts only the exact reply/progress paths and the pending
+        // request's phone node/id. A reply-only registration hides progress.
+        listenerRegistration = messageClient.addListener(replies);
         listenerRegistration.addOnSuccessListener(v -> {
             listenerReady = true;
             if (!closed) main.post(sync);

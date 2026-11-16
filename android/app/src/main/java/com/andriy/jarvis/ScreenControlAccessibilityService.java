@@ -1685,7 +1685,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     private final class PendingScreenAction implements Runnable {
         final ScreenControlCommands.Action action;
         final Completion callback;
-        final String expectedPackage;
+        String expectedPackage;
         boolean done;
         int waits;
         PendingScreenAction(ScreenControlCommands.Action action,Completion callback) {
@@ -1704,6 +1704,8 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                 finish(false,"Очікування скасовано: керування вимкнено або телефон заблоковано.");return;
             }
             String current=visibleExternalPackage();
+            if((expectedPackage==null || expectedPackage.isEmpty()) && current!=null && !current.isEmpty())
+                expectedPackage=current;
             if(expectedPackage!=null && !expectedPackage.isEmpty() && current!=null &&
                 !current.isEmpty() && !expectedPackage.equals(current)) {
                 finish(false,"Відкрито іншу програму. Очікування попередньої кнопки скасовано.");return;

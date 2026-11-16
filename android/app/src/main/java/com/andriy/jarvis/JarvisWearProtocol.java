@@ -38,7 +38,7 @@ public final class JarvisWearProtocol {
     public static final int COMMAND_ACK_TIMEOUT_MS = 150000;
 
     /** Progress renews the ACK deadline but can never complete a command. */
-    public static final String PROGRESS = "/jarvis/phone/progress";
+    public static final String PROGRESS = "/jarvis/phone-control/v1/progress";
     public static boolean acceptsProgress(String action) {
         return SPOTIFY.equals(action) || TAXI.equals(action) || COMMAND.equals(action) ||
             ASSISTANT.equals(action) || UNLOCK.equals(action);
