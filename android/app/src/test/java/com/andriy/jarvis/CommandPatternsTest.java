@@ -52,6 +52,17 @@ public final class CommandPatternsTest {
         eq(CommandPatterns.timerIntent("Постав таймер на 1 хвилину"),true);
         eq(CommandPatterns.timerIntent("увімкни таймер"),true);
         eq(CommandPatterns.timerIntent("скасуй таймер"),false);
+        // Watch timers must remain on Watch7: cancel and inspect the same
+        // local AlarmManager, never the paired Pixel timer.
+        eq(CommandPatterns.timerCancelIntent("скасуй таймер"),true);
+        eq(CommandPatterns.timerCancelIntent("Джарвіс, зупини таймер"),true);
+        eq(CommandPatterns.timerCancelIntent("вимкни таймер"),true);
+        eq(CommandPatterns.timerCancelIntent("постав таймер на хвилину"),false);
+        eq(CommandPatterns.timerRemainingIntent("скільки залишилось до кінця таймера"),true);
+        eq(CommandPatterns.timerRemainingIntent("скільки часу на таймері"),true);
+        eq(CommandPatterns.timerRemainingIntent("покажи таймер"),true);
+        eq(CommandPatterns.timerRemainingIntent("постав таймер на 1 хвилину"),false);
+        eq(CommandPatterns.timerRemainingIntent("скільки часу на телефоні"),false);
         eq(CommandPatterns.timerIntent("нагадай про таймер"),false);
         eq(CommandPatterns.timerSeconds("прочитай нотатку таймер на 1 хвилину"),null);
         eq(CommandPatterns.timerSeconds("таймер 30 секунд"), 30);
