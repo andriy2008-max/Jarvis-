@@ -75,7 +75,8 @@ public final class FloatingJarvisService extends Service {
                 // or invalidates an overlay. Never crash the Jarvis process.
                 android.util.Log.w("JARVIS_FLOATING",
                     "Overlay layout update was rejected",failure);
-                if (failure instanceof SecurityException && !Settings.canDrawOverlays(this)) {
+                if (failure instanceof SecurityException &&
+                    !Settings.canDrawOverlays(FloatingJarvisService.this)) {
                     // A real permission revocation cannot be recovered silently.
                     stopSelf();
                     return;
