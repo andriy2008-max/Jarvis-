@@ -77,6 +77,8 @@ import java.util.List;
 public final class MainActivity extends Activity implements RecognitionListener {
     private static final int REQUEST_MICROPHONE = 101;
     private static final int REQUEST_TIMER_NOTIFICATIONS = 103;
+    private static final int REQUEST_WATCH_ONGOING_NOTIFICATIONS = 109;
+    private static final String PREF_WATCH_SESSION_PERMISSION_ASKED = "watch_ongoing_permission_asked";
     private static final int REQUEST_AI_ATTACHMENT = 106;
     private static final int REQUEST_ASSISTANT_ROLE = 108;
     public static final String EXTRA_AI_IMAGE_PROMPT = "com.andriy.jarvis.AI_IMAGE_PROMPT";
@@ -632,8 +634,20 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 "onResume; watch face remains active until user/system navigates away");
         // Keep the watch awake for the whole visible Jarvis session, including
         // idle, replies and microphone recovery, independently of listening mode.
-        if (isWatchDevice)
+        if (isWatchDevice) {
             getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            JarvisWatchOngoing.show(this);
+            if (Build.VERSION.SDK_INT >= 33 &&
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                    PackageManager.PERMISSION_GRANTED &&
+                !getPreferences(MODE_PRIVATE).getBoolean(
+                    PREF_WATCH_SESSION_PERMISSION_ASKED,false)) {
+                getPreferences(MODE_PRIVATE).edit().putBoolean(
+                    PREF_WATCH_SESSION_PERMISSION_ASKED,true).apply();
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                    REQUEST_WATCH_ONGOING_NOTIFICATIONS);
+            }
+        }
         if(!isWatchDevice)JarvisWearImageBridge.attachPhone(this);
         if (isWatchDevice && JarvisPhoneMode.isActive())
             ensureWatchPhoneListening();
@@ -3549,7 +3563,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
     @Override
     public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(code, permissions, results);
-        if (code == REQUEST_TIMER_NOTIFICATIONS) {
+        if (code == REQUEST_WATCH_ONGOING_NOTIFICATIONS) {
+            if (isWatchDevice && results.length > 0 &&
+                results[0] == PackageManager.PERMISSION_GRANTED)
+                JarvisWatchOngoing.show(this);
+            else if(isWatchDevice)
+                setStatus("Щоб сеанс Джарвіса залишався доступним на циферблаті, дозволь сповіщення Watch7.");
+        } else if (code == REQUEST_TIMER_NOTIFICATIONS) {
             if (results.length == 0 || results[0] != PackageManager.PERMISSION_GRANTED) {
                 setStatus("Сповіщення таймера заборонені. Вібрація та сигнал можуть працювати, але повідомлення не з'явиться.");
             }
@@ -5350,6 +5370,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 "onDestroy; finishing="+isFinishing()+
                 " changingConfig="+isChangingConfigurations());
             cancelPendingWatchTtsStart();
+            if(!isChangingConfigurations())JarvisWatchOngoing.hide(this);
         }
         if (headsetRoute != null) headsetRoute.end();
         JarvisPhoneMode.unsubscribe(phoneModeListener);
