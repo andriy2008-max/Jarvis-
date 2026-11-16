@@ -25,7 +25,7 @@ public final class JarvisWatchSessionService extends Service {
     private static final String PREFS="jarvis_watch_session_v1";
     private static final String KEY_ENABLED="enabled";
     private static final String START="com.andriy.jarvis.WATCH_SESSION_START";
-    private static final String STOP="com.andriy.jarvis.WATCH_SESSION_STOP";
+    static final String ACTION_STOP="com.andriy.jarvis.WATCH_SESSION_STOP";
     private static final int ID=81748;
 
     private static boolean isWatch(Context c) {
@@ -57,7 +57,7 @@ public final class JarvisWatchSessionService extends Service {
         c.getSharedPreferences(PREFS,MODE_PRIVATE)
             .edit().putBoolean(KEY_ENABLED,false).apply();
         try {
-            c.startService(new Intent(c,JarvisWatchSessionService.class).setAction(STOP));
+            c.startService(new Intent(c,JarvisWatchSessionService.class).setAction(ACTION_STOP));
         } catch(RuntimeException ignored) {
             try {c.stopService(new Intent(c,JarvisWatchSessionService.class));}
             catch(RuntimeException alsoIgnored){}
@@ -69,7 +69,7 @@ public final class JarvisWatchSessionService extends Service {
 
     @Override public int onStartCommand(Intent intent,int flags,int startId) {
         if(!isWatch(this) || !enabled(this) ||
-            (intent!=null && STOP.equals(intent.getAction()))) {
+            (intent!=null && ACTION_STOP.equals(intent.getAction()))) {
             getSharedPreferences(PREFS,MODE_PRIVATE)
                 .edit().putBoolean(KEY_ENABLED,false).apply();
             JarvisWatchOngoing.hide(this);
