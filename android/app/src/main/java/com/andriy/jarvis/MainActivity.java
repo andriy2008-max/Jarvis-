@@ -5014,6 +5014,16 @@ public final class MainActivity extends Activity implements RecognitionListener 
             });
             return;
         }
+        if(!isWatchDevice && FinanceVoiceCommands.shortFinanceIntent(raw)){
+            String msg="Фінансовий запис не розпізнано. Приклад: "+
+                "«Витратив 150 готівка транспорт таксі» або "+
+                "«Заробив 350 моно чайові столик 5». "+
+                "Рахунок обов'язковий, категорія — одне слово.";
+            appendDialogue("Джарвіс",msg);
+            setStatus(msg);
+            if(voiceEnabled)speakReply(msg);
+            return;
+        }
         if (!isWatchDevice && JarvisTaxiCommands.destination(raw) != null) {
             BoltTaxiController.start(this, raw, new BoltTaxiController.Listener() {
                 @Override public void onProgress(String detail) {setStatus(detail);}
