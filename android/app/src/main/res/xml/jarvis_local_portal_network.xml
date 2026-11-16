@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Never permit plain HTTP outside the Android device. -->
+    <base-config cleartextTrafficPermitted="false" />
+    <!-- Only the owner's authenticated Mobilerun Portal local socket. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain>127.0.0.1</domain>
+        <domain>localhost</domain>
+    </domain-config>
+</network-security-config>
