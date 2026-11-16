@@ -21,3 +21,12 @@ Compilation and contract tests do not prove real Wear Data Layer, ASR, TTS, lock
 ## Remaining device-dependent limits
 
 Money Manager has no implemented ledger readback API. Actual record existence and uniqueness require checking history manually. Generic UI heuristics must not be presented as proof of saving. Real-time API tests need the settings already stored on the user's Pixel. Android background restrictions are reported rather than bypassed.
+
+## Watch7 returning to the watch face after voice commands — 2026-11-16
+
+- The Wear `MainActivity` never calls `finish()` at command completion; a return to the Samsung watch face can be an OS idle transition rather than a crash.
+- An `OngoingActivity` now posts when the user opens Jarvis on Watch7 and is cancelled only when its Activity is actually destroyed (not merely paused for ambient mode). It provides a one-tap return entry and lets Wear OS preserve the active user session during idle transitions. It does not forcibly relaunch Jarvis after an intentional Home press, keep the microphone on continuously, or bypass battery restrictions.
+- Android 13+ notification permission is requested once on the watch. If denied, grant Notifications for Jarvis from the watch's app settings and relaunch. A notification posted by the app is distinct from the phone's background companion service.
+- Test each of `Скажи привіт`, `Увімкни реп`, `Виклич таксі`, note/AI replies and voice alarms. After each response verify that the Jarvis face stays visible when the screen is interactive; let the device dim and check the active-session return icon. Press Home deliberately and verify the watch respects that action.
+- If the app *immediately* disappears with the screen still bright, collect `adb logcat -b crash -d` and logs tagged `JARVIS_WATCH_LIFECYCLE`. An app crash is not fixed by OngoingActivity and must be diagnosed separately.
+- Physical Galaxy Watch7 tests and signed APK are not part of this source-code change. The system may still return to the face depending on power saving and Samsung firmware policies.
