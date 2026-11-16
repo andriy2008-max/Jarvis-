@@ -671,6 +671,82 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         return scanned>MAX_SCAN?null:value;
     }
 
+    /**
+     * Only set a finance memo in a uniquely identifiable, editable
+     * "Примітка" field belonging to the exact Money Manager package.
+     * Never tap guessed coordinates, mutate the amount field, or save a
+     * transaction whose requested note could not be verified.
+     */
+    private AccessibilityNodeInfo financeNoteEditor(AccessibilityNodeInfo root) {
+        if(root==null || detectFinanceScreen(root)!=FinanceScreen.AMOUNT)
+            return null;
+        ArrayDeque<AccessibilityNodeInfo> nodes=new ArrayDeque<>();
+        nodes.add(root);
+        AccessibilityNodeInfo found=null;
+        int scanned=0;
+        while(!nodes.isEmpty() && ++scanned<=MAX_SCAN) {
+            AccessibilityNodeInfo node=nodes.removeFirst();
+            if(!node.isVisibleToUser())continue;
+            if(node.isEditable() && node.isEnabled() && !node.isPassword() &&
+               !isSensitiveInputType(node.getInputType()) &&
+               !isSensitiveFieldLabel(node) &&
+               node.getPackageName()!=null &&
+               "com.freeman.moneymanager".contentEquals(node.getPackageName())) {
+                String label=FinanceManagerUiLabels.normalize(financeLabel(node));
+                // Only the explicitly labelled note editor is eligible.
+                if(label.contains("примітка") || label.contains("коментар") ||
+                   label.contains("note") || label.contains("memo")) {
+                    if(found!=null)return null; // Ambiguous editors
+                    found=node;
+                }
+            }
+            for(int i=0;i<node.getChildCount();i++){
+                AccessibilityNodeInfo child=node.getChild(i);
+                if(child!=null)nodes.addLast(child);
+            }
+        }
+        return scanned>MAX_SCAN?null:found;
+    }
+
+    public static FinanceStep financeSetNote(String requested) {
+        ScreenControlAccessibilityService service=connected.get();
+        if(service==null || !service.sessionActive ||
+           !FinanceVoiceCommands.validNote(requested))return FinanceStep.BLOCKED;
+        AccessibilityNodeInfo root=service.financeRoot();
+        if(root==null || service.detectFinanceScreen(root)!=FinanceScreen.AMOUNT)
+            return FinanceStep.WAIT;
+        AccessibilityNodeInfo field=service.financeNoteEditor(root);
+        if(field==null)return FinanceStep.BLOCKED;
+        String previous=asString(field.getText()).trim();
+        if(!previous.isEmpty() && !previous.equals(requested))return FinanceStep.BLOCKED;
+        if(previous.equals(requested))return FinanceStep.TAPPED;
+        boolean supportsSetText=false;
+        for(AccessibilityNodeInfo.AccessibilityAction action:field.getActionList()){
+            if(action.getId()==AccessibilityNodeInfo.ACTION_SET_TEXT) {
+                supportsSetText=true;break;
+            }
+        }
+        if(!supportsSetText)return FinanceStep.BLOCKED;
+        Bundle arguments=new Bundle();
+        arguments.putCharSequence(
+            AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,requested);
+        try{
+            return field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,arguments)
+                ? FinanceStep.TAPPED : FinanceStep.WAIT;
+        }catch(RuntimeException error){
+            return FinanceStep.BLOCKED;
+        }
+    }
+
+    public static boolean financeNoteMatches(String requested) {
+        ScreenControlAccessibilityService service=connected.get();
+        if(service==null || !service.sessionActive ||
+           !FinanceVoiceCommands.validNote(requested))return false;
+        AccessibilityNodeInfo root=service.financeRoot();
+        AccessibilityNodeInfo field=service.financeNoteEditor(root);
+        return field!=null && requested.equals(asString(field.getText()).trim());
+    }
+
     public static FinanceStep financeConfirm(String expectedAmount) {
         ScreenControlAccessibilityService s=connected.get();
         if(s==null||!s.sessionActive)return FinanceStep.BLOCKED;
