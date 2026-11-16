@@ -113,7 +113,7 @@ public final class SpotifyPlaybackController {
                     if(!active)return;
                     directBridge=null;
                     if(ok) {
-                        finish(true,"Spotify прийняв команду прямого відтворення без натискання Play.");
+                        finish(true,detail);
                     } else {
                         active=false;
                         listener=null;
