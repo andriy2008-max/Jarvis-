@@ -52,6 +52,21 @@ public final class JarvisWatchSessionService extends Service {
         }
     }
 
+    /** Restore after watch reboot/app upgrade if the user did not stop it.
+     * Android may reject a background foreground-service launch; never attempt
+     * a forbidden background Activity start or turn on the microphone. */
+    static void restoreIfPreviouslyEnabled(Context c) {
+        if(!isWatch(c) || !enabled(c))return;
+        try {
+            Intent intent=new Intent(c,JarvisWatchSessionService.class)
+                .setAction(START);
+            if(Build.VERSION.SDK_INT>=26)c.startForegroundService(intent);
+            else c.startService(intent);
+        } catch(RuntimeException error) {
+            Log.w(TAG,"Wear OS deferred persistent session restore",error);
+        }
+    }
+
     /** Explicit owner choice; never called as a result of a voice reply. */
     static void stopByOwner(Context c) {
         c.getSharedPreferences(PREFS,MODE_PRIVATE)
