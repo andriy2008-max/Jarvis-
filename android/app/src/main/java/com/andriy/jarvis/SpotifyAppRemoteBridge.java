@@ -67,7 +67,7 @@ public final class SpotifyAppRemoteBridge {
                             (resume ? connected.getPlayerApi().resume() :
                                 connected.getPlayerApi().play(uri))
                                 .setResultCallback(empty -> handler.post(()->
-                                    finish(true,"Spotify прийняв команду прямого відтворення.")))
+                                    verifyPlayback(0)))
                                 .setErrorCallback(error -> handler.post(()->
                                     finish(false,"Spotify не запустив вибраний трек або плейлист.")));
                         } catch(RuntimeException error) {
@@ -84,6 +84,42 @@ public final class SpotifyAppRemoteBridge {
             finish(false,"Не вдалося відкрити підключення Spotify.");
         }
     }
+    /** PlayerApi.play/resume ACK is not playback confirmation.
+     * Check actual Spotify state, without issuing a second play command.
+     */
+    private void verifyPlayback(int attempt) {
+        if(finished || remote==null)return;
+        try {
+            remote.getPlayerApi().getPlayerState()
+                .setResultCallback(state->handler.post(()->{
+                    if(finished)return;
+                    boolean active=state!=null && state.track!=null && !state.isPaused;
+                    boolean wantedTrack=uri!=null && uri.startsWith("spotify:track:");
+                    boolean matching=!wantedTrack || (active && uri.equals(state.track.uri));
+                    if(active && matching) {
+                        finish(true,"Spotify підтвердив відтворення "+
+                            (state.track.name==null?"вибраного контенту":
+                                "«"+state.track.name+"»")+".");
+                    }else if(attempt<4) {
+                        handler.postDelayed(()->verifyPlayback(attempt+1),600L);
+                    }else {
+                        // The play request may have succeeded even if the
+                        // PlayerState call is stale; don't double-launch a song.
+                        finish(true,"Spotify прийняв команду, але стан "+
+                            "відтворення ще не підтверджений. Перевір програвач.");
+                    }
+                }))
+                .setErrorCallback(error->handler.post(()->{
+                    if(finished)return;
+                    finish(true,"Spotify прийняв команду, але SDK не зміг "+
+                        "отримати стан програвача. Перевір відтворення.");
+                }));
+        }catch(RuntimeException error) {
+            finish(true,"Spotify прийняв команду, але не вдалося "+
+                "перевірити поточний трек.");
+        }
+    }
+
     public void cancel() {
         handler.removeCallbacks(timeout);
         if(finished)return;
