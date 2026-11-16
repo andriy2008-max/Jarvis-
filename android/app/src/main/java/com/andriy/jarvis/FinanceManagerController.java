@@ -14,6 +14,14 @@ public final class FinanceManagerController {
     }
     public static synchronized void start(Context context,String utterance,String commandId,long capturedAt,Listener listener) {
         if(listener==null)return;
+        JarvisActionNotice.show(context,"Перевіряю фінансову команду...");
+        startWithFeedback(context,utterance,commandId,capturedAt,new Listener(){
+            public void onProgress(String text){JarvisActionNotice.show(context,text);listener.onProgress(text);}
+            public void onFinished(boolean ok,String text){JarvisActionNotice.show(context,text);listener.onFinished(ok,text);}
+        });
+    }
+    private static void startWithFeedback(Context context,String utterance,String commandId,long capturedAt,Listener listener) {
+        if(listener==null)return;
         if(capturedAt<=0||capturedAt>System.currentTimeMillis()+300000L){listener.onFinished(false,"Перевір дату й час годинника.");return;}
         if(FinanceBatchCommands.looksLikeBatch(utterance)){
             FinanceBatchController.start(context,utterance,commandId,capturedAt,listener);

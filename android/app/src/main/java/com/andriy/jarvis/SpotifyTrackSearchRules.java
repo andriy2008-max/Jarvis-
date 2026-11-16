@@ -92,6 +92,32 @@ public final class SpotifyTrackSearchRules {
             s.startsWith("пісня ") || s.contains(" пісня ");
     }
 
+    /** Full horizontal song rows, excluding footer player, icons and cards. */
+    public static boolean songRowRegion(int l,int t,int r,int b,int fl,int ft,int fr,int fb) {
+        int w=fr-fl,h=fb-ft;
+        return w>0 && h>0 && r-l>=w*.5f && r-l<=w && b-t>=h*.022f && b-t<h*.16f &&
+            t>=ft+h*.16f && b<=ft+h*.82f;
+    }
+
+    public static boolean songRowEvidence(String label,String ids,boolean playlist,
+                                           boolean artwork,int textCount) {
+        String text=normal(label),id=normal(ids);
+        if(text.isEmpty() || text.contains("додати до плейліста") ||
+            text.contains("додати до плейлиста") || text.contains("add to playlist") ||
+            text.contains("створити плейліст") || text.contains("створити плейлист") ||
+            text.contains("create playlist") || id.contains("now playing") ||
+            id.contains("mini player") || id.contains("miniplayer"))return false;
+        boolean typed=false,other=false;
+        for(String part:label.split("[,•·\\n]")) {
+            String type=normal(part);
+            typed|=type.matches("song|track|пісня|трек|песня|аудіо");
+            other|=type.matches("(artist|album|playlist|podcast|episode|виконавець|альбом|плейлист|плейліст|подкаст|епізод|исполнитель)");
+        }
+        if(other && !typed && !playlist)return false;
+        return typed || id.matches(".*(track|song) (row|title|name|item).*") ||
+            playlist && artwork && textCount>=2;
+    }
+
     /** A search result must be in the content area and not be a bottom
      * player, input field, filter tab, or full-screen carousel. */
     public static boolean resultRegion(int x,int y,int w,int h,

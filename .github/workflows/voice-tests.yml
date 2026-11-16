@@ -3,6 +3,7 @@ name: Neural voice contract tests
 on:
   push:
     paths:
+      - 'tools/tests/**'
       - '.github/workflows/voice-tests.yml'
       - 'android/app/src/main/java/com/andriy/jarvis/SongRecognition*.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisTaxi*.java'
@@ -167,10 +168,12 @@ jobs:
         run: |
           grep -q 'android:name="com.android.alarm.permission.SET_ALARM"' android/app/src/main/AndroidManifest.xml
           ! grep -q 'android:name="android.permission.SET_ALARM"' android/app/src/main/AndroidManifest.xml
+      - name: Spotify controller flow regression (without APK)
+        run: python tools/tests/spotify_flow_test.py
       - name: Java policy contracts (without APK)
         run: |
           mkdir -p /tmp/jarvis-voice-tests
-          javac -encoding UTF-8 -d /tmp/jarvis-voice-tests \
+          javac -sourcepath android/app/src/main/java -encoding UTF-8 -d /tmp/jarvis-voice-tests \
             android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisInstantCommands.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisInstantCommandsTest.java \

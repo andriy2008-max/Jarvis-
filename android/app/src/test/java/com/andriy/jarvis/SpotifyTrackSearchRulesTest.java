@@ -6,6 +6,15 @@ public final class SpotifyTrackSearchRulesTest {
     }
 
     public static void main(String[] args) {
+        ok(SpotifyTrackSearchRules.songRowRegion(0,640,684,735,0,0,684,1528),"Full width visible playlist row");
+        ok(!SpotifyTrackSearchRules.songRowRegion(0,1262,684,1355,0,0,684,1528),"Exclude mini-player");
+        ok(!SpotifyTrackSearchRules.songRowRegion(565,330,651,410,0,0,684,1528),"Exclude green Play");
+        ok(SpotifyTrackSearchRules.songRowEvidence("Riders On The Storm · Snoop Dogg, The Doors","",true,true,2),"Playlist song with title and artist");
+        ok(!SpotifyTrackSearchRules.songRowEvidence("Додати до плейліста","",true,true,2),"Never press add-to-playlist row");
+        ok(SpotifyTrackSearchRules.songRowEvidence("Метель · Пісня · Artist Name","",false,false,3),"Typed song search result");
+        ok(!SpotifyTrackSearchRules.songRowEvidence("Метель · Альбом · Виконавець","",false,true,3),"Never choose album result");
+        ok(!SpotifyTrackSearchRules.songRowEvidence("Shape of You · Playlist","",false,true,2),"Never choose playlist result");
+
         ok(SpotifyTrackSearchRules.searchTab("Пошук"),"Ukrainian Search tab");
         // Spotify's nav button can be a Compose label without ACTION_CLICK.
         // Fallback may tap only a real visible search label near the bottom.

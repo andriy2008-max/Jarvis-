@@ -102,6 +102,12 @@ public final class JarvisWearPhoneLink {
 
     /** Local taxi command: phone controls Bolt without invoking conversational AI. */
     public void taxi(String voice, Callback callback) {
+        if(JarvisTaxiCommands.cancelRequested(voice)) {
+            Callback previous=pendingCallback;
+            clearPending();
+            if(previous!=null)previous.finished(false,"Скасовую очікування Bolt...");
+            send(JarvisWearProtocol.TAXI,voice,callback);return;
+        }
         if (!JarvisWearProtocol.validCommand(voice) ||
             JarvisTaxiCommands.destination(voice) == null) {
             callback.finished(false, "Невідома команда таксі.");

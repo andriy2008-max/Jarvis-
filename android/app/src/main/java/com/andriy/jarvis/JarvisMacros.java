@@ -384,6 +384,7 @@ public final class JarvisMacros {
             RUNNING.set(false);
             String result = ok ? "Макрос «" + name + "» завершено." :
                 "Макрос «" + name + "» зупинено: " + info;
+            JarvisActionNotice.show(context,result);
             if (listener != null) MAIN.post(() -> listener.onComplete(ok,result));
         }
         void next() {
@@ -393,6 +394,7 @@ public final class JarvisMacros {
                 JSONObject step = steps.optJSONObject(index++);
                 if (step == null) { complete(false, "пошкоджений крок"); return; }
                 String type = step.optString("type");
+                JarvisActionNotice.show(context,"Макрос: крок " + index + "/" + steps.length() + " · " + type);
                 String value = step.optString("value").trim();
                 if(listener!=null)listener.onProgress(index,steps.length(),
                     type + ("type_text".equals(type) || "root".equals(type)

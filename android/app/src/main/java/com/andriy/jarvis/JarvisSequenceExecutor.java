@@ -29,6 +29,7 @@ public final class JarvisSequenceExecutor {
     private JarvisSequenceEngine engine;
     private Listener listener;
     private int lastAnnounced = -1;
+    private long announceAt;
     private String lastError;
     private boolean running;
     private JarvisPhoneModeManager.Lease phoneLease;
@@ -82,7 +83,7 @@ public final class JarvisSequenceExecutor {
         int step = engine.completedSteps();
         if (step != lastAnnounced) {
             lastAnnounced = step;
-            if (listener != null) {
+            {
                 String label;
                 switch (getStepKind(step)) {
                     case OPEN_APP: label = "Відкриваю застосунок і чекаю готового екрана"; break;
@@ -91,8 +92,14 @@ public final class JarvisSequenceExecutor {
                     case MEDIA_VOLUME: label = "Змінюю медіагучність"; break;
                     default: label = "Виконую команду"; break;
                 }
-                listener.onProgress(step + 1, engine.totalSteps(), label);
+                JarvisActionNotice.show(context,"Крок " + (step + 1) + "/" + engine.totalSteps() + ": " + label);
+                announceAt = SystemClock.elapsedRealtime() + 4000L;
+                if (listener != null) listener.onProgress(step + 1, engine.totalSteps(), label);
             }
+        }
+        if (SystemClock.elapsedRealtime() >= announceAt) {
+            JarvisActionNotice.show(context,"Крок " + (step+1) + ": очікую елемент. Перевіряю кожні 2 с; можна скасувати послідовність.");
+            announceAt = SystemClock.elapsedRealtime() + 2000L;
         }
         JarvisSequenceEngine.Progress progress = engine.tick(SystemClock.elapsedRealtime());
         if (progress == JarvisSequenceEngine.Progress.WAITING) {
@@ -120,6 +127,7 @@ public final class JarvisSequenceExecutor {
         lastError = null;
         JarvisPhoneModeManager.releaseForCommand(phoneLease, success);
         phoneLease = null;
+        JarvisActionNotice.show(context,summary);
         if (cb != null) cb.onFinished(success, summary);
     }
 

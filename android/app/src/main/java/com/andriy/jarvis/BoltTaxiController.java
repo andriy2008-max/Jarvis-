@@ -6,13 +6,12 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 
-/** Ordered consent-gated Bolt passenger UI flow. Never books or pays for a ride. */
+/** Ordered Bolt passenger UI flow with visible-control retries; never books a ride. */
 public final class BoltTaxiController {
     private static final String BOLT="ee.mtakso.client";
     private static final Handler HANDLER=new Handler(Looper.getMainLooper());
-    // Poll the app foreground conservatively; only user-calibrated taps run.
-    private static final long POLL_MS=650L;
-    private static final long TOTAL_TIMEOUT_MS=45000L;
+    // Re-read the visible requested control; never repeat a blind coordinate tap.
+    private static final long POLL_MS=2000L;
     private static BoltTaxiController active;
     public interface Listener {
         void onProgress(String status);
@@ -26,7 +25,6 @@ public final class BoltTaxiController {
     private final Runnable tick=this::pollSafely;
     private Stage stage=Stage.COORD_RIDES;
     private long started=SystemClock.elapsedRealtime();
-    private final long flowStarted=started;
     private boolean finished;
     /** A non-sensitive marker for the exact operation that failed.
      * Keep street addresses and recognition transcripts out of logs. */
@@ -70,21 +68,13 @@ public final class BoltTaxiController {
         }
         BoltTaxiController job=new BoltTaxiController(context,listener,address,lease);
         synchronized(BoltTaxiController.class){active=job;}
-        listener.onProgress("Відкриваю Bolt. Використовую збережені координати, без читання екрана...");
-        HANDLER.postDelayed(job.tick,POLL_MS);
+        job.progress("Відкриваю Bolt. Через 4 секунди перевірю кнопку «Поїздки / Рушаймо»...");
+        HANDLER.postDelayed(job.tick,4000L);
     }
     private void move(Stage next,String info){
         stage=next;started=SystemClock.elapsedRealtime();
-        listener.onProgress(info);
+        progress(info);
     }
-    /**
-     * The only supported flow is the owner's fixed-coordinate Bolt sequence.
-     * Never fall back to stale OPEN_APP/Accessibility-tree navigation:
-     * those stages depend on brittle Bolt labels and are not recoverable
-     * when Android hides the window hierarchy.
-     *
-     * An unexpected error stops the command without repeating a tap.
-     */
     private void pollSafely() {
         if(finished)return;
         try {
@@ -102,120 +92,70 @@ public final class BoltTaxiController {
         }
     }
 
-    /**
-     * Coordinate-only Bolt flow configured by the device owner:
-     * home «Рушаймо» (333,645), 2s later «Місце висадки» (450,520).
-     * Each coordinate is tapped once. If the destination editor belongs to
-     * Bolt, Android's Accessibility InputMethod enters the spoken address.
-     * After the address is entered, Enter is sent once to the same Bolt editor.
-     * No UI text reads, auto-retries on unknown pages, or ride confirmation.
-     */
+    private void progress(String text) {
+        JarvisActionNotice.show(context,text);
+        listener.onProgress(text);
+    }
+
+    /** Advance only when the requested control is present. Never order a ride. */
     private void pollCoordinates() {
         if(finished)return;
-        long elapsed=SystemClock.elapsedRealtime()-started;
-        if(SystemClock.elapsedRealtime()-flowStarted>=TOTAL_TIMEOUT_MS) {
-            finish(false,"Bolt не завершив послідовність за 45 секунд. Поїздку не замовлено.");
-            return;
-        }
-        operation="CHECK_ACCESSIBILITY";
         if(!JarvisPhoneScreenGuard.available(context) ||
            !ScreenControlAccessibilityService.isSessionActive()) {
-            finish(false,"Розблокуй телефон і ввімкни керування екраном Джарвіса.");
-            return;
+            finish(false,"Керування Bolt зупинено. Розблокуй телефон і перевір спеціальні можливості.");return;
         }
+        if(!ScreenControlAccessibilityService.boltVisible()) {
+            progress("Очікую екран Bolt. Перевірю через 2 с. Скасування: «Скасуй таксі».");
+            HANDLER.postDelayed(tick,POLL_MS);return;
+        }
+        Stage before=stage;
+        ScreenControlAccessibilityService.BoltStep result;
         switch(stage) {
             case COORD_RIDES:
-                // Preserve the existing 4s app-load grace period. Never tap
-                // merely because a timer elapsed: require Bolt foreground too.
-                if(elapsed<BoltUiLabels.RIDES_TAP_DELAY_MS) {
-                    HANDLER.postDelayed(tick,POLL_MS);return;
-                }
-                operation="CHECK_BOLT_FOREGROUND";
-                if(!ScreenControlAccessibilityService.boltCoordinateReady()) {
-                    if(elapsed>12000L) {
-                        finish(false,"Не вдалося підтвердити, що відкритий Bolt. Натискання зупинено.");
-                    } else HANDLER.postDelayed(tick,POLL_MS);
-                    return;
-                }
-                operation="TAP_RUSHAYMO_PREP";
-                ScreenControlAccessibilityService.boltTapCalibrated(333,645,
-                    (ok,detail)->{
-                        if(finished)return;
-                        if(!ok) {
-                            finish(false,"Кнопка «Рушаймо»: "+detail);return;
-                        }
-                        move(Stage.COORD_DROPOFF,
-                            "«Рушаймо» натиснуто. Через 2 секунди відкрию «Місце висадки».");
-                        HANDLER.postDelayed(tick,2000L);
-                    });
-                return;
+                operation="FIND_RIDES";
+                result=ScreenControlAccessibilityService.boltRides();
+                if(result==ScreenControlAccessibilityService.BoltStep.WAIT)
+                    result=ScreenControlAccessibilityService.boltLetsGo();
+                if(result==ScreenControlAccessibilityService.BoltStep.READY ||
+                   result==ScreenControlAccessibilityService.BoltStep.CLICKED)
+                    move(Stage.COORD_DROPOFF,"Відкриваю маршрут. Очікую «Місце висадки»...");
+                break;
             case COORD_DROPOFF:
-                if(elapsed<2000L) {
-                    HANDLER.postDelayed(tick,2000L-elapsed);return;
-                }
-                if(!ScreenControlAccessibilityService.boltCoordinateReady()) {
-                    finish(false,"Bolt не підтверджено перед натисканням «Місце висадки».");
-                    return;
-                }
-                operation="TAP_DROPOFF_PREP";
-                ScreenControlAccessibilityService.boltTapCalibrated(450,520,
-                    (ok,detail)->{
-                        if(finished)return;
-                        if(!ok) {
-                            finish(false,"«Місце висадки»: "+detail);return;
-                        }
-                        if(address.isEmpty()) {
-                            finish(true,"Відкрив «Місце висадки». Назви адресу призначення.");
-                            return;
-                        }
-                        move(Stage.COORD_TYPE,"Шукаю активне поле Bolt для введення адреси...");
-                        HANDLER.postDelayed(tick,800L);
-                    });
-                return;
+                operation="FOCUS_DROPOFF";
+                result=ScreenControlAccessibilityService.boltFocusDestination();
+                if(result==ScreenControlAccessibilityService.BoltStep.READY) {
+                    if(address.isEmpty()) {finish(true,"Поле призначення відкрито. Назви адресу.");return;}
+                    move(Stage.COORD_TYPE,"Поле призначення готове. Вводжу адресу...");
+                } else if(result==ScreenControlAccessibilityService.BoltStep.CLICKED)
+                    progress("Натиснув «Місце висадки». Очікую активне поле...");
+                else if(SystemClock.elapsedRealtime()-started>=4000L)
+                    ScreenControlAccessibilityService.boltRides();
+                break;
             case COORD_TYPE:
-                if(elapsed>8000L) {
-                    finish(false,"Поле введення Bolt не активувалося. Адресу не вводив.");
-                    return;
+                operation="TYPE_ADDRESS";
+                result=ScreenControlAccessibilityService.boltTypeDestination(address);
+                if(result!=ScreenControlAccessibilityService.BoltStep.ENTERED)
+                    result=ScreenControlAccessibilityService.boltTypeViaInputMethod(address);
+                if(result==ScreenControlAccessibilityService.BoltStep.ENTERED)
+                    move(Stage.COORD_ENTER,"Адресу введено. Натискаю Пошук/Enter...");
+                else if(result==ScreenControlAccessibilityService.BoltStep.BLOCKED) {
+                    finish(false,"Android відхилив введення адреси Bolt.");return;
                 }
-                operation="TYPE_BOLT_ADDRESS";
-                ScreenControlAccessibilityService.BoltStep typed=
-                    ScreenControlAccessibilityService.boltTypeViaInputMethod(address);
-                if(typed==ScreenControlAccessibilityService.BoltStep.ENTERED) {
-                    // The user explicitly asked for Enter after typing.
-                    // Do not assume commitText alone triggers Bolt's search.
-                    move(Stage.COORD_ENTER,
-                        "Адресу введено. Через 500 мс натисну Enter для пошуку...");
-                    HANDLER.postDelayed(tick,500L);
-                    return;
-                } else if(typed==ScreenControlAccessibilityService.BoltStep.BLOCKED) {
-                    finish(false,"Android не дозволив введення в поле Bolt. "+
-                        "Перевір, чи відкрилося поле адреси.");
-                } else HANDLER.postDelayed(tick,POLL_MS);
-                return;
+                break;
             case COORD_ENTER:
-                if(elapsed<500L) {
-                    HANDLER.postDelayed(tick,500L-elapsed);return;
+                operation="SUBMIT_SEARCH";
+                result=ScreenControlAccessibilityService.boltPressDestinationEnter(address);
+                if(result!=ScreenControlAccessibilityService.BoltStep.SUBMITTED)
+                    result=ScreenControlAccessibilityService.boltSubmitDestinationSearch();
+                if(result==ScreenControlAccessibilityService.BoltStep.SUBMITTED) {
+                    finish(true,"Ввів адресу й натиснув Enter у Bolt. Перевір маршрут. Поїздку не замовляв.");return;
+                } else if(result==ScreenControlAccessibilityService.BoltStep.BLOCKED) {
+                    finish(false,"Android відхилив Enter. Адресу введено; поїздку не замовляв.");return;
                 }
-                if(elapsed>8000L) {
-                    finish(false,"Bolt не підтвердив активне поле адреси для Enter. "+
-                        "Адресу введено, але Enter не натискав. Поїздку не замовляв.");
-                    return;
-                }
-                operation="SUBMIT_BOLT_ENTER";
-                ScreenControlAccessibilityService.BoltStep enter=
-                    ScreenControlAccessibilityService.boltSubmitDestinationSearch();
-                if(enter==ScreenControlAccessibilityService.BoltStep.SUBMITTED) {
-                    finish(true,"Ввів адресу «"+address+
-                        "» і один раз натиснув Enter у пошуку Bolt. "+
-                        "Перевір правильність результату. Поїздку не замовляв.");
-                } else if(enter==ScreenControlAccessibilityService.BoltStep.BLOCKED) {
-                    finish(false,"Android не дозволив натиснути Enter у Bolt. "+
-                        "Адресу вже введено. Поїздку не замовляв.");
-                } else HANDLER.postDelayed(tick,POLL_MS);
-                return;
-            default:
-                finish(false,"Невідома стадія введення адреси Bolt.");
+                break;
         }
+        if(before==stage)progress("Bolt: очікую потрібну кнопку або поле. Перевірю через 2 с. Скасування: «Скасуй таксі».");
+        HANDLER.postDelayed(tick,POLL_MS);
     }
 
     private void finish(boolean ok,String info){
@@ -223,6 +163,7 @@ public final class BoltTaxiController {
         finished=true;HANDLER.removeCallbacks(tick);
         synchronized(BoltTaxiController.class){if(active==this)active=null;}
         JarvisPhoneModeManager.releaseForCommand(lease,ok);
+        JarvisActionNotice.show(context,info);
         listener.onFinished(ok,info);
     }
 }

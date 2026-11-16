@@ -6,6 +6,12 @@ public final class SpotifyMusicCommandsTest {
             throw new AssertionError("Spotify intent incorrect: " + voice);
     }
     public static void main(String[] args) {
+        is("не та пісня",SpotifyMusicCommands.Kind.NEXT_RESULT);
+        is("інша",SpotifyMusicCommands.Kind.NEXT_RESULT);
+        is("Джарвіс, інша!",SpotifyMusicCommands.Kind.NEXT_RESULT);
+        is("увімкни пісню Інша",SpotifyMusicCommands.Kind.TRACK);
+        is("напиши інша",null);
+
         is("Увімкни музику",SpotifyMusicCommands.Kind.OPEN);
         is("включи музику",SpotifyMusicCommands.Kind.OPEN);
         is("увімкну музику",SpotifyMusicCommands.Kind.OPEN);

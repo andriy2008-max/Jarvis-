@@ -31,6 +31,8 @@ public final class JarvisSequenceEngine {
     private int index;
     private long stepStart = -1L;
     private boolean appLaunchIssued;
+    private long retryAt;
+    private int waits;
     private String expectedPackage;
     private Progress progress = Progress.WAITING;
     private String result = "";
@@ -64,6 +66,7 @@ public final class JarvisSequenceEngine {
         index++;
         stepStart = -1L;
         appLaunchIssued = false;
+        retryAt = 0; waits = 0;
         if (index >= plan.steps.size()) {
             progress = Progress.COMPLETED;
             result = "Готово. Послідовно виконав усі " + index + " команди.";
@@ -80,13 +83,14 @@ public final class JarvisSequenceEngine {
         if (stepStart < 0) stepStart = elapsedRealtimeMs;
         int timeout = step.kind == JarvisCommandSequence.Kind.TYPE_TEXT
             ? INPUT_TIMEOUT_MS : STEP_TIMEOUT_MS;
-        if (elapsedRealtimeMs - stepStart > timeout)
+        if (step.kind == JarvisCommandSequence.Kind.OPEN_APP && elapsedRealtimeMs - stepStart > timeout)
             return fail(step.kind == JarvisCommandSequence.Kind.OPEN_APP
                 ? "Застосунок не відкрив потрібний екран за час очікування."
                 : step.kind == JarvisCommandSequence.Kind.CLICK
                     ? "Не знайшов потрібну кнопку на готовому екрані."
                     : "Не з'явилося активне текстове поле.");
 
+        if (elapsedRealtimeMs < retryAt) return Progress.WAITING;
         switch (step.kind) {
             case OPEN_APP:
                 if (!appLaunchIssued) {
@@ -108,7 +112,7 @@ public final class JarvisSequenceEngine {
                     return Progress.WAITING;
                 if (expectedPackage == null) expectedPackage = active;
                 Attempt clicked = env.click(step.text);
-                if (clicked == Attempt.WAIT) return Progress.WAITING;
+                if (clicked == Attempt.WAIT) return waitForControl(elapsedRealtimeMs);
                 if (clicked == Attempt.DENY)
                     return fail(orReason("Не вдалося безпечно натиснути кнопку."));
                 return advance();
@@ -121,9 +125,9 @@ public final class JarvisSequenceEngine {
                 // Do not type until a real editable input becomes focused
                 // in the app where the preceding click succeeded.
                 if (!env.focusedInputReady(expectedPackage))
-                    return Progress.WAITING;
+                    return waitForControl(elapsedRealtimeMs);
                 Attempt typed = env.type(step.text);
-                if (typed == Attempt.WAIT) return Progress.WAITING;
+                if (typed == Attempt.WAIT) return waitForControl(elapsedRealtimeMs);
                 if (typed == Attempt.DENY)
                     return fail(orReason("Поле відхилило введення тексту."));
                 return advance();
@@ -134,6 +138,11 @@ public final class JarvisSequenceEngine {
             default:
                 return fail("Непідтримувана дія.");
         }
+    }
+
+    private Progress waitForControl(long now) {
+        retryAt = now + (waits++ == 0 ? 4000L : 2000L);
+        return Progress.WAITING;
     }
 
     private String orReason(String fallback) {
