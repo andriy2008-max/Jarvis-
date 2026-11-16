@@ -91,7 +91,7 @@ public final class CommandPatterns {
         Matcher m=TIMER.matcher(command);
         if(!m.find()) {
             // Speech recognition often drops the numeral in "на хвилину".
-            if(command.matches(".*\\bтаймер\\s+(?:на\\s+)?хвилину$"))
+            if(command.matches("(?:^|.*\\s)таймер\\s+(?:на\\s+)?хвилину$"))
                 return 60;
             return -1;
         }
