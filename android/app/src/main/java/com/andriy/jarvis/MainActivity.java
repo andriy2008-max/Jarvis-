@@ -4758,6 +4758,43 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 if(voiceEnabled)speakReply(feedback);
                 return;
             }
+            // Timer requests spoken on Watch7 BELONG to the watch itself:
+            // no Wear Data Layer call, no Pixel connection, no AI, no UI mode.
+            // AlarmManager + TimerFireReceiver + TimerAlertService remain
+            // alive after this Activity is hidden and ring/vibrate locally.
+            String timerSpeech=CommandPatterns.normalizeControlVerb(raw);
+            if(CommandPatterns.timerCancelIntent(timerSpeech)) {
+                String feedback=cancelTimer();
+                appendDialogue("Джарвіс",feedback);
+                setStatus(feedback);
+                if(voiceEnabled)speakReply(feedback);
+                return;
+            }
+            if(CommandPatterns.timerRemainingIntent(timerSpeech)) {
+                String feedback=timerRemaining();
+                appendDialogue("Джарвіс",feedback);
+                setStatus(feedback);
+                if(voiceEnabled)speakReply(feedback);
+                return;
+            }
+            if(CommandPatterns.timerIntent(timerSpeech)) {
+                Integer seconds=CommandPatterns.timerSeconds(timerSpeech);
+                final String feedback;
+                if(seconds==null || seconds<1) {
+                    feedback="Не розпізнав тривалість таймера. "+
+                        "Скажи «Постав таймер на 1 хвилину» або "+
+                        "«Постав таймер на одну хвилину». Максимум три години.";
+                } else {
+                    String result=startTimer(seconds);
+                    feedback=result.startsWith("Таймер на ")
+                        ? "На Watch7: "+result
+                        : result;
+                }
+                appendDialogue("Джарвіс",feedback);
+                setStatus(feedback);
+                if(voiceEnabled)speakReply(feedback);
+                return;
+            }
             // Automated Spotify tasks use a temporary watch/phone face, not
             // a persistent session. A new voice command cannot interrupt
             // the verified sequence except an explicit cancellation.
@@ -4834,43 +4871,6 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 CommandPatterns.normalizeControlVerb(raw));
             if(requestedWatchAlarm!=null) {
                 requestWatchAlarm(requestedWatchAlarm);
-                return;
-            }
-            // Timer requests spoken on Watch7 BELONG to the watch itself:
-            // no Wear Data Layer call, no Pixel connection, no AI, no UI mode.
-            // AlarmManager + TimerFireReceiver + TimerAlertService remain
-            // alive after this Activity is hidden and ring/vibrate locally.
-            String timerSpeech=CommandPatterns.normalizeControlVerb(raw);
-            if(CommandPatterns.timerCancelIntent(timerSpeech)) {
-                String feedback=cancelTimer();
-                appendDialogue("Джарвіс",feedback);
-                setStatus(feedback);
-                if(voiceEnabled)speakReply(feedback);
-                return;
-            }
-            if(CommandPatterns.timerRemainingIntent(timerSpeech)) {
-                String feedback=timerRemaining();
-                appendDialogue("Джарвіс",feedback);
-                setStatus(feedback);
-                if(voiceEnabled)speakReply(feedback);
-                return;
-            }
-            if(CommandPatterns.timerIntent(timerSpeech)) {
-                Integer seconds=CommandPatterns.timerSeconds(timerSpeech);
-                final String feedback;
-                if(seconds==null || seconds<1) {
-                    feedback="Не розпізнав тривалість таймера. "+
-                        "Скажи «Постав таймер на 1 хвилину» або "+
-                        "«Постав таймер на одну хвилину». Максимум три години.";
-                } else {
-                    String result=startTimer(seconds);
-                    feedback=result.startsWith("Таймер на ")
-                        ? "На Watch7: "+result
-                        : result;
-                }
-                appendDialogue("Джарвіс",feedback);
-                setStatus(feedback);
-                if(voiceEnabled)speakReply(feedback);
                 return;
             }
             // Image requests from the watch are handled on Pixel, not by
