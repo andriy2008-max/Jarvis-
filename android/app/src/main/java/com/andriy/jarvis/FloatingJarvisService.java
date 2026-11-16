@@ -1208,6 +1208,11 @@ public final class FloatingJarvisService extends Service {
         if (JarvisMacros.handleVoice(this, raw, result -> {
             if (!closing) reply(result);
         })) return;
+        String financeInsight=FinanceInsightsController.handle(this,raw);
+        if(financeInsight!=null) {
+            reply(financeInsight);
+            return;
+        }
         JarvisPhoneMode.Transition transition = JarvisPhoneMode.transition(raw);
         if (transition == JarvisPhoneMode.Transition.ENTER) {
             String result = JarvisPhoneModeManager.enter(this, true);
