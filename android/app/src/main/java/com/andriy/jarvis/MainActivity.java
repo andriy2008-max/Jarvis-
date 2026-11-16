@@ -4983,6 +4983,17 @@ public final class MainActivity extends Activity implements RecognitionListener 
             TelegramReplyController.perform(this,telegram,this::telegramResponse);
             return;
         }
+        // Local budget commands and read-only finance summaries use Pixel data,
+        // never a conversational AI guess or a third-party screen scrape.
+        if (!isWatchDevice) {
+            String insight=FinanceInsightsController.handle(this,raw);
+            if(insight!=null) {
+                appendDialogue("Джарвіс",insight);
+                setStatus(insight);
+                if(voiceEnabled)speakReply(insight);
+                return;
+            }
+        }
         if (!isWatchDevice && FinanceManagerController.isRunning()) {
             if(FinanceVoiceCommands.cancel(raw))FinanceManagerController.cancel();
             else setStatus("Фінансовий запис виконується. Скажи «Скасуй витрату», щоб зупинити.");
