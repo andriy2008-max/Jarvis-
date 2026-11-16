@@ -199,6 +199,23 @@ public final class JarvisWearPhoneSession {
             });
             return;
         }
+        if (JarvisWearProtocol.SET_TIMER.equals(action)) {
+            // Short numeric duration only, bound to the authenticated watch
+            // request, and independent of any Accessibility session.
+            if(!command.matches("[0-9]{1,5}")) {
+                out.reply(false,"Некоректна тривалість таймера з Watch7.","",false);
+                return;
+            }
+            int seconds;
+            try { seconds=Integer.parseInt(command); }
+            catch(NumberFormatException error) {
+                out.reply(false,"Некоректна тривалість таймера з Watch7.","",false);
+                return;
+            }
+            TimerScheduler.VoiceResult timer=TimerScheduler.startForVoice(context,seconds);
+            out.reply(timer.ok,timer.message,"",false);
+            return;
+        }
         if (JarvisWearProtocol.SET_ALARM.equals(action)) {
             // The phone is the only alarm owner. A watch sends HH:mm, never
             // an Android Intent or arbitrary command to execute.
@@ -373,9 +390,8 @@ public final class JarvisWearPhoneSession {
         }
         Integer timer = CommandPatterns.timerSeconds(normalized);
         if (timer != null) {
-            boolean ok = timer > 0 && TimerScheduler.start(context,timer);
-            out.reply(ok,ok ? "Таймер на телефоні встановлено на " + timer + " секунд."
-                : "Не вдалося запустити таймер на телефоні. Перевір дозвіл точних будильників.",session,false);
+            TimerScheduler.VoiceResult started=TimerScheduler.startForVoice(context,timer);
+            out.reply(started.ok,started.message,session,false);
             return;
         }
         if (normalized.equals("скасуй таймер") || normalized.equals("зупини таймер") ||
