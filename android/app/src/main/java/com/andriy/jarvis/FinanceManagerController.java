@@ -26,7 +26,7 @@ public final class FinanceManagerController {
     private enum Stage {
         OPEN, WAIT_ADD, TYPE, WAIT_TYPE, CATEGORY, WAIT_EDITOR,
         OPEN_ACCOUNT, WAIT_ACCOUNT, SELECT_ACCOUNT, WAIT_AMOUNT,
-        KEY, VERIFY, SAVE, VERIFY_SAVED
+        NOTE, VERIFY_NOTE, KEY, VERIFY, SAVE, VERIFY_SAVED
     }
 
     private final Context context;
@@ -172,8 +172,8 @@ public final class FinanceManagerController {
                 if(screen==ScreenControlAccessibilityService.FinanceScreen.ACCOUNTS)
                     move(Stage.SELECT_ACCOUNT,"Перевіряю рахунок...");
                 else if(screen==ScreenControlAccessibilityService.FinanceScreen.AMOUNT)
-                    move(entry.account==null?Stage.KEY:Stage.OPEN_ACCOUNT,
-                        entry.account==null?"Вводжу суму...":"Вибираю вказаний рахунок...");
+                    move(entry.account==null?nextAmountStage():Stage.OPEN_ACCOUNT,
+                        entry.account==null?"Готую суму і примітку...":"Вибираю вказаний рахунок...");
                 else if(elapsed>8500L){
                     finish(false,"Не знайшов поле суми після вибору категорії.");return;
                 }
@@ -200,7 +200,7 @@ public final class FinanceManagerController {
                 break;
             case SELECT_ACCOUNT:
                 if(screen==ScreenControlAccessibilityService.FinanceScreen.AMOUNT) {
-                    move(Stage.KEY,"Вводжу суму...");
+                    move(nextAmountStage(),"Готую суму і примітку...");
                 } else if(screen==ScreenControlAccessibilityService.FinanceScreen.ACCOUNTS) {
                     ScreenControlAccessibilityService.FinanceStep choice=
                         ScreenControlAccessibilityService.financeAccount(entry.account);
@@ -215,9 +215,30 @@ public final class FinanceManagerController {
                 break;
             case WAIT_AMOUNT:
                 if(screen==ScreenControlAccessibilityService.FinanceScreen.AMOUNT)
-                    move(Stage.KEY,"Поле суми готове...");
+                    move(nextAmountStage(),"Поле суми готове...");
                 else if(elapsed>8000L){
                     finish(false,"Після вибору рахунку сума не відкрилася.");return;
+                }
+                break;
+            case NOTE:
+                if(screen!=ScreenControlAccessibilityService.FinanceScreen.AMOUNT)break;
+                ScreenControlAccessibilityService.FinanceStep noteStep=
+                    ScreenControlAccessibilityService.financeSetNote(entry.note);
+                if(noteStep==ScreenControlAccessibilityService.FinanceStep.TAPPED)
+                    move(Stage.VERIFY_NOTE,"Перевіряю примітку «"+entry.note+"»...");
+                else if(noteStep==ScreenControlAccessibilityService.FinanceStep.BLOCKED){
+                    finish(false,"Не знайшов доступного текстового поля «Примітка» "+
+                        "у Менеджері фінансів. Нічого не зберіг. "+
+                        "Відкрий поле вручну або перевір екран.");return;
+                }
+                break;
+            case VERIFY_NOTE:
+                if(ScreenControlAccessibilityService.financeNoteMatches(entry.note) &&
+                   screen==ScreenControlAccessibilityService.FinanceScreen.AMOUNT)
+                    move(Stage.KEY,"Примітку перевірено. Вводжу суму...");
+                else if(elapsed>5500L) {
+                    finish(false,"Не зміг підтвердити текст примітки. "+
+                        "Операцію не зберіг.");return;
                 }
                 break;
             case KEY:
@@ -286,6 +307,9 @@ public final class FinanceManagerController {
                 break;
         }
         if(!finished)HANDLER.postDelayed(tick,POLL_MS);
+    }
+    private Stage nextAmountStage(){
+        return entry.note==null ? Stage.KEY : Stage.NOTE;
     }
     private void finish(boolean success,String result){
         if(finished)return;
