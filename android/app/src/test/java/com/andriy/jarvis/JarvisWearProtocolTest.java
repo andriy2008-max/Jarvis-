@@ -15,6 +15,10 @@ public final class JarvisWearProtocolTest {
             "watch taxi must be a local phone action, not conversational AI");
         yes(JarvisWearProtocol.validAction(JarvisWearProtocol.ASSISTANT),
             "watch freeform voice must be delegated to phone AI/API");
+        yes(JarvisWearProtocol.validAction(JarvisWearProtocol.SET_TIMER),
+            "watch timer must be a separate phone action, not a generic AI request");
+        yes(JarvisWearProtocol.timeoutMs(JarvisWearProtocol.SET_TIMER)>12000,
+            "timer must wait for Pixel AlarmManager acknowledgment");
         yes(JarvisWearProtocol.validAction(JarvisWearProtocol.UNLOCK),
             "Watch7 may explicitly submit one ephemeral PIN to rooted companion");
         yes(JarvisWearProtocol.timeoutMs(JarvisWearProtocol.UNLOCK) > 120000,
