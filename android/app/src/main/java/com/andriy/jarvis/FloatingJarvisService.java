@@ -1231,8 +1231,10 @@ public final class FloatingJarvisService extends Service {
             });
             return;
         }
-        if(FinanceVoiceCommands.shortExpenseIntent(raw)) {
-            reply("Не розпізнав коротку витрату. Скажи: «Витратив 150 готівка транспорт таксі».");
+        if(FinanceVoiceCommands.shortFinanceIntent(raw)) {
+            reply(FinanceVoiceCommands.shortIncomeIntent(raw)
+                ? "Не розпізнав короткий дохід. Скажи: «Заробив 350 готівка чайові столик 5»."
+                : "Не розпізнав коротку витрату. Скажи: «Витратив 150 готівка транспорт таксі».");
             return;
         }
         JarvisPhoneMode.Transition transition = JarvisPhoneMode.transition(raw);
