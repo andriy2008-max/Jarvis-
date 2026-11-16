@@ -1560,6 +1560,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void applyPreferredVoice() {
         if (tts == null || !ttsReady) return;
+        try {
         ArrayList<Voice> available = ukrainianVoices();
         String profile = selectedVoiceProfile();
         Voice namedVoice = voiceForProfile(available, profile);
@@ -1583,6 +1584,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 ? "Офлайн-файли збережені, але синтез ще тестується."
                 : "Офлайн-пакет ще не підключений.";
             setStatus(why + " Зараз озвучує Android.");
+        }
+        } catch(RuntimeException failure) {
+            // Samsung/Google TTS binders can disappear during getVoices/setVoice.
+            onSystemTtsFailure("CONFIGURE_VOICE",failure);
         }
     }
 
@@ -1665,8 +1670,16 @@ public final class MainActivity extends Activity implements RecognitionListener 
         cancelPendingWatchTtsStart();
         prepareSpeech();
         activeTtsId = "jarvis-system-" + SystemClock.uptimeMillis();
-        int statusCode = tts.speak(text, TextToSpeech.QUEUE_FLUSH, new Bundle(), activeTtsId);
-        if (statusCode != TextToSpeech.SUCCESS) endSpeaking();
+        try {
+            int statusCode=tts.speak(text,TextToSpeech.QUEUE_FLUSH,
+                new Bundle(),activeTtsId);
+            if(statusCode!=TextToSpeech.SUCCESS) {
+                // A binder returning ERROR should not cause Jarvis to close.
+                onSystemTtsFailure("SPEAK_RETURNED_ERROR",null);
+            }
+        } catch(RuntimeException failure) {
+            onSystemTtsFailure("SPEAK",failure);
+        }
     }
 
     /** Prefer fully-local two-speaker ONNX, then private TTS server, then Android TTS. */
@@ -4326,7 +4339,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (offlineSpeech != null) offlineSpeech.stop();
         if (supertonicSpeech != null) supertonicSpeech.stop();
         if (neuralSpeech != null) neuralSpeech.stop();
-        if (tts != null) tts.stop();
+        if (tts != null) {
+            try { tts.stop(); }
+            catch(RuntimeException failure) {
+                // stop() itself can throw when the watch TTS process died.
+                onSystemTtsFailure("STOP",failure);
+            }
+        }
         speaking = false;
         if (face != null) face.setState(listening ? "listening" : "idle");
     }
@@ -5566,9 +5585,23 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (supertonicPack != null) supertonicPack.close();
         if (offlinePacks != null) offlinePacks.close();
         if (neuralSpeech != null) neuralSpeech.close();
-        if (tts != null) {
-            tts.stop();
-            tts.shutdown();
+        ttsClosing=true;
+        if(ttsRecovery!=null) {
+            wakeHandler.removeCallbacks(ttsRecovery);
+            ttsRecovery=null;
+        }
+        ++ttsGeneration;
+        if(tts!=null) {
+            try { tts.stop(); }
+            catch(RuntimeException failure) {
+                android.util.Log.w("JARVIS_WATCH_TTS",
+                    "TTS stop during destroy failed",failure);
+            }
+            try { tts.shutdown(); }
+            catch(RuntimeException failure) {
+                android.util.Log.w("JARVIS_WATCH_TTS",
+                    "TTS shutdown during destroy failed",failure);
+            }
         }
         super.onDestroy();
     }
