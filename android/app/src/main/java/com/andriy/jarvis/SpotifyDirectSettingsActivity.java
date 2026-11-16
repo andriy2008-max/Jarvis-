@@ -37,7 +37,7 @@ public final class SpotifyDirectSettingsActivity extends Activity {
         page.addView(body);
 
         addText(body,"🎵 Spotify — прямий запуск",23,WHITE);
-        addText(body,"Джарвіс запускатиме плейлист через офіційний Spotify App Remote SDK без натискання Play. Spotify має бути встановлений, а ти — увійти в акаунт.",15,MUTED);
+        addText(body,"Джарвіс спочатку використає Spotify App Remote для збережених плейлистів і треків. Якщо URI невідомий, залишиться екранний пошук. Spotify має бути встановлений, а ти — увійти в акаунт.",15,MUTED);
         addText(body,"1. Створи застосунок у Spotify Developer Dashboard та вибери Android. Укажи цей пакет і SHA-1:",16,WHITE);
         addText(body,"Пакет: "+getPackageName()+"\nSHA-1: "+certificateSha1(),14,WHITE);
         addText(body,"Redirect URI, який треба додати в Spotify Dashboard:",15,WHITE);
@@ -79,7 +79,7 @@ public final class SpotifyDirectSettingsActivity extends Activity {
             connection.connect();
         });
         body.addView(connect);
-        addText(body,"Якщо Client ID, авторизації або посилання немає, Джарвіс залишить старий спосіб: знайти плейлист та натиснути Play через Accessibility. Для окремого треку на вимогу Spotify може вимагати Premium.",14,MUTED);
+        addText(body,"Для прямого запуску збережи точне посилання на трек або плейлист. Увімкни пісню [назва] без збереженого посилання працює через екранний пошук. Spotify Premium потрібен для запуску окремого треку за URI. Spotify App Remote підтверджує стан через PlayerState, коли він доступний.",14,MUTED);
         setContentView(page);
     }
 
