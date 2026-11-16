@@ -66,8 +66,10 @@ public final class FinanceInsightsCommands {
         if (setCat.matches()) {
             String category = expenseCategory(setCat.group(1));
             String amount = positiveAmount(setCat.group(2));
-            return category == null || amount == null ? null :
-                request(Kind.SET_CATEGORY_BUDGET,category,null,amount);
+            // "на цей місяць" is not a category; let the general-budget
+            // matcher below handle it instead of rejecting the command.
+            if(category!=null && amount!=null)
+                return request(Kind.SET_CATEGORY_BUDGET,category,null,amount);
         }
         Matcher setAll = SET_TOTAL.matcher(s);
         if (setAll.matches()) {
