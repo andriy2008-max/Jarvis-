@@ -292,16 +292,18 @@ public final class FloatingJarvisService extends Service {
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent == null || ACTION_CLOSE.equals(intent.getAction())) {
+        // Null intent is an Android restart, not the user's Close action.
+        final String action=intent==null ? ACTION_SHOW : intent.getAction();
+        if(ACTION_CLOSE.equals(action)){
             stopSelf();
             return START_NOT_STICKY;
         }
-        if (ACTION_RESIZE.equals(intent.getAction())) {
-            if (face != null && !closing) resizeFace();
-            return START_NOT_STICKY;
+        if(ACTION_RESIZE.equals(action)){
+            if(face!=null && !closing)resizeFace();
+            return closing ? START_NOT_STICKY : START_STICKY;
         }
-        if ((!ACTION_SHOW.equals(intent.getAction()) &&
-             !ACTION_LISTEN.equals(intent.getAction())) || closing) return START_NOT_STICKY;
+        if((!ACTION_SHOW.equals(action) && !ACTION_LISTEN.equals(action)) || closing)
+            return START_NOT_STICKY;
         android.util.Log.i("JARVIS_FLOATING_QA", "service_onstart=true");
         if (!Settings.canDrawOverlays(this) ||
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -310,6 +312,7 @@ public final class FloatingJarvisService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
+        boolean started=false;
         try {
             NotificationManager manager =
                 (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
@@ -335,7 +338,9 @@ public final class FloatingJarvisService extends Service {
             }
             android.util.Log.i("JARVIS_FLOATING_QA", "foreground_started=true");
             showFace();
-            if (ACTION_LISTEN.equals(intent.getAction())) {
+            started=true;
+            // Do not secretly restart the microphone following process death.
+            if (ACTION_LISTEN.equals(action)) {
                 if (JarvisPhoneMode.isActive()) startPhoneListening();
                 else if (!recording && !recognizerSessionActive && !aiBusy &&
                     pendingSend == null) toggleListening();
@@ -346,8 +351,9 @@ public final class FloatingJarvisService extends Service {
             Toast.makeText(this, "Не вдалося відкрити плаваючий Джарвіс. Перевір дозволи Android.",
                 Toast.LENGTH_LONG).show();
             stopSelf();
+            started=false;
         }
-        return START_NOT_STICKY;
+        return started ? START_STICKY : START_NOT_STICKY;
     }
 
     private int dp(int n) {
