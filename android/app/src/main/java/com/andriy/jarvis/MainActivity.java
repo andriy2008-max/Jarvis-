@@ -2615,7 +2615,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "🖼 Останнє зображення",
             "⏰ Поставити будильник",
             "🗣 Перевірити голос Watch7",
-            "⏹ Завершити Джарвіса (вручну)"
+            "⏹ Завершити Джарвіса (вручну)",
+            "🛠 Діагностика голосу Watch7"
         };
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("Налаштування Джарвіса")
@@ -2693,6 +2694,21 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         // the phone, AI and microphone recognition.
                         processCommand("Скажи Перевірка голосу. Джарвіс працює на годиннику.");
                         break;
+                    case 18: {
+                        String last=getPreferences(MODE_PRIVATE)
+                            .getString(WATCH_TTS_LAST_ERROR,"Збоїв не зареєстровано.");
+                        String status=ttsReady && tts!=null
+                            ? "Синтезатор Android підключений."
+                            : "Синтезатор Android не готовий.";
+                        showDialogWithoutWake(new AlertDialog.Builder(this)
+                            .setTitle("Голос Джарвіса на Watch7")
+                            .setMessage(status+"\nОстання помилка: "+last+
+                                "\nЯкщо Джарвіс повертається на циферблат після "+
+                                "озвучення, потрібен журнал Android із міткою "+
+                                "JARVIS_WATCH_TTS.")
+                            .setPositiveButton("Закрити",null).create());
+                        break;
+                    }
                     case 17:
                         new AlertDialog.Builder(this)
                             .setTitle("Завершити Джарвіса?")
