@@ -49,6 +49,9 @@ public final class SpotifyPlaybackController {
     private boolean playlistRowRetried;
     private boolean coordinatePlaylistPlayUsed;
     private boolean searchTabRetried;
+    private boolean portalSearchTried;
+    private boolean portalLibraryTried;
+    private boolean portalPending;
 
     public SpotifyPlaybackController(Context context) {
         this.context = context;
@@ -162,6 +165,9 @@ public final class SpotifyPlaybackController {
         playlistRowRetried = false;
         coordinatePlaylistPlayUsed = false;
         searchTabRetried = false;
+        portalSearchTried=false;
+        portalLibraryTried=false;
+        portalPending=false;
         listener = callback;
         active = true;
         move(Stage.WAIT_APP, "Режим «Телефон»: очікую відкриття Spotify...");
@@ -177,6 +183,39 @@ public final class SpotifyPlaybackController {
         stage = next;
         stageStart = SystemClock.elapsedRealtime();
         if (listener != null) listener.onProgress(message);
+    }
+
+    /** Try the optional Portal tree only when native Accessibility could not
+     * find a tab. A confirmed tab press does NOT confirm Spotify playback.
+     */
+    private void portalTab(Stage expected,PortalUiBridge.Target target,
+                           Stage next,String message) {
+        if(portalPending || !PortalUiBridge.available(context))return;
+        final Runnable restore;
+        try {restore=FloatingJarvisService.hideForGesture();}
+        catch(RuntimeException ignored) {
+            if(listener!=null)listener.onProgress(
+                "Portal: плаваюче обличчя не вдалося безпечно приховати.");
+            return;
+        }
+        portalPending=true;
+        PortalUiBridge.tap(context,target,(status,detail)->{
+            portalPending=false;
+            try {restore.run();}
+            catch(RuntimeException ignored) {
+                finish(false,"Помилка відновлення інтерфейсу після Portal.");
+                return;
+            }
+            if(!active || stage!=expected)return;
+            if(status==PortalUiBridge.State.CLICKED)
+                move(next,message);
+            else if(status==PortalUiBridge.State.UNSURE) {
+                finish(false,"Portal не підтвердив натискання вкладки "+
+                    "Spotify. Не повторював дію.");
+                return;
+            }
+            if(active)handler.postDelayed(poll,POLL_MS);
+        });
     }
 
     /** Never let an invalidated Spotify Accessibility node or a changing
@@ -303,6 +342,13 @@ public final class SpotifyPlaybackController {
             case OPEN_SEARCH_TAB:
                 if(successful(ScreenControlAccessibilityService.spotifySearchTab()))
                     move(Stage.FOCUS_SEARCH,"Натискаю «Що ви хочете послухати?»...");
+                else if(age>=2200L && !portalSearchTried &&
+                    PortalUiBridge.available(context)) {
+                    portalSearchTried=true;
+                    portalTab(Stage.OPEN_SEARCH_TAB,PortalUiBridge.Target.SPOTIFY_SEARCH,
+                        Stage.FOCUS_SEARCH,"Portal відкрив вкладку Пошук Spotify.");
+                    return;
+                }
                 break;
             case FOCUS_SEARCH:
                 if(successful(ScreenControlAccessibilityService.spotifyFocusSearch()))
@@ -393,6 +439,12 @@ public final class SpotifyPlaybackController {
                         : requested==SpotifyMusicCommands.Kind.PLAYLIST
                             ? "Шукаю «"+namedPlaylist+"» у Моїй бібліотеці..."
                             : "Шукаю плейлист «Укр муз»...");
+                } else if(age>=2200L && !portalLibraryTried &&
+                    PortalUiBridge.available(context)) {
+                    portalLibraryTried=true;
+                    portalTab(Stage.OPEN_LIBRARY,PortalUiBridge.Target.SPOTIFY_LIBRARY,
+                        Stage.OPEN_COLLECTION,"Portal відкрив Мою бібліотеку Spotify.");
+                    return;
                 }
                 break;
             case OPEN_COLLECTION: {
