@@ -9,6 +9,13 @@ public final class FinanceVoiceCommandsTest {
             e.category.equals(category) &&
             (account==null?e.account==null:account.equals(e.account)));
     }
+    private static void quick(String phrase,FinanceVoiceCommands.Kind kind,
+                              String amount,String category,String account,String note) {
+        FinanceVoiceCommands.Entry e=FinanceVoiceCommands.parse(phrase);
+        yes(e!=null && e.kind==kind && amount.equals(e.amount) &&
+            category.equals(e.category) && account.equals(e.account) &&
+            (note==null?e.note==null:note.equals(e.note)));
+    }
     public static void main(String[] args){
         test("Джарвіс, запиши витрату 350 гривень на харчування",
             FinanceVoiceCommands.Kind.EXPENSE,"350","Харчування",null);
@@ -51,6 +58,25 @@ public final class FinanceVoiceCommandsTest {
         test("витрата кава 85 з рахунку моно",FinanceVoiceCommands.Kind.EXPENSE,"85","Їжа → Кафе","моно");
         test("запиши витрату 1800 на заправку з монобанку",FinanceVoiceCommands.Kind.EXPENSE,"1800","Транспорт → Пальне","монобанк");
         test("чайові 650 з рахунку картка роботи",FinanceVoiceCommands.Kind.INCOME,"650","чай","картка роботи");
+        quick("витратив 150 готівка транспорт таксі",
+            FinanceVoiceCommands.Kind.EXPENSE,"150","Транспорт","готівка","таксі");
+        quick("потратив 50 моно транспорт автобус на роботу",
+            FinanceVoiceCommands.Kind.EXPENSE,"50","Транспорт","карта моно","автобус на роботу");
+        quick("заробив 350 готівка чайові столик 5",
+            FinanceVoiceCommands.Kind.INCOME,"350","чай","готівка","столик 5");
+        quick("джарвіс заробив 15000 карта моно зарплата за листопад",
+            FinanceVoiceCommands.Kind.INCOME,"15000","Зарплата","карта моно","за листопад");
+        quick("заробив 200,50 грн заначка гривні підробіток доставка",
+            FinanceVoiceCommands.Kind.INCOME,"200.5","Підробіток","заначка гривні","доставка");
+        quick("заробив 120 моно бонус",
+            FinanceVoiceCommands.Kind.INCOME,"120","Бонус","карта моно",null);
+        yes(FinanceVoiceCommands.shortFinanceIntent("заробив 100 моно чайові"));
+        yes(!FinanceVoiceCommands.shortFinanceIntent("портатив 150 моно транспорт"));
+        yes(FinanceVoiceCommands.parse("портатив 150 моно транспорт")==null);
+        yes(FinanceVoiceCommands.parse("заробив 200 моно транспорт таксі")==null);
+        yes(FinanceVoiceCommands.parse("заробив 200 чайові")==null);
+        yes(FinanceVoiceCommands.parse("потратив 150 невідомий транспорт")==null);
+        yes(FinanceVoiceCommands.parse("потратив 0 готівка транспорт")==null);
         System.out.println("PASS FinanceVoiceCommandsTest");
     }
 }
