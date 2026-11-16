@@ -89,8 +89,10 @@ public final class SpotifyPlaybackController {
         }
         // Direct App Remote is tried before requesting Accessibility.
         // An explicit user-saved URI is required; never guess IDs from names.
-        // Named songs follow the explicit text-driven sequence, even with a saved URI.
-        boolean allowDirect=!bypassDirectOnce && kind!=SpotifyMusicCommands.Kind.TRACK;
+        // If the owner saved an exact track URI, use Spotify App Remote
+        // instead of the fragile song-search screen. Without a saved URI,
+        // the existing verified search UI remains the safe fallback.
+        boolean allowDirect=!bypassDirectOnce;
         bypassDirectOnce=false;
         String alias=kind==SpotifyMusicCommands.Kind.TRACK
             ? namedTrack : named==null?null:named.name;
