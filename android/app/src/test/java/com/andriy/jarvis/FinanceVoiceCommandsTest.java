@@ -51,7 +51,7 @@ public final class FinanceVoiceCommandsTest {
         testNote("Потратив 50 моно транспорт автобус на роботу",
             FinanceVoiceCommands.Kind.EXPENSE,"50","Транспорт","карта моно",
             "автобус на роботу");
-        testNote("Портатив 150 карта моно харчування кава і круасан",
+        testNote("Витратив 150 карта моно харчування кава і круасан",
             FinanceVoiceCommands.Kind.EXPENSE,"150","Харчування","карта моно",
             "кава і круасан");
         testNote("Джарвіс, витратив 12,50 грн заначка гривні шопінг футболка",
@@ -63,7 +63,9 @@ public final class FinanceVoiceCommandsTest {
             FinanceVoiceCommands.Kind.EXPENSE,"180","Транспорт","готівка");
         test("витратив 90 моно телефон",
             FinanceVoiceCommands.Kind.EXPENSE,"90","Телефон","карта моно");
-        yes(FinanceVoiceCommands.shortExpenseIntent("джарвіс, портатив 150 готівка транспорт"));
+        yes(FinanceVoiceCommands.shortExpenseIntent("джарвіс, витратив 150 готівка транспорт"));
+        yes(!FinanceVoiceCommands.shortExpenseIntent("джарвіс, портатив 150 готівка транспорт"));
+        yes(FinanceVoiceCommands.parse("портатив 150 готівка транспорт")==null);
         yes(FinanceVoiceCommands.shortExpenseIntent("потратив"));
         yes(FinanceVoiceCommands.parse("витратив 0 готівка транспорт")==null);
         yes(FinanceVoiceCommands.parse("витратив 1000000 готівка транспорт")==null);
