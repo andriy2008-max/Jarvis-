@@ -63,6 +63,20 @@ public final class JarvisWearPhoneAssistant {
                     completion::finished)) return;
         }
 
+        // Watch questions use Pixel's encrypted Finance ledger, not AI guesses.
+        if(FinanceVoiceQueries.matches(raw)) {
+            try(FinanceLedger l=new FinanceLedger(phone)){
+                android.app.KeyguardManager km=(android.app.KeyguardManager)
+                    phone.getSystemService(Context.KEYGUARD_SERVICE);
+                if(km!=null && km.isDeviceLocked() &&
+                   !"true".equals(l.setting("finance_voice_locked","false")))
+                    completion.finished(false,"Розблокуй Pixel для фінансового звіту.");
+                else completion.finished(true,FinanceVoiceQueries.answer(l,raw));
+            } catch(RuntimeException failure){
+                completion.finished(false,"Не вдалося прочитати журнал фінансів.");
+            }
+            return;
+        }
         // Money Tracker supports a user-issued token. API writes are deliberately
         // disabled until its provider's transaction schema is verified;
         // existing Accessibility workflow remains available.
@@ -450,7 +464,8 @@ public final class JarvisWearPhoneAssistant {
     }
 
     private static boolean looksLikeFinanceCommand(String normalized) {
-        return normalized.matches(
+        return FinanceVoiceCommands.shortFinanceIntent(normalized) ||
+            normalized.matches(
             "^(?:запиши|додай|занеси|зафіксуй)\\s+" +
             "(?:витрату|витрати|дохід|доход|надходження)(?:\\s+.*)?$");
     }
