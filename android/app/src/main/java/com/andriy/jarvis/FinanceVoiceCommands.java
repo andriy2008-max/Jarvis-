@@ -99,7 +99,14 @@ public final class FinanceVoiceCommands {
         int daysAgo=s.endsWith(" позавчора")?2:s.endsWith(" вчора")?1:0;
         s=s.replaceFirst("\\s+(?:позавчора|вчора|сьогодні)$","").trim();
         String bare=CommandPatterns.normalize(s);
-        if(shortFinanceIntent(bare))return shortEntry(bare,daysAgo);
+        if(shortFinanceIntent(bare)) {
+            Entry quick=shortEntry(bare,daysAgo);
+            if(quick!=null)return quick;
+            // Version 0.1.33 also accepted old natural phrases such as
+            // "витратив 150 на каву позавчора". Preserve that flow;
+            // "потратив" and "заробив" remain strict short formats.
+            if(!bare.startsWith("витратив "))return null;
+        }
         Matcher m=EXP.matcher(s);
         Kind kind=Kind.EXPENSE;
         if(!m.matches()) {
