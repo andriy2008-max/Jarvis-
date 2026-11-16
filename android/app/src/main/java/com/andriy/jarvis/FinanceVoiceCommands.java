@@ -40,7 +40,7 @@ public final class FinanceVoiceCommands {
     // The account is mandatory, the category is ONE exact word,
     // and every following word belongs exclusively to the note.
     private static final Pattern SHORT_EXP=Pattern.compile(
-        "^(?:витратив|потратив|портатив)\\s+" +
+        "^(?:витратив|потратив)\\s+" +
         "([0-9]{1,7}(?:[,.][0-9]{1,2})?)" +
         "(?:\\s*(?:грн\\.?|грив(?:ня|ні|ень|ню)))?\\s+(.+)$",
         Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
@@ -67,7 +67,7 @@ public final class FinanceVoiceCommands {
      * Callers must provide an error rather than route it to conversational AI. */
     public static boolean shortExpenseIntent(String voice) {
         String normalized=CommandPatterns.normalize(voice);
-        return normalized.matches("^(?:витратив|потратив|портатив)(?:\\s+.*)?$");
+        return normalized.matches("^(?:витратив|потратив)(?:\\s+.*)?$");
     }
 
     /** A spoken income command uses the same strict account/category/note
