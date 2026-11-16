@@ -1450,8 +1450,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
      * the Jarvis Activity. Initialization callbacks are always handled on UI.
      */
     private int ttsGeneration;
-    private long lastTtsRecoveryMs=-60000L;
+    private int ttsRecoveryAttempts;
     private Runnable ttsRecovery;
+    private static final String WATCH_TTS_LAST_ERROR="watch_tts_last_failure";
     private boolean ttsClosing;
 
     private void initializeSystemTts() {
@@ -1459,7 +1460,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         final int generation=++ttsGeneration;
         ttsReady=false;
         try {
-            tts=new TextToSpeech(this,result->runOnUiThread(()->{
+            tts=new TextToSpeech(this,result->wakeHandler.post(()->{
                 if(ttsClosing || isDestroyed() || generation!=ttsGeneration)return;
                 if(result!=TextToSpeech.SUCCESS || tts==null) {
                     onSystemTtsFailure("INIT",null);
@@ -1486,10 +1487,17 @@ public final class MainActivity extends Activity implements RecognitionListener 
                                 "Android voice playback reported an error");
                             runOnUiThread(()->{
                                 if(!isFinishing() && !isDestroyed() &&
-                                   id!=null && id.equals(activeTtsId) && isWatchDevice)
-                                    setStatus("Голос Watch7 не відтворив відповідь. Джарвіс активний.");
+                                   id!=null && id.equals(activeTtsId)) {
+                                    if(isWatchDevice)
+                                        getPreferences(MODE_PRIVATE).edit()
+                                            .putString(WATCH_TTS_LAST_ERROR,
+                                                "PLAYBACK_CALLBACK_ERROR").apply();
+                                    endSpeaking();
+                                    if(isWatchDevice)
+                                        setStatus("Голос Watch7 не відтворив відповідь. "+
+                                            "Джарвіс активний.");
+                                }
                             });
-                            finishSystemTts(id);
                         }
                         @Override public void onStop(String id,boolean interrupted) {
                             finishSystemTts(id);
@@ -1501,6 +1509,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         }
                     });
                     int supported=tts.setLanguage(Locale.forLanguageTag("uk-UA"));
+                    if(isWatchDevice) {
+                        tts.setAudioAttributes(new android.media.AudioAttributes.Builder()
+                            .setUsage(android.media.AudioAttributes.USAGE_ASSISTANT)
+                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                            .build());
+                    }
                     if(supported==TextToSpeech.LANG_MISSING_DATA ||
                        supported==TextToSpeech.LANG_NOT_SUPPORTED)
                         appendDialogue("Джарвіс",
@@ -1542,16 +1556,26 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if(face!=null)face.setState("idle");
             if(isWatchDevice)
                 setStatus("Голос Watch7 тимчасово недоступний. Джарвіс не закривається; відновлюю озвучення.");
+            if(isWatchDevice) {
+                String code=stage+(failure==null?"":(" ("+
+                    failure.getClass().getSimpleName()+")"));
+                getPreferences(MODE_PRIVATE).edit()
+                    .putString(WATCH_TTS_LAST_ERROR,code).apply();
+                if(face!=null)face.showTranscript(
+                    "Помилка голосу Watch7. Джарвіс активний.",
+                    false,SystemClock.uptimeMillis()+5200L);
+            }
             if(ttsRecovery!=null)wakeHandler.removeCallbacks(ttsRecovery);
-            long now=SystemClock.elapsedRealtime();
-            if(isWatchDevice && foreground && now-lastTtsRecoveryMs>=30000L){
-                lastTtsRecoveryMs=now;
+            // Never loop indefinitely when Android's voice provider is broken.
+            if(isWatchDevice && foreground && ttsRecoveryAttempts<2) {
+                long delay=ttsRecoveryAttempts==0?1300L:5000L;
+                ttsRecoveryAttempts++;
                 ttsRecovery=()->{
                     ttsRecovery=null;
                     if(!ttsClosing && foreground && !isFinishing() && !isDestroyed())
                         initializeSystemTts();
                 };
-                wakeHandler.postDelayed(ttsRecovery,1200L);
+                wakeHandler.postDelayed(ttsRecovery,delay);
             }
         };
         if(Looper.myLooper()==Looper.getMainLooper())fail.run();
@@ -1613,8 +1637,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void finishSystemTts(String utteranceId) {
         runOnUiThread(() -> {
-            if (utteranceId != null && utteranceId.equals(activeTtsId))
+            if (utteranceId != null && utteranceId.equals(activeTtsId)) {
+                ttsRecoveryAttempts=0;
                 endSpeaking();
+            }
         });
     }
 
@@ -2725,7 +2751,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             !manualCapture && !listening && !processing && message != null &&
             (message.startsWith("Не ") || message.startsWith("Немає ") ||
              message.startsWith("Спочатку ") || message.startsWith("Зв'язок ") ||
-             message.startsWith("На пристрої "))) {
+             message.startsWith("Голос ") ||
+              message.startsWith("На пристрої "))) {
             face.showTranscript(message, false, SystemClock.uptimeMillis() + 3200L);
         }
     }
