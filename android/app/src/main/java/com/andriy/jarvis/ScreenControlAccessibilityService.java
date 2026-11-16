@@ -520,11 +520,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if(root==null)return FinanceStep.WAIT;
         if(detectFinanceScreen(root)!=expected)return FinanceStep.WAIT;
         android.graphics.Point display=new android.graphics.Point();
-        android.view.Display screen=getDisplay();
-        if(screen==null){
-            WindowManager wm=(WindowManager)getSystemService(Context.WINDOW_SERVICE);
-            if(wm!=null)screen=wm.getDefaultDisplay();
-        }
+        android.view.Display screen=JarvisServiceDisplay.resolve(this);
         if(screen==null)return FinanceStep.WAIT;
         screen.getRealSize(display);
         if(!FinanceManagerUiLabels.screenshotShape(display.x,display.y))
@@ -562,11 +558,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     }
 
     private int[] financeDisplaySize() {
-        android.view.Display screen=getDisplay();
-        if(screen==null){
-            WindowManager wm=(WindowManager)getSystemService(Context.WINDOW_SERVICE);
-            if(wm!=null)screen=wm.getDefaultDisplay();
-        }
+        android.view.Display screen=JarvisServiceDisplay.resolve(this);
         if(screen==null)return null;
         android.graphics.Point p=new android.graphics.Point();
         screen.getRealSize(p);
@@ -781,11 +773,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             return;
         }
         android.graphics.Point size=new android.graphics.Point();
-        android.view.Display display=getDisplay();
-        if(display==null) {
-            WindowManager wm=(WindowManager)getSystemService(Context.WINDOW_SERVICE);
-            if(wm!=null)display=wm.getDefaultDisplay();
-        }
+        android.view.Display display=JarvisServiceDisplay.resolve(this);
         if(display==null) {
             cb.finished(false,"Не вдалося визначити екран.");return;
         }
@@ -1131,11 +1119,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     private Rect findBoltDropoffTarget(AccessibilityNodeInfo root) {
         if (root == null || !root.isVisibleToUser()) return null;
         android.graphics.Point displaySize = new android.graphics.Point();
-        android.view.Display display = getDisplay();
-        if (display == null) {
-            WindowManager window = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
-            if (window != null) display = window.getDefaultDisplay();
-        }
+        android.view.Display display=JarvisServiceDisplay.resolve(this);
         if (display == null) return null;
         display.getRealSize(displaySize);
         int width=displaySize.x,height=displaySize.y;
@@ -1279,11 +1263,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if (!routePage && screen.height() > screen.width() * 1.45f &&
             BoltUiLabels.ridesHomeFallback(homeHeading,plan,food,send,homeSearch)) {
             android.graphics.Point physical = new android.graphics.Point();
-            android.view.Display display = getDisplay();
-            if (display == null) {
-                WindowManager wm = (WindowManager)getSystemService(Context.WINDOW_SERVICE);
-                if (wm != null)display = wm.getDefaultDisplay();
-            }
+            android.view.Display display=JarvisServiceDisplay.resolve(this);
             if (display != null) {
                 display.getRealSize(physical);
                 int[] point = BoltUiLabels.screenshotRidesPoint(physical.x,physical.y);
@@ -1379,11 +1359,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             return BoltStep.READY;
 
         android.graphics.Point physical=new android.graphics.Point();
-        android.view.Display display=getDisplay();
-        if(display==null){
-            WindowManager wm=(WindowManager)getSystemService(Context.WINDOW_SERVICE);
-            if(wm!=null)display=wm.getDefaultDisplay();
-        }
+        android.view.Display display=JarvisServiceDisplay.resolve(this);
         if(display==null)return BoltStep.BLOCKED;
         display.getRealSize(physical);
         int[] point=BoltUiLabels.screenshotRidesPoint(physical.x,physical.y);
@@ -2667,11 +2643,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             x=best.centerX();y=best.centerY();
         } else {
             android.graphics.Point physical=new android.graphics.Point();
-            android.view.Display display=getDisplay();
-            if(display==null) {
-                WindowManager wm=(WindowManager)getSystemService(Context.WINDOW_SERVICE);
-                if(wm!=null)display=wm.getDefaultDisplay();
-            }
+            android.view.Display display=JarvisServiceDisplay.resolve(this);
             if(display==null)return SpotifyStep.WAIT;
             display.getRealSize(physical);
             int[] point=SpotifyUiLabels.screenshotPlaylistPlayPoint(
@@ -2981,11 +2953,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
            spotifyLikedHeaderNearTop(root,frame)) {
             // User-confirmed Pixel 9 screenshot, scaled to physical display.
             android.graphics.Point physical=new android.graphics.Point();
-            android.view.Display display=getDisplay();
-            if(display==null) {
-                WindowManager window=(WindowManager)getSystemService(Context.WINDOW_SERVICE);
-                if(window!=null)display=window.getDefaultDisplay();
-            }
+            android.view.Display display=JarvisServiceDisplay.resolve(this);
             if(display!=null) {
                 display.getRealSize(physical);
                 position=SpotifyUiLabels.screenshotShufflePoint(physical.x,physical.y);
