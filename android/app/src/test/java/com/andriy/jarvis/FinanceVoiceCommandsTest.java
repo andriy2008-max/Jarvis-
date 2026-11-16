@@ -9,6 +9,14 @@ public final class FinanceVoiceCommandsTest {
             e.category.equals(category) &&
             (account==null?e.account==null:account.equals(e.account)));
     }
+    private static void testNote(String phrase, FinanceVoiceCommands.Kind kind,
+                                 String amount, String category, String account, String note) {
+        FinanceVoiceCommands.Entry parsed=FinanceVoiceCommands.parse(phrase);
+        yes(parsed!=null && parsed.kind==kind && parsed.amount.equals(amount) &&
+            parsed.category.equals(category) && note.equals(parsed.note) &&
+            (account==null?parsed.account==null:account.equals(parsed.account)));
+    }
+
     public static void main(String[] args){
         test("Джарвіс, запиши витрату 350 гривень на харчування",
             FinanceVoiceCommands.Kind.EXPENSE,"350","Харчування",null);
@@ -20,6 +28,22 @@ public final class FinanceVoiceCommandsTest {
             FinanceVoiceCommands.Kind.INCOME,"1000","Зарплата",null);
         test("додай дохід 500 чайові на карту моно",
             FinanceVoiceCommands.Kind.INCOME,"500","чай","карта моно");
+        // User-requested transaction memos stay separate from the category.
+        testNote("Джарвіс запиши витрату 150 гривень на транспорт таксі",
+            FinanceVoiceCommands.Kind.EXPENSE,"150","Транспорт",null,"таксі");
+        testNote("запиши витрату 150 гривень на транспорт автобус",
+            FinanceVoiceCommands.Kind.EXPENSE,"150","Транспорт",null,"автобус");
+        testNote("запиши витрату 150 гривень на транспорт примітка таксі",
+            FinanceVoiceCommands.Kind.EXPENSE,"150","Транспорт",null,"таксі");
+        testNote("запиши витрату 12,50 на харчування кава з карти моно",
+            FinanceVoiceCommands.Kind.EXPENSE,"12.5","Харчування","карта моно","кава");
+        testNote("запиши дохід 200 гривень чайові столик 5",
+            FinanceVoiceCommands.Kind.INCOME,"200","чай",null,"столик 5");
+        testNote("запиши витрату 150 на таксі",
+            FinanceVoiceCommands.Kind.EXPENSE,"150","Транспорт",null,"таксі");
+        yes(FinanceVoiceCommands.parse("запиши витрату 150 на транспорт примітка")==null);
+        yes(FinanceVoiceCommands.parse("запиши витрату 150 на щось таксі")==null);
+        yes(FinanceVoiceCommands.parse("запиши витрату 150 на транспорт")!=null);
         yes(FinanceVoiceCommands.parse("переказ 1000 на карту")==null);
         yes(FinanceVoiceCommands.parse("переказ з карти 200")==null);
         yes(FinanceVoiceCommands.parse("запиши витрату 0 на транспорт")==null);
