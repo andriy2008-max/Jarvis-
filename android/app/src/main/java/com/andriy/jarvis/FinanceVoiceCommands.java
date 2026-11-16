@@ -45,6 +45,12 @@ public final class FinanceVoiceCommands {
         "(?:\\s*(?:грн\\.?|грив(?:ня|ні|ень|ню)))?\\s+(.+)$",
         Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
 
+    private static final Pattern SHORT_INC=Pattern.compile(
+        "^(?:заробив)\\s+" +
+        "([0-9]{1,7}(?:[,.][0-9]{1,2})?)" +
+        "(?:\\s*(?:грн\\.?|грив(?:ня|ні|ень|ню)))?\\s+(.+)$",
+        Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
+
     private static final String[][] SHORT_ACCOUNTS={
         {"карта моно","карта моно"},{"карти моно","карта моно"},
         {"картка моно","карта моно"},{"картки моно","карта моно"},
@@ -64,8 +70,19 @@ public final class FinanceVoiceCommands {
         return normalized.matches("^(?:витратив|потратив|портатив)(?:\\s+.*)?$");
     }
 
-    private static Entry parseShortExpense(String normalized) {
-        Matcher m=SHORT_EXP.matcher(normalized);
+    /** A spoken income command uses the same strict account/category/note
+     * grammar as expenses, but never falls back to an expense category. */
+    public static boolean shortIncomeIntent(String voice) {
+        String normalized=CommandPatterns.normalize(voice);
+        return normalized.matches("^заробив(?:\\s+.*)?$");
+    }
+
+    public static boolean shortFinanceIntent(String voice) {
+        return shortExpenseIntent(voice) || shortIncomeIntent(voice);
+    }
+
+    private static Entry parseShort(String normalized,Kind kind) {
+        Matcher m=(kind==Kind.EXPENSE ? SHORT_EXP : SHORT_INC).matcher(normalized);
         if(!m.matches())return null;
         String amount=positiveAmount(m.group(1));
         if(amount==null)return null;
@@ -78,11 +95,11 @@ public final class FinanceVoiceCommands {
             if(rest.isEmpty())return null;
             String[] parts=rest.split(" ",2);
             // One word is the entire category, NOT a free-form description.
-            String category=category(Kind.EXPENSE,parts[0]);
+            String category=category(kind,parts[0]);
             if(category==null)return null;
             String note=parts.length>1?parts[1].trim():null;
             if(note!=null && !validNote(note))return null;
-            return new Entry(Kind.EXPENSE,amount,category,alias[1],note);
+            return new Entry(kind,amount,category,alias[1],note);
         }
         return null;
     }
@@ -102,7 +119,10 @@ public final class FinanceVoiceCommands {
         if(voice==null||voice.length()>230)return null;
         String s=voice.toLowerCase(Locale.forLanguageTag("uk-UA")).trim()
             .replaceAll("[.!?]+$","");
-        if(shortExpenseIntent(s))return parseShortExpense(CommandPatterns.normalize(s));
+        if(shortExpenseIntent(s))
+            return parseShort(CommandPatterns.normalize(s),Kind.EXPENSE);
+        if(shortIncomeIntent(s))
+            return parseShort(CommandPatterns.normalize(s),Kind.INCOME);
         Matcher m=EXP.matcher(s);
         Kind kind=Kind.EXPENSE;
         if(!m.matches()) {
