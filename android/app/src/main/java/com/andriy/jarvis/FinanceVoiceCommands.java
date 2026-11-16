@@ -14,8 +14,13 @@ public final class FinanceVoiceCommands {
         public final String amount; // canonical positive decimal with dot
         public final String category;
         public final String account; // null means selected account in app
+        public final String note; // optional transaction memo, never a new category
         public Entry(Kind kind,String amount,String category,String account) {
-            this.kind=kind;this.amount=amount;this.category=category;this.account=account;
+            this(kind,amount,category,account,null);
+        }
+        public Entry(Kind kind,String amount,String category,String account,String note) {
+            this.kind=kind;this.amount=amount;this.category=category;
+            this.account=account;this.note=note;
         }
         /** Keypad chars, without extra zeros or a hidden negative sign. */
         public String keypad() {return amount.replace('.',',');}
@@ -67,8 +72,49 @@ public final class FinanceVoiceCommands {
                 break;
             }
         }
+        // Explicit wording: "на транспорт примітка таксі".
+        // Short wording: "на транспорт автобус" or "на харчування обід".
+        // The category must still be an exact known category; never create
+        // a different expense by guessing an unrelated free-text category.
+        String note=null;
+        Matcher memo=Pattern.compile(
+            "^(.*?)\\s+(?:примітка|примітку|коментар|коментарем|опис)\\s+(.+)$")
+            .matcher(descriptor);
+        if(memo.matches()){
+            descriptor=memo.group(1).trim();
+            note=memo.group(2).trim();
+        }
         String category=category(kind,descriptor);
-        return category==null?null:new Entry(kind,amount,category,account);
+        if(category==null){
+            String[] words=descriptor.split("\\s+");
+            // Match the longest valid category prefix; remaining words are
+            // the memo (e.g. transport -> taxi or bus).
+            for(int count=words.length-1;count>=1;count--){
+                String prefix=String.join(" ",java.util.Arrays.copyOfRange(words,0,count));
+                category=category(kind,prefix);
+                if(category!=null){
+                    if(note!=null)return null; // two memo syntaxes are ambiguous
+                    note=String.join(" ",java.util.Arrays.copyOfRange(words,count,words.length));
+                    break;
+                }
+            }
+        }
+        if(category==null)return null;
+        if(kind==Kind.EXPENSE && note==null && descriptor.equals("таксі"))
+            note="таксі";
+        if(kind==Kind.EXPENSE && note==null && descriptor.equals("автобус")){
+            category="Транспорт";note="автобус";
+        }
+        if(note!=null && (!validNote(note)))return null;
+        return new Entry(kind,amount,category,account,note);
+    }
+
+    /** A finite, single-line memo. Money Manager receives it only through
+     * a verified editable field; never in a command or an API guess. */
+    public static boolean validNote(String note) {
+        return note!=null && !note.trim().isEmpty() && note.length()<=100 &&
+            note.indexOf('\\n')<0 && note.indexOf('\\r')<0 &&
+            note.chars().noneMatch(ch->Character.isISOControl(ch));
     }
 
     private static String category(Kind kind,String value){
