@@ -4833,6 +4833,41 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 requestWatchAlarm(requestedWatchAlarm);
                 return;
             }
+            // Dedicated Watch7 timer request BEFORE conversational AI and
+            // phone screen-control mode. Let the paired Pixel own the alarm.
+            String timerSpeech=CommandPatterns.normalizeControlVerb(raw);
+            if(CommandPatterns.timerIntent(timerSpeech)) {
+                Integer seconds=CommandPatterns.timerSeconds(timerSpeech);
+                if(seconds==null || seconds<1) {
+                    String feedback="Не розпізнав тривалість таймера. "+
+                        "Скажи «Постав таймер на одну хвилину» або "+
+                        "«Постав таймер на 1 хвилину». Максимум три години.";
+                    appendDialogue("Джарвіс",feedback);
+                    setStatus(feedback);
+                    if(voiceEnabled)speakReply(feedback);
+                    return;
+                }
+                if(watchPhoneLink==null) {
+                    String feedback="Не можу поставити таймер: Pixel не підключений.";
+                    appendDialogue("Джарвіс",feedback);
+                    setStatus(feedback);
+                    if(voiceEnabled)speakReply(feedback);
+                    return;
+                }
+                processing=true;
+                if(face!=null)face.setState("thinking");
+                setStatus("Передаю таймер на Pixel...");
+                watchPhoneLink.setTimer(seconds,(ok,detail)->{
+                    processing=false;
+                    if(isFinishing()||isDestroyed())return;
+                    appendDialogue("Джарвіс",detail);
+                    setStatus(detail);
+                    ensureWatchPhoneListening();
+                    if(voiceEnabled)speakReply(detail);
+                    else if(face!=null)face.setState("idle");
+                });
+                return;
+            }
             // Image requests from the watch are handled on Pixel, not by
             // a watch-side HTTP client or by sending binary in MessageClient.
             if(JarvisWearImageCommands.lastImage(raw)) {
