@@ -1650,6 +1650,10 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     private Completion gestureCompletion;
 
     private PendingScreenAction pendingScreenAction;
+    public static boolean hasPendingAction() {
+        ScreenControlAccessibilityService s=connected.get();
+        return s!=null && s.pendingScreenAction!=null;
+    }
     public static boolean cancelWaitingAction() {
         ScreenControlAccessibilityService s=connected.get();
         if(s==null || s.pendingScreenAction==null)return false;

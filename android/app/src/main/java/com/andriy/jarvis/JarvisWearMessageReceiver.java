@@ -89,7 +89,9 @@ public final class JarvisWearMessageReceiver extends WearableListenerService {
                 : page.text,"",false,page);
             return;
         }
+        JarvisWearProgress progress = new JarvisWearProgress(this,node,id,action);
         JarvisWearPhoneSession.receive(this,node,request,(ok,description,token,ended)->{
+            progress.close();
             JarvisWearReplyPages.Page page =
                 ok && JarvisWearProtocol.ASSISTANT.equals(action)
                     ? JarvisWearReplyPages.save(node,id,description) : null;

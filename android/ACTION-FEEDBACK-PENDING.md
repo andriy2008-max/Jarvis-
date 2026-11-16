@@ -11,6 +11,7 @@ No version increment, APK assembly, signing or release is part of this change.
 - Song search presses the bottom Search tab once. If entering from another tab and the placeholder is still absent 2 seconds later, it presses Search once more. It then clicks the visible search field, waits for its editor, enters the query, submits Search/Enter, and selects the first identified song row.
 - “не та пісня”, “інша”, “інша пісня” repeat the last song query and choose an unselected song result. Context is shared across phone/watch/overlay controllers in the same phone process, and is cleared by a new song or collection request. If the process restarted, the user is asked for a song name.
 - Missing Bolt controls are read repeatedly instead of tapping fixed coordinates on a loading screen. The existing display-resolution fix is retained. The final ride confirmation is never pressed.
+- Watch UI requests emit a progress heartbeat on a separate path. A matching watch request ID, phone node and action are required to renew its response deadline; progress never finishes a command or acknowledges a financial write. Older watch builds ignore the separate progress path.
 - Cancellation: “скасуй Spotify”, “скасуй таксі”, “скасуй послідовність”, or “скасуй виконання” for a pending individual screen action. New individual screen actions retire the previous pending action.
 
 ## Verification

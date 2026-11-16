@@ -440,6 +440,7 @@ public final class JarvisWearPhoneSession {
             if (!session.isEmpty() && SystemClock.elapsedRealtime() >= deadline) {
                 if ((sequences != null && sequences.isRunning()) ||
                     (spotify != null && spotify.isRunning()) ||
+                    BoltTaxiController.isRunning() || ScreenControlAccessibilityService.hasPendingAction() ||
                     FinanceManagerController.isRunning() || JarvisMacros.isRunning()) extend();
                 else endSession();
             }

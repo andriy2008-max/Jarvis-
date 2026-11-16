@@ -6,6 +6,15 @@ public final class JarvisWearProtocolTest {
         if (!result) throw new AssertionError(message);
     }
     public static void main(String[] args) {
+        yes(JarvisWearProtocol.acceptsProgress(JarvisWearProtocol.SPOTIFY),"Spotify progress renews wait");
+        yes(JarvisWearProtocol.acceptsProgress(JarvisWearProtocol.TAXI),"Bolt progress renews wait");
+        yes(JarvisWearProtocol.acceptsProgress(JarvisWearProtocol.COMMAND),"screen-action progress renews wait");
+        yes(!JarvisWearProtocol.acceptsProgress(JarvisWearProtocol.SYNC),"heartbeat is not command progress");
+        yes(!JarvisWearProtocol.acceptsProgress(JarvisWearProtocol.SET_ALARM),"alarm ACK must remain final");
+        yes(!JarvisWearProtocol.acceptsProgress(null),"null action rejected");
+        yes(!JarvisWearProtocol.validAction(JarvisWearProtocol.PROGRESS),"progress path cannot invoke actions");
+        yes(!JarvisWearProtocol.REPLY.equals(JarvisWearProtocol.PROGRESS),"old watch never interprets progress as final result");
+
         if (!JarvisWearProtocol.validAction(JarvisWearProtocol.SYNC))
             throw new AssertionError("Phone mode sync/heartbeat must be supported");
         yes(JarvisWearProtocol.validAction("enter"),"enter");
