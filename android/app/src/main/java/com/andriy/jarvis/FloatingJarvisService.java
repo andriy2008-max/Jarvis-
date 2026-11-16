@@ -75,10 +75,13 @@ public final class FloatingJarvisService extends Service {
                 // or invalidates an overlay. Never crash the Jarvis process.
                 android.util.Log.w("JARVIS_FLOATING",
                     "Overlay layout update was rejected",failure);
-                if (failure instanceof SecurityException) {
+                if (failure instanceof SecurityException && !Settings.canDrawOverlays(this)) {
+                    // A real permission revocation cannot be recovered silently.
                     stopSelf();
                     return;
                 }
+                // A transient SystemUI/Spotify window transition is not an
+                // instruction to close Jarvis. Retry while permission remains.
             }
             if(!closing)ui.postDelayed(this,250L);
         }
@@ -166,8 +169,10 @@ public final class FloatingJarvisService extends Service {
         }
         catch (SecurityException denied) {
             android.util.Log.w("JARVIS_FLOATING",
-                "Overlay permission lost while switching external apps",denied);
-            stopSelf();
+                "Overlay update rejected; checking current permission",denied);
+            // A temporary window rejection while opening another app must
+            // not tear down the microphone, service or command executor.
+            if (!Settings.canDrawOverlays(this)) stopSelf();
         }
     }
 
@@ -292,16 +297,19 @@ public final class FloatingJarvisService extends Service {
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent == null || ACTION_CLOSE.equals(intent.getAction())) {
-            stopSelf();
+        // START_STICKY restarts may have a null intent. Restore the visible
+        // face instead of treating a system restart as the user's Close command.
+        final String action = intent == null ? ACTION_SHOW : intent.getAction();
+        if (ACTION_CLOSE.equals(action)) {
+            stopSelf(); // Only an explicit user action closes Jarvis.
             return START_NOT_STICKY;
         }
-        if (ACTION_RESIZE.equals(intent.getAction())) {
+        if (ACTION_RESIZE.equals(action)) {
             if (face != null && !closing) resizeFace();
-            return START_NOT_STICKY;
+            return closing ? START_NOT_STICKY : START_STICKY;
         }
-        if ((!ACTION_SHOW.equals(intent.getAction()) &&
-             !ACTION_LISTEN.equals(intent.getAction())) || closing) return START_NOT_STICKY;
+        if ((!ACTION_SHOW.equals(action) &&
+             !ACTION_LISTEN.equals(action)) || closing) return START_NOT_STICKY;
         android.util.Log.i("JARVIS_FLOATING_QA", "service_onstart=true");
         if (!Settings.canDrawOverlays(this) ||
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -310,6 +318,7 @@ public final class FloatingJarvisService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
+        boolean started = false;
         try {
             NotificationManager manager =
                 (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
@@ -335,7 +344,10 @@ public final class FloatingJarvisService extends Service {
             }
             android.util.Log.i("JARVIS_FLOATING_QA", "foreground_started=true");
             showFace();
-            if (ACTION_LISTEN.equals(intent.getAction())) {
+            // A restored service must not start the microphone without a
+            // fresh user gesture; it only restores the visible orb.
+            started = true;
+            if (ACTION_LISTEN.equals(action)) {
                 if (JarvisPhoneMode.isActive()) startPhoneListening();
                 else if (!recording && !recognizerSessionActive && !aiBusy &&
                     pendingSend == null) toggleListening();
@@ -346,8 +358,9 @@ public final class FloatingJarvisService extends Service {
             Toast.makeText(this, "Не вдалося відкрити плаваючий Джарвіс. Перевір дозволи Android.",
                 Toast.LENGTH_LONG).show();
             stopSelf();
+            started = false;
         }
-        return START_NOT_STICKY;
+        return started ? START_STICKY : START_NOT_STICKY;
     }
 
     private int dp(int n) {
