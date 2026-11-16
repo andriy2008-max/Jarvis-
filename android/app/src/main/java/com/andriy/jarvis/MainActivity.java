@@ -5011,6 +5011,16 @@ public final class MainActivity extends Activity implements RecognitionListener 
             });
             return;
         }
+        if (!isWatchDevice && FinanceVoiceCommands.shortExpenseIntent(raw)) {
+            String detail="Не розпізнав коротку витрату. Скажи: "+
+                "«Витратив 150 готівка транспорт таксі». "+
+                "Рахунок: готівка, моно або заначка гривні; "+
+                "наступне одне слово — категорія, решта — примітка.";
+            appendDialogue("Джарвіс",detail);
+            setStatus(detail);
+            if(voiceEnabled)speakReply(detail);
+            return;
+        }
         if (!isWatchDevice && JarvisTaxiCommands.destination(raw) != null) {
             BoltTaxiController.start(this, raw, new BoltTaxiController.Listener() {
                 @Override public void onProgress(String detail) {setStatus(detail);}
