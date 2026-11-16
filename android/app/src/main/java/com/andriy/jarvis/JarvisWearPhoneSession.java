@@ -317,6 +317,19 @@ public final class JarvisWearPhoneSession {
                 out.reply(ok,message,telegramSession,false));
             return;
         }
+        if(FinanceVoiceQueries.matches(command)) {
+            try(FinanceLedger ledger=new FinanceLedger(context)){
+                android.app.KeyguardManager lock=(android.app.KeyguardManager)
+                    context.getSystemService(Context.KEYGUARD_SERVICE);
+                if(lock!=null && lock.isDeviceLocked() &&
+                   !"true".equals(ledger.setting("finance_voice_locked","false")))
+                    out.reply(false,"Розблокуй Pixel для фінансового звіту.",session,false);
+                else out.reply(true,FinanceVoiceQueries.answer(ledger,command),session,false);
+            } catch(RuntimeException failure){
+                out.reply(false,"Не вдалося прочитати журнал фінансів.",session,false);
+            }
+            return;
+        }
         if(FinanceManagerController.isRunning()) {
             if(FinanceVoiceCommands.cancel(command)) {
                 FinanceManagerController.cancel();
@@ -332,6 +345,11 @@ public final class JarvisWearPhoneSession {
                     out.reply(success,detail,token,false);
                 }
             });
+            return;
+        }
+        if(FinanceVoiceCommands.shortFinanceIntent(command)){
+            out.reply(false,"Не розпізнав фінансовий запис. "+
+                "Приклад: «Заробив 350 готівка чайові столик 5».",session,false);
             return;
         }
         SpotifyMusicCommands.Kind music = SpotifyMusicCommands.parse(command);
