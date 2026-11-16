@@ -895,6 +895,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
             new LinearLayout.LayoutParams(-1,dp(46));
         spotifyDirectParams.topMargin=dp(7);
         content.addView(spotifyDirectTab,spotifyDirectParams);
+        if(!isWatchDevice) {
+            Button portalTab=secondaryButton("👁 Mobilerun Portal · елементи екрана",
+                ()->startActivity(new Intent(this,PortalUiSettingsActivity.class)));
+            LinearLayout.LayoutParams portalParams=
+                new LinearLayout.LayoutParams(-1,dp(46));
+            portalParams.topMargin=dp(7);
+            content.addView(portalTab,portalParams);
+        }
         Button telegramTab = secondaryButton("💬 Telegram API · мій акаунт",
             () -> startActivity(new Intent(this, TelegramReplySettingsActivity.class)));
         LinearLayout.LayoutParams telegramParams=
