@@ -331,10 +331,12 @@ public final class JarvisWearPhoneSession {
             } else out.reply(false,"Фінансова команда ще виконується.",session,false);
             return;
         }
-        if(FinanceVoiceCommands.shortExpenseIntent(command) &&
+        if(FinanceVoiceCommands.shortFinanceIntent(command) &&
            FinanceVoiceCommands.parse(command)==null){
-            out.reply(false,"Не розпізнав коротку витрату. Скажи: "+
-                "«Витратив 150 готівка транспорт таксі».",session,false);
+            out.reply(false,FinanceVoiceCommands.shortIncomeIntent(command)
+                ? "Не розпізнав короткий дохід. Скажи: «Заробив 350 готівка чайові столик 5»."
+                : "Не розпізнав коротку витрату. Скажи: «Витратив 150 готівка транспорт таксі».",
+                session,false);
             return;
         }
         if(FinanceVoiceCommands.parse(command)!=null) {
