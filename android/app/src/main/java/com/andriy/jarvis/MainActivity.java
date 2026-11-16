@@ -608,6 +608,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         // idle, replies and microphone recovery, independently of listening mode.
         if (isWatchDevice) {
             getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            if(tts==null && ttsRecovery==null && !ttsClosing && ttsRecoveryAttempts<2)
+                initializeSystemTts();
             // Command completion is NOT an Activity exit. A user-started
             // foreground session survives this UI being recreated or hidden.
             JarvisWatchSessionService.startFromVisibleWatch(this);
@@ -1492,10 +1494,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
                                         getPreferences(MODE_PRIVATE).edit()
                                             .putString(WATCH_TTS_LAST_ERROR,
                                                 "PLAYBACK_CALLBACK_ERROR").apply();
-                                    endSpeaking();
                                     if(isWatchDevice)
-                                        setStatus("Голос Watch7 не відтворив відповідь. "+
-                                            "Джарвіс активний.");
+                                        onSystemTtsFailure("PLAYBACK_CALLBACK_ERROR",null);
+                                    else endSpeaking();
                                 }
                             });
                         }
@@ -1554,8 +1555,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         "TTS engine shutdown failed",shutdownError);
                 }
             if(face!=null)face.setState("idle");
-            if(isWatchDevice)
-                setStatus("Голос Watch7 тимчасово недоступний. Джарвіс не закривається; відновлюю озвучення.");
+            if(isWatchDevice) {
+                setStatus("Голос Watch7 тимчасово недоступний. Джарвіс залишається активним.");
+                resumeAfterReply();
+            }
             if(isWatchDevice) {
                 String code=stage+(failure==null?"":(" ("+
                     failure.getClass().getSimpleName()+")"));
@@ -3131,6 +3134,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
         wakeHandler.postDelayed(wakeRestart, delayMs);
     }
 
+    private boolean systemVoiceSpeakingSafely() {
+        if(tts==null)return false;
+        try {return tts.isSpeaking();}
+        catch(RuntimeException failure) {
+            onSystemTtsFailure("IS_SPEAKING",failure);
+            return false;
+        }
+    }
+
     private boolean canAutoWake() {
         return foreground && !phoneListening && !JarvisPhoneMode.isActive() && !shakeEnabled &&
             (shakeProbe == null || !shakeProbe.active()) &&
@@ -3140,7 +3152,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             !FloatingJarvisService.isShowing() && recognizer != null &&
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED &&
             !manualCapture && !listening && !processing && !aiBusy && !speaking &&
-            (tts == null || !tts.isSpeaking());
+            !systemVoiceSpeakingSafely();
     }
 
     private void resumeAfterReply() {
