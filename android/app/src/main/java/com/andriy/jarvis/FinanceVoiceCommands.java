@@ -121,7 +121,7 @@ public final class FinanceVoiceCommands {
             note.chars().noneMatch(ch->Character.isISOControl(ch));
     }
 
-    private static String category(Kind kind,String value){
+    static String category(Kind kind,String value){
         String s=value.replaceAll("\\s+"," ").trim();
         if(kind==Kind.INCOME){
             switch(s) {
