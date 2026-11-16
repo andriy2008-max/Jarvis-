@@ -20,6 +20,32 @@
 - [ ] Confirm the ongoing indicator returns to Jarvis after the user presses the Home key.
 - [ ] Confirm that force-stop from system settings stops the session (cannot be overridden).
 
+## Watch7 system TTS crash protection (user-observed closure before speaking)
+
+- [x] System TextToSpeech constructor, voice configuration, speech request,
+      status lookup, stop and shutdown no longer propagate RuntimeException to the UI.
+- [x] A failed or disconnected Android speech binder resets only the voice
+      engine, leaving the persistent Watch7 Jarvis session intact.
+- [x] Reconnect attempts are bounded to two per run of failures, avoiding
+      speech-engine loops and excess battery drain.
+- [x] Error diagnostics persist only the operation and exception class —
+      no voice transcripts, AI answers or user data.
+- [x] The Watch7 menu ⋮ has `🛠 Діагностика голосу Watch7` showing
+      current engine status and the previous fault code.
+- [x] Wear OS TTS uses assistant/speech audio attributes.
+- [ ] **On device**: run `Скажи Привіт` 10 times. The face must remain
+      visible for every utterance, including errors and interrupted speech.
+- [ ] **On device**: `Увімкни плейлист`, `Таксі до...`, `Скільки часу на таймері`.
+      Jarvis must speak responses without returning to the watch face.
+- [ ] **On device**: open menu ⋮ → `Перевірити голос Watch7` and inspect
+      `Діагностика голосу Watch7` if speech fails.
+- [ ] **On device**: force a missing or broken Android TTS voice provider and
+      verify that the error appears, reconnection is bounded, and Jarvis stays open.
+- [ ] **On device**: if the entire process still closes, capture
+      `adb logcat -b crash -d` and logs filtered by `JARVIS_WATCH_TTS`.
+      Android native OOM/process kills may not be caught by Java exception guards.
+- [ ] **On device**: verify normal voice output after a TTS provider reconnect.
+
 ## Watch7 manual tests
 
 - [ ] Say `Скажи Привіт`. The face speaks and remains on the watch.
