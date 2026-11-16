@@ -215,10 +215,8 @@ public final class JarvisWearPhoneAssistant {
 
         Integer timer = CommandPatterns.timerSeconds(normalized);
         if (timer != null) {
-            boolean ok = timer > 0 && TimerScheduler.start(phone,timer);
-            completion.finished(ok,ok
-                ? "Таймер телефона запущено на " + timer + " секунд."
-                : "Не вдалося запустити таймер. Перевір дозвіл точних будильників.");
+            TimerScheduler.VoiceResult started=TimerScheduler.startForVoice(phone,timer);
+            completion.finished(started.ok,started.message);
             return;
         }
         if (normalized.equals("скасуй таймер") ||
