@@ -632,8 +632,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 "onResume; watch face remains active until user/system navigates away");
         // Keep the watch awake for the whole visible Jarvis session, including
         // idle, replies and microphone recovery, independently of listening mode.
-        if (isWatchDevice)
+        if (isWatchDevice) {
             getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            // Keeping the activity alive does not override Wear OS's idle
+            // return-to-watchface policy. An ongoing session does, while
+            // offering a one-tap return if the user presses Home.
+            JarvisWatchOngoing.show(this);
+        }
         if(!isWatchDevice)JarvisWearImageBridge.attachPhone(this);
         if (isWatchDevice && JarvisPhoneMode.isActive())
             ensureWatchPhoneListening();
@@ -5326,8 +5331,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if(isWatchDevice) {
             android.util.Log.i("JARVIS_WATCH_LIFECYCLE",
                 "onDestroy; finishing="+isFinishing()+
-                " changingConfig="+isChangingConfigurations());
+                " changingConfig="+isChangingConfigurations()+
+                " speaking="+speaking+" processing="+processing);
             cancelPendingWatchTtsStart();
+            // A configuration change is not a user exit; the new Activity
+            // will continue the ongoing session when it resumes.
+            if (!isChangingConfigurations()) JarvisWatchOngoing.hide(this);
         }
         if (headsetRoute != null) headsetRoute.end();
         JarvisPhoneMode.unsubscribe(phoneModeListener);
