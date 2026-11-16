@@ -7,6 +7,14 @@ on:
       - 'android/app/src/main/java/com/andriy/jarvis/SongRecognition*.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisTaxi*.java'
       - 'android/app/src/main/java/com/andriy/jarvis/Bolt*.java'
+      # Source changes to the opt-in local Mobilerun Portal and Spotify
+      # App Remote must trigger a full Android compile (never an APK).
+      - 'android/app/src/main/java/com/andriy/jarvis/Portal*.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/Spotify*.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/ScreenControlAccessibilityService.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/MainActivity.java'
+      - 'android/app/src/main/AndroidManifest.xml'
+      - 'android/app/src/main/res/xml/jarvis_local_portal_network.xml'
       - 'android/app/src/main/java/com/andriy/jarvis/Finance*.java'
       - 'android/app/src/main/java/com/andriy/jarvis/Telegram*.java'
       - 'android/app/src/test/java/com/andriy/jarvis/Finance*.java'
