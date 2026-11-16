@@ -28,7 +28,7 @@ public final class SpotifyPlaybackController {
         WAIT_APP, OPEN_LIBRARY, OPEN_COLLECTION, WAIT_PLAYLIST_PAGE,
         CHOOSE_RAP, PLAY, VERIFY_PLAY,
         OPEN_SEARCH_TAB, FOCUS_SEARCH, TYPE_SEARCH, SUBMIT_SEARCH,
-        COORD_SELECT_FIRST
+        COORD_SELECT_FIRST, SELECT_SONG, VERIFY_SONG_ROW
     }
 
     private final Context context;
@@ -48,6 +48,7 @@ public final class SpotifyPlaybackController {
     private boolean playlistPlayRetried;
     private boolean playlistRowRetried;
     private boolean coordinatePlaylistPlayUsed;
+    private boolean searchTabRetried;
 
     public SpotifyPlaybackController(Context context) {
         this.context = context;
@@ -158,6 +159,7 @@ public final class SpotifyPlaybackController {
         playlistPlayRetried = false;
         playlistRowRetried = false;
         coordinatePlaylistPlayUsed = false;
+        searchTabRetried = false;
         listener = callback;
         active = true;
         move(Stage.WAIT_APP, "Режим «Телефон»: очікую відкриття Spotify...");
@@ -241,7 +243,11 @@ public final class SpotifyPlaybackController {
                     reason = "Не вдалося підтвердити пошук пісні клавішею Пошук/Enter.";
                     break;
                 case COORD_SELECT_FIRST:
-                    reason = "Не вдалося натиснути першу пісню по центру на Y=510.";
+                    reason = "Не вдалося вибрати перший результат пісні.";
+                    break;
+                case SELECT_SONG:
+                case VERIFY_SONG_ROW:
+                    reason = "Не знайшов безпечний рядок пісні або Spotify не підтвердив її відтворення.";
                     break;
                 case VERIFY_PLAY:
                     reason = "Натиснув Play, але Spotify не підтвердив відтворення. " +
@@ -288,7 +294,7 @@ public final class SpotifyPlaybackController {
                     if(age>=1500L &&
                         ScreenControlAccessibilityService.spotifyCoordinateReady())
                         move(Stage.OPEN_LIBRARY,
-                            "Відкриваю «Моя бібліотека» за координатами...");
+                            "Перевіряю вкладку «Моя бібліотека»...");
                 } else
                     move(Stage.OPEN_LIBRARY,"Відкриваю «Моя бібліотека»...");
                 break;
@@ -299,6 +305,14 @@ public final class SpotifyPlaybackController {
             case FOCUS_SEARCH:
                 if(successful(ScreenControlAccessibilityService.spotifyFocusSearch()))
                     move(Stage.TYPE_SEARCH,"Вводжу назву пісні «"+namedTrack+"»...");
+                else if(age>=2000L && !searchTabRetried) {
+                    // A tab transition might not have rendered its search
+                    // textbox. Retry the tab ONCE, never spam double taps.
+                    searchTabRetried=true;
+                    ScreenControlAccessibilityService.spotifySearchTab();
+                    if(listener!=null)listener.onProgress(
+                        "Поле пошуку не з'явилося. Перевіряю вкладку ще раз...");
+                }
                 break;
             case TYPE_SEARCH: {
                 ScreenControlAccessibilityService.SpotifyStep typed=
@@ -314,23 +328,34 @@ public final class SpotifyPlaybackController {
                     move(Stage.COORD_SELECT_FIRST,"Очікую результати пошуку Spotify...");
                 break;
             case COORD_SELECT_FIRST:
-                // One tap after submission and a loading delay. Never repeat it
-                // or claim playback merely because Android accepted the gesture.
-                if(age<3000L)break;
-                ScreenControlAccessibilityService.spotifyTapCalibrated(-1,510,
-                    (ok,detail)->{
-                        if(!active || stage!=Stage.COORD_SELECT_FIRST)return;
-                        finish(ok,ok
-                            ? "Натиснув першу пісню по центру екрана на Y=510. Перевір відтворення."
-                            : "Не вдалося натиснути першу пісню Spotify: "+detail);
-                    });
-                return;
+                // Prefer an actual accessible song row. A calibrated fallback
+                // is allowed only after the exact search query is visible.
+                if(age<1200L)break;
+                ScreenControlAccessibilityService.SpotifyStep song=
+                    ScreenControlAccessibilityService.spotifySelectTrack(namedTrack);
+                if(song==ScreenControlAccessibilityService.SpotifyStep.CLICKED) {
+                    finish(true,"Натиснув знайдену пісню «"+namedTrack+
+                        "». Перевір, чи Spotify почав відтворення.");
+                    return;
+                }
+                if(age>=3100L &&
+                   ScreenControlAccessibilityService.spotifySearchQueryVisible(namedTrack)) {
+                    ScreenControlAccessibilityService.spotifyTapCalibrated(-1,510,
+                        (ok,detail)->{
+                            if(!active || stage!=Stage.COORD_SELECT_FIRST)return;
+                            finish(ok,ok
+                                ? "Натиснув перший результат пісні. Перевір відтворення."
+                                : "Не вдалося натиснути результат Spotify: "+detail);
+                        });
+                    return;
+                }
+                break;
             case WAIT_PLAYLIST_PAGE: {
                 ScreenControlAccessibilityService.SpotifyStep ready=
                     ScreenControlAccessibilityService.spotifyNamedPlaylistDetailReady(
                         namedPlaylist);
                 if(ready==ScreenControlAccessibilityService.SpotifyStep.ALREADY) {
-                    move(Stage.PLAY,"Плейлист відкрито. Запускаю велику кнопку Play...");
+                    move(Stage.SELECT_SONG,"Плейлист відкрито. Обираю першу пісню зі списку...");
                 } else if(!playlistRowRetried && age>=2600L) {
                     // Spotify Compose may acknowledge ACTION_CLICK without
                     // leaving My Library. Retry the exact named row once,
@@ -340,7 +365,7 @@ public final class SpotifyPlaybackController {
                         ScreenControlAccessibilityService.spotifyRetryNamedPlaylistEntry(
                             namedPlaylist);
                     if(again==ScreenControlAccessibilityService.SpotifyStep.ALREADY)
-                        move(Stage.PLAY,"Відкрився плейлист. Натискаю Play...");
+                        move(Stage.SELECT_SONG,"Плейлист відкрито. Обираю пісню зі списку...");
                     else if(again==ScreenControlAccessibilityService.SpotifyStep.CLICKED)
                         move(Stage.WAIT_PLAYLIST_PAGE,
                             "Повторно відкриваю плейлист дотиком. Чекаю сторінку...");
@@ -352,30 +377,21 @@ public final class SpotifyPlaybackController {
                 break;
             }
             case OPEN_LIBRARY:
-                if(requested==SpotifyMusicCommands.Kind.PLAYLIST) {
-                    if(!ScreenControlAccessibilityService.spotifyCoordinateReady()) {
-                        finish(false,"Spotify не відкритий для натискання «Моя бібліотека».");
-                        return;
-                    }
-                    ScreenControlAccessibilityService.spotifyTapCalibrated(665,2224,
-                        (ok,detail)->{
-                            if(!active || stage!=Stage.OPEN_LIBRARY)return;
-                            if(!ok) {
-                                finish(false,"Не відкрив «Моя бібліотека»: "+detail);
-                                return;
-                            }
-                            move(Stage.OPEN_COLLECTION,
-                                "Відкрив «Моя бібліотека». Шукаю плейлист «"+
-                                namedPlaylist+"» прокручуванням...");
-                            handler.postDelayed(poll,800L);
-                        });
-                    return;
+                // Never tap a fixed bottom-tab coordinate when already in
+                // My Library or on the requested playlist detail page.
+                if(requested==SpotifyMusicCommands.Kind.PLAYLIST &&
+                   ScreenControlAccessibilityService.spotifyNamedPlaylistDetailReady(
+                       namedPlaylist)==ScreenControlAccessibilityService.SpotifyStep.ALREADY) {
+                    move(Stage.SELECT_SONG,
+                        "Плейлист уже відкрито. Обираю пісню зі списку...");
+                } else if (successful(ScreenControlAccessibilityService.spotifyControl(
+                    SpotifyUiLabels.Target.LIBRARY, null))) {
+                    move(Stage.OPEN_COLLECTION,requested==SpotifyMusicCommands.Kind.RAP
+                        ? "Перевіряю «Пісні, що сподобалися»..."
+                        : requested==SpotifyMusicCommands.Kind.PLAYLIST
+                            ? "Шукаю «"+namedPlaylist+"» у Моїй бібліотеці..."
+                            : "Шукаю плейлист «Укр муз»...");
                 }
-                if (successful(ScreenControlAccessibilityService.spotifyControl(
-                    SpotifyUiLabels.Target.LIBRARY, null)))
-                    move(Stage.OPEN_COLLECTION, requested == SpotifyMusicCommands.Kind.RAP
-                        ? "Чекаю «Пісні, що сподобалися»..."
-                        : "Шукаю плейлист «Укр муз»...");
                 break;
             case OPEN_COLLECTION: {
                 ScreenControlAccessibilityService.SpotifyStep found;
@@ -395,10 +411,10 @@ public final class SpotifyPlaybackController {
                             "Натиснув плейлист. Очікую його сторінку...");
                     else
                         move(requested == SpotifyMusicCommands.Kind.RAP ?
-                            Stage.CHOOSE_RAP : Stage.PLAY,
+                            Stage.CHOOSE_RAP : Stage.SELECT_SONG,
                             requested == SpotifyMusicCommands.Kind.RAP
                                 ? "Чекаю кнопку жанру «Реп»..."
-                                : "Сторінка плейлиста відкрита. Натискаю Play...");
+                                : "Обираю першу пісню зі списку...");
                 } else {
                     boolean canScroll = requested == SpotifyMusicCommands.Kind.UKRAINIAN ||
                         requested == SpotifyMusicCommands.Kind.PLAYLIST;
@@ -419,8 +435,41 @@ public final class SpotifyPlaybackController {
                 if (successful(ScreenControlAccessibilityService.spotifyControl(
                     SpotifyUiLabels.Target.RAP_FILTER,
                     SpotifyUiLabels.Target.LIKED_SONGS)))
-                    move(Stage.PLAY, "Знайшов «Реп». Натискаю Play без перемішування...");
+                    move(Stage.SELECT_SONG, "Фільтр «Реп» вибрано. Обираю пісню зі списку...");
                 break;
+            case SELECT_SONG: {
+                if(age<1150L)break;
+                SpotifyUiLabels.Target target=requested==SpotifyMusicCommands.Kind.PLAYLIST
+                    ? null : pageTarget();
+                ScreenControlAccessibilityService.SpotifyStep chosen=
+                    ScreenControlAccessibilityService.spotifySelectFirstPlaylistSong(
+                        target,requested==SpotifyMusicCommands.Kind.PLAYLIST
+                            ? namedPlaylist : null);
+                if(chosen==ScreenControlAccessibilityService.SpotifyStep.CLICKED)
+                    move(Stage.VERIFY_SONG_ROW,
+                        "Натиснув пісню зі списку. Чекаю підтвердження Spotify...");
+                else if(chosen==ScreenControlAccessibilityService.SpotifyStep.BLOCKED) {
+                    finish(false,"Не вдалося отримати доступ до пісень Spotify.");
+                    return;
+                }
+                break;
+            }
+            case VERIFY_SONG_ROW: {
+                // Never retry a song-row tap automatically: it could change
+                // the track or pause playback after UI transition.
+                SpotifyUiLabels.Target target=requested==SpotifyMusicCommands.Kind.PLAYLIST
+                    ? null : pageTarget();
+                if(ScreenControlAccessibilityService.spotifyPlaylistPlaybackState(
+                       target,requested==SpotifyMusicCommands.Kind.PLAYLIST
+                           ? namedPlaylist : null)
+                   == ScreenControlAccessibilityService.SpotifyStep.ALREADY) {
+                    finish(true,"Spotify показує відтворення вибраної пісні.");
+                } else if(age>3800L) {
+                    finish(false,"Натиснув пісню, але Spotify не підтвердив відтворення. "+
+                        "Не повторював натискання. Перевір Pixel.");
+                }
+                break;
+            }
             case PLAY: {
                 // Opening a playlist is NOT playing it. Only stop when a
                 // large visible Pause has been observed, never merely because
