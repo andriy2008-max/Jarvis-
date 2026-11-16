@@ -79,6 +79,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private static final int REQUEST_TIMER_NOTIFICATIONS = 103;
     private static final int REQUEST_AI_ATTACHMENT = 106;
     private static final int REQUEST_ASSISTANT_ROLE = 108;
+    private static final int REQUEST_WATCH_ONGOING_NOTIFICATIONS = 109;
+    private static final String PREF_WATCH_SESSION_PERMISSION_ASKED =
+        "watch_session_notification_permission_asked";
     public static final String EXTRA_AI_IMAGE_PROMPT = "com.andriy.jarvis.AI_IMAGE_PROMPT";
     private static final int BG = Color.rgb(8, 14, 29);
     private static final int PANEL = Color.rgb(17, 27, 48);
@@ -638,6 +641,18 @@ public final class MainActivity extends Activity implements RecognitionListener 
             // return-to-watchface policy. An ongoing session does, while
             // offering a one-tap return if the user presses Home.
             JarvisWatchOngoing.show(this);
+            // Android 13+ requires explicit notification permission for
+            // OngoingActivity. Ask only once, from a visible watch Activity.
+            if (Build.VERSION.SDK_INT >= 33 &&
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                    PackageManager.PERMISSION_GRANTED &&
+                !getPreferences(MODE_PRIVATE).getBoolean(
+                    PREF_WATCH_SESSION_PERMISSION_ASKED, false)) {
+                getPreferences(MODE_PRIVATE).edit().putBoolean(
+                    PREF_WATCH_SESSION_PERMISSION_ASKED, true).apply();
+                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                    REQUEST_WATCH_ONGOING_NOTIFICATIONS);
+            }
         }
         if(!isWatchDevice)JarvisWearImageBridge.attachPhone(this);
         if (isWatchDevice && JarvisPhoneMode.isActive())
@@ -3551,7 +3566,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
     @Override
     public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(code, permissions, results);
-        if (code == REQUEST_TIMER_NOTIFICATIONS) {
+        if (code == REQUEST_WATCH_ONGOING_NOTIFICATIONS) {
+            if (isWatchDevice && results.length > 0 &&
+                results[0] == PackageManager.PERMISSION_GRANTED) {
+                JarvisWatchOngoing.show(this);
+            } else if (isWatchDevice) {
+                setStatus("Дозволь сповіщення Джарвіса в налаштуваннях Watch7, "+
+                    "щоб активний сеанс не повертався автоматично до циферблата.");
+            }
+        } else if (code == REQUEST_TIMER_NOTIFICATIONS) {
             if (results.length == 0 || results[0] != PackageManager.PERMISSION_GRANTED) {
                 setStatus("Сповіщення таймера заборонені. Вібрація та сигнал можуть працювати, але повідомлення не з'явиться.");
             }
