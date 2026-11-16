@@ -430,14 +430,20 @@ public final class MainActivity extends Activity implements RecognitionListener 
         headsetRoute = new JarvisHeadsetAudioRouter(this);
         listeningAudioFocus = new JarvisListeningAudioFocus(this);
         headsetRoute.setOnRouteLost(this::onMicrophoneRouteLost);
-        aiChatClient = new AiChatClient(this);
-        worldNewsReader = new WorldNewsReader();
-        generalWebSearch = new GeneralWebSearchClient();
-        neuralSpeech = new NeuralSpeechClient(this);
-        offlinePacks = new OfflineVoicePackManager(this);
-        offlineSpeech = new OfflineSpeechClient(this, offlinePacks);
-        supertonicPack = new Supertonic3PackManager(this);
-        supertonicSpeech = new Supertonic3SpeechClient(this, supertonicPack);
+        // Wear OS uses Android's local TTS and routes network AI/API jobs
+        // to Pixel. Do not initialize the heavy phone-only AI / offline model
+        // managers on a small Watch7 process: this avoids memory pressure
+        // during the command -> speak -> listen cycle.
+        if (!isWatchDevice) {
+            aiChatClient = new AiChatClient(this);
+            worldNewsReader = new WorldNewsReader();
+            generalWebSearch = new GeneralWebSearchClient();
+            neuralSpeech = new NeuralSpeechClient(this);
+            offlinePacks = new OfflineVoicePackManager(this);
+            offlineSpeech = new OfflineSpeechClient(this, offlinePacks);
+            supertonicPack = new Supertonic3PackManager(this);
+            supertonicSpeech = new Supertonic3SpeechClient(this, supertonicPack);
+        }
         buildInterface();
         JarvisMacros.scheduleAll(this);
         JarvisPhoneMode.subscribe(phoneModeListener);
