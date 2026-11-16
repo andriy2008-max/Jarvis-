@@ -28,6 +28,9 @@ public final class BoltTaxiController {
     private long started=SystemClock.elapsedRealtime();
     private final long flowStarted=started;
     private boolean finished;
+    private boolean portalPending;
+    private boolean portalSkipped;
+    private boolean portalStartedRides;
     /** A non-sensitive marker for the exact operation that failed.
      * Keep street addresses and recognition transcripts out of logs. */
     private String operation="WAIT_BOLT";
@@ -70,18 +73,88 @@ public final class BoltTaxiController {
         }
         BoltTaxiController job=new BoltTaxiController(context,listener,address,lease);
         synchronized(BoltTaxiController.class){active=job;}
-        listener.onProgress("Відкриваю Bolt. Використовую збережені координати, без читання екрана...");
+        listener.onProgress(PortalUiBridge.available(context)
+            ? "Відкриваю Bolt. Спробую знайти кнопки через локальний Mobilerun Portal..."
+            : "Відкриваю Bolt. Служба Portal вимкнена; збережені координати — резервний варіант.");
         HANDLER.postDelayed(job.tick,POLL_MS);
     }
     private void move(Stage next,String info){
         stage=next;started=SystemClock.elapsedRealtime();
+        portalPending=false;
+        portalSkipped=false;
         listener.onProgress(info);
     }
+
+    /** Portal reads the current Bolt tree and taps ONE verified target.
+     * WAIT is polled every 2 s; uncertain taps NEVER trigger coordinate retries. */
+    private boolean maybeTapThroughPortal(Stage expected,PortalUiBridge.Target target) {
+        if(!PortalUiBridge.available(context)||portalSkipped)return false;
+        long stageAge=SystemClock.elapsedRealtime()-started;
+        if(stageAge>11000L) {
+            if(portalStartedRides && expected==Stage.COORD_DROPOFF) {
+                finish(false,"Portal не знайшов «Місце висадки» після натискання "+
+                    "«Рушаймо». Не натискав координати на непідтвердженій сторінці.");
+                return true;
+            }
+            portalSkipped=true;
+            listener.onProgress("Portal не побачив потрібну кнопку. "+
+                "Переходжу до перевіреного резервного способу.");
+            return false;
+        }
+        if(portalPending)return true;
+        portalPending=true;
+        operation=expected==Stage.COORD_RIDES?"PORTAL_RIDES":"PORTAL_DROPOFF";
+        PortalUiBridge.tap(context,target,(state,note)->{
+            portalPending=false;
+            if(finished||stage!=expected)return;
+            switch(state) {
+                case CLICKED:
+                    if(expected==Stage.COORD_RIDES) {
+                        portalStartedRides=true;
+                        move(Stage.COORD_DROPOFF,
+                            "Portal знайшов і натиснув «Рушаймо». "+
+                            "Чекаю «Місце висадки»...");
+                        HANDLER.postDelayed(tick,2000L);
+                    } else {
+                        if(address.isEmpty()) {
+                            finish(true,"Відкрив «Місце висадки» через Portal. "+
+                                "Назви адресу призначення.");
+                        } else {
+                            move(Stage.COORD_TYPE,
+                                "Portal натиснув «Місце висадки». "+
+                                "Перевіряю активне поле адреси...");
+                            HANDLER.postDelayed(tick,800L);
+                        }
+                    }
+                    break;
+                case UNSURE:
+                    finish(false,"Portal: не підтверджено дію «"+
+                        (expected==Stage.COORD_RIDES?"Рушаймо":"Місце висадки")+
+                        "». Жодного повторного натискання не робив.");
+                    break;
+                case UNAVAILABLE:
+                    if(portalStartedRides && expected==Stage.COORD_DROPOFF){
+                        finish(false,"Після натискання «Рушаймо» Portal став "+
+                            "недоступним. Не натискаю координати навмання.");
+                        return;
+                    }
+                    portalSkipped=true;
+                    HANDLER.post(tick);
+                    break;
+                case WAIT:
+                default:
+                    listener.onProgress("Portal очікує кнопку Bolt. "+
+                        "Знову перевірю елементи через 2 секунди...");
+                    HANDLER.postDelayed(tick,2000L);
+                    break;
+            }
+        });
+        return true;
+    }
     /**
-     * The only supported flow is the owner's fixed-coordinate Bolt sequence.
-     * Never fall back to stale OPEN_APP/Accessibility-tree navigation:
-     * those stages depend on brittle Bolt labels and are not recoverable
-     * when Android hides the window hierarchy.
+     * Prefer the owner's opt-in, localhost Portal semantic UI tree.
+     * If absent, preserve calibrated native gestures. Never use guessed
+     * coordinates after a Portal gesture with uncertain confirmation.
      *
      * An unexpected error stops the command without repeating a tap.
      */
@@ -103,7 +176,7 @@ public final class BoltTaxiController {
     }
 
     /**
-     * Coordinate-only Bolt flow configured by the device owner:
+     * Guarded Bolt flow configured by the device owner:
      * home «Рушаймо» (333,645), 2s later «Місце висадки» (450,520).
      * Each coordinate is tapped once. If the destination editor belongs to
      * Bolt, Android's Accessibility InputMethod enters the spoken address.
@@ -137,6 +210,8 @@ public final class BoltTaxiController {
                     } else HANDLER.postDelayed(tick,POLL_MS);
                     return;
                 }
+                if(maybeTapThroughPortal(Stage.COORD_RIDES,
+                    PortalUiBridge.Target.BOLT_RIDES))return;
                 operation="TAP_RUSHAYMO_PREP";
                 ScreenControlAccessibilityService.boltTapCalibrated(333,645,
                     (ok,detail)->{
@@ -157,6 +232,8 @@ public final class BoltTaxiController {
                     finish(false,"Bolt не підтверджено перед натисканням «Місце висадки».");
                     return;
                 }
+                if(maybeTapThroughPortal(Stage.COORD_DROPOFF,
+                    PortalUiBridge.Target.BOLT_DROPOFF))return;
                 operation="TAP_DROPOFF_PREP";
                 ScreenControlAccessibilityService.boltTapCalibrated(450,520,
                     (ok,detail)->{
