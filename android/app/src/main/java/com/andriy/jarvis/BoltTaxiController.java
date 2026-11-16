@@ -104,8 +104,23 @@ public final class BoltTaxiController {
         if(portalPending)return true;
         portalPending=true;
         operation=expected==Stage.COORD_RIDES?"PORTAL_RIDES":"PORTAL_DROPOFF";
+        // Portal is a second Accessibility service. Ensure Jarvis's own
+        // floating face never intercepts a Portal gesture.
+        final Runnable restore;
+        try { restore=FloatingJarvisService.hideForGesture(); }
+        catch(RuntimeException blocked) {
+            portalPending=false;
+            finish(false,"Не вдалося приховати плаваюче обличчя перед "+
+                "натисканням Portal. Ніяких координат не натискав.");
+            return true;
+        }
         PortalUiBridge.tap(context,target,(state,note)->{
             portalPending=false;
+            try {restore.run();}
+            catch(RuntimeException overlayFailure) {
+                finish(false,"Не вдалося відновити плаваючий інтерфейс Джарвіса.");
+                return;
+            }
             if(finished||stage!=expected)return;
             switch(state) {
                 case CLICKED:
