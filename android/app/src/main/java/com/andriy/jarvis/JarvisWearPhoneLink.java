@@ -145,6 +145,17 @@ public final class JarvisWearPhoneLink {
         send(JarvisWearProtocol.SET_ALARM,time,callback);
     }
 
+    /** A one-shot timer request uses an exact numeric duration, never AI.
+     * It is independent of the temporary phone screen-control session. */
+    public void setTimer(int seconds,Callback callback) {
+        if(callback==null)return;
+        if(!TimerRules.valid(seconds)) {
+            callback.finished(false,"Некоректна тривалість таймера. Максимум три години.");
+            return;
+        }
+        send(JarvisWearProtocol.SET_TIMER,Integer.toString(seconds),callback);
+    }
+
     /** Same phone assistant request, with all pages available in a watch reader. */
     public void assistantDocument(String voice,DocumentCallback cb) {
         if(cb==null)return;
