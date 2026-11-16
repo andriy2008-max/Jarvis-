@@ -63,6 +63,14 @@ public final class JarvisWearPhoneAssistant {
                     completion::finished)) return;
         }
 
+        // Read-only financial questions and locally persisted budgets have
+        // their own deterministic handler, before any AI fallback.
+        String financeInsight=FinanceInsightsController.handle(phone,raw);
+        if(financeInsight!=null) {
+            completion.finished(true,financeInsight);
+            return;
+        }
+
         // Money Tracker supports a user-issued token. API writes are deliberately
         // disabled until its provider's transaction schema is verified;
         // existing Accessibility workflow remains available.
