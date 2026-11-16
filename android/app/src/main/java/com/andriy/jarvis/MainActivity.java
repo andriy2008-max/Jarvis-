@@ -449,42 +449,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         JarvisPhoneMode.subscribe(phoneModeListener);
         deviceActions = new DeviceActions(this);
 
-        tts = new TextToSpeech(this, result -> {
-            if (result == TextToSpeech.SUCCESS && tts != null) {
-                int supported = tts.setLanguage(Locale.forLanguageTag("uk-UA"));
-                if (supported == TextToSpeech.LANG_MISSING_DATA || supported == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    appendDialogue("Джарвіс", "Для озвучення встанови український голос TTS у налаштуваннях Android.");
-                }
-                ttsReady = true;
-                applyPreferredVoice();
-                tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                    @Override public void onStart(String id) {
-                        if (id != null && id.equals(activeTtsId) && voiceEnabled) {
-                            // Start the audio clock immediately. Word-range callbacks
-                            // can arrive before the main-thread animation update.
-                            JarvisSpeechMouth.startSystemTts();
-                            runOnUiThread(() -> {
-                                if (id.equals(activeTtsId) && voiceEnabled)
-                                    markSpeaking();
-                            });
-                        }
-                    }
-                    @Override public void onDone(String id) {
-                        finishSystemTts(id);
-                    }
-                    @Override public void onError(String id) {
-                        finishSystemTts(id);
-                    }
-                    @Override public void onStop(String id, boolean interrupted) {
-                        finishSystemTts(id);
-                    }
-                    @Override public void onRangeStart(String id, int start, int end, int frame) {
-                        if (id != null && id.equals(activeTtsId) && voiceEnabled)
-                            JarvisSpeechMouth.systemWord(end - start);
-                    }
-                });
-            }
-        });
+        initializeSystemTts();
+
 
         try {
             if (SpeechRecognizer.isRecognitionAvailable(this)) {
@@ -1478,6 +1444,118 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private String profileLabel(String profile) {
         return VoiceRanking.LADA.equals(profile) ? "Лада" : "Дмитро";
+    }
+
+    /** Restartable system voice; never let Wear OS's TTS binder failure kill
+     * the Jarvis Activity. Initialization callbacks are always handled on UI.
+     */
+    private int ttsGeneration;
+    private long lastTtsRecoveryMs=-60000L;
+    private Runnable ttsRecovery;
+    private boolean ttsClosing;
+
+    private void initializeSystemTts() {
+        if(ttsClosing || isFinishing() || isDestroyed())return;
+        final int generation=++ttsGeneration;
+        ttsReady=false;
+        try {
+            tts=new TextToSpeech(this,result->runOnUiThread(()->{
+                if(ttsClosing || isDestroyed() || generation!=ttsGeneration)return;
+                if(result!=TextToSpeech.SUCCESS || tts==null) {
+                    onSystemTtsFailure("INIT",null);
+                    return;
+                }
+                try {
+                    // Install progress callbacks before exposing the engine as ready.
+                    tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                        @Override public void onStart(String id) {
+                            if(id!=null && id.equals(activeTtsId) && voiceEnabled) {
+                                JarvisSpeechMouth.startSystemTts();
+                                runOnUiThread(()->{
+                                    if(id.equals(activeTtsId) && voiceEnabled &&
+                                        !isFinishing() && !isDestroyed())
+                                        markSpeaking();
+                                });
+                            }
+                        }
+                        @Override public void onDone(String id) {
+                            finishSystemTts(id);
+                        }
+                        @Override public void onError(String id) {
+                            android.util.Log.w("JARVIS_WATCH_TTS",
+                                "Android voice playback reported an error");
+                            runOnUiThread(()->{
+                                if(!isFinishing() && !isDestroyed() &&
+                                   id!=null && id.equals(activeTtsId) && isWatchDevice)
+                                    setStatus("Голос Watch7 не відтворив відповідь. Джарвіс активний.");
+                            });
+                            finishSystemTts(id);
+                        }
+                        @Override public void onStop(String id,boolean interrupted) {
+                            finishSystemTts(id);
+                        }
+                        @Override public void onRangeStart(String id,int start,
+                                                           int end,int frame) {
+                            if(id!=null && id.equals(activeTtsId) && voiceEnabled)
+                                JarvisSpeechMouth.systemWord(end-start);
+                        }
+                    });
+                    int supported=tts.setLanguage(Locale.forLanguageTag("uk-UA"));
+                    if(supported==TextToSpeech.LANG_MISSING_DATA ||
+                       supported==TextToSpeech.LANG_NOT_SUPPORTED)
+                        appendDialogue("Джарвіс",
+                            "Для озвучення встанови український голос TTS у налаштуваннях Android.");
+                    ttsReady=true;
+                    applyPreferredVoice();
+                } catch(RuntimeException failure) {
+                    onSystemTtsFailure("INIT_CONFIG",failure);
+                }
+            }));
+        } catch(RuntimeException failure) {
+            onSystemTtsFailure("CONSTRUCT",failure);
+        }
+    }
+
+    /** Stop only the broken voice engine, never the watch session or face.
+     * Automatically reconnect at most once per 30 seconds. Never replay
+     * a command after an ambiguous TTS engine failure.
+     */
+    private void onSystemTtsFailure(String stage,RuntimeException failure) {
+        if(failure!=null)
+            android.util.Log.e("JARVIS_WATCH_TTS","TTS failure at "+stage,failure);
+        else android.util.Log.w("JARVIS_WATCH_TTS","TTS unavailable at "+stage);
+        if(ttsClosing)return;
+        Runnable fail=()->{
+            if(ttsClosing || isDestroyed())return;
+            ++ttsGeneration;
+            ttsReady=false;
+            activeTtsId=null;
+            speaking=false;
+            JarvisSpeechMouth.stopSystemTts();
+            TextToSpeech broken=tts;
+            tts=null;
+            if(broken!=null)try{broken.shutdown();}
+                catch(RuntimeException shutdownError){
+                    android.util.Log.w("JARVIS_WATCH_TTS",
+                        "TTS engine shutdown failed",shutdownError);
+                }
+            if(face!=null)face.setState("idle");
+            if(isWatchDevice)
+                setStatus("Голос Watch7 тимчасово недоступний. Джарвіс не закривається; відновлюю озвучення.");
+            if(ttsRecovery!=null)wakeHandler.removeCallbacks(ttsRecovery);
+            long now=SystemClock.elapsedRealtime();
+            if(isWatchDevice && foreground && now-lastTtsRecoveryMs>=30000L){
+                lastTtsRecoveryMs=now;
+                ttsRecovery=()->{
+                    ttsRecovery=null;
+                    if(!ttsClosing && foreground && !isFinishing() && !isDestroyed())
+                        initializeSystemTts();
+                };
+                wakeHandler.postDelayed(ttsRecovery,1200L);
+            }
+        };
+        if(Looper.myLooper()==Looper.getMainLooper())fail.run();
+        else runOnUiThread(fail);
     }
 
     private void applyPreferredVoice() {
