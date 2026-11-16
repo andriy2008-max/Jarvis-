@@ -72,6 +72,34 @@ public final class FinanceVoiceCommandsTest {
         yes(FinanceVoiceCommands.parse("витратив 150 готівка невідоме таксі")==null);
         yes(FinanceVoiceCommands.parse("витратив 150 готівка")==null);
         yes(FinanceVoiceCommands.parse("витратив 150")==null);
+        // "заробив" is an INCOME only. Account and one-word income
+        // category are required; every remaining word is exactly the memo.
+        testNote("Заробив 350 готівка чайові столик сім",
+            FinanceVoiceCommands.Kind.INCOME,"350","чай","готівка","столик сім");
+        testNote("Джарвіс, заробив 15000 грн моно зарплата за листопад",
+            FinanceVoiceCommands.Kind.INCOME,"15000","Зарплата","карта моно","за листопад");
+        testNote("заробив 200,50 карта моно підробіток доставка ввечері",
+            FinanceVoiceCommands.Kind.INCOME,"200.5","Підробіток","карта моно",
+            "доставка ввечері");
+        testNote("заробив 90 заначка гривні бонус подарунок від друга",
+            FinanceVoiceCommands.Kind.INCOME,"90","Бонус","заначка гривні",
+            "подарунок від друга");
+        test("заробив 120 готівка борг",
+            FinanceVoiceCommands.Kind.INCOME,"120","борг","готівка");
+        test("заробив 100 моно інвестиції",
+            FinanceVoiceCommands.Kind.INCOME,"100","Інвестиції","карта моно");
+        yes(FinanceVoiceCommands.shortIncomeIntent("джарвіс заробив"));
+        yes(FinanceVoiceCommands.shortFinanceIntent("заробив 100 моно чайові"));
+        yes(FinanceVoiceCommands.parse("заробив 0 моно зарплата")==null);
+        yes(FinanceVoiceCommands.parse("заробив 1000000 моно зарплата")==null);
+        yes(FinanceVoiceCommands.parse("заробив 200 моно транспорт таксі")==null);
+        yes(FinanceVoiceCommands.parse("заробив 200 монобанк чайові")==null);
+        yes(FinanceVoiceCommands.parse("заробив 200 чайові")==null);
+        yes(FinanceVoiceCommands.parse("заробив 200")==null);
+        yes(FinanceVoiceCommands.parse("заробив")==null);
+        yes(FinanceVoiceCommands.parse("заробив 200 моно невідоме примітка")==null);
+        yes(!FinanceVoiceCommands.shortIncomeIntent("витратив 150 моно транспорт"));
+        yes(!FinanceVoiceCommands.shortFinanceIntent("переказ 1000 на карту"));
         yes(!FinanceVoiceCommands.shortExpenseIntent("переказ 1000 на карту"));
         yes(FinanceVoiceCommands.parse("переказ 1000 на карту")==null);
         yes(FinanceVoiceCommands.parse("переказ з карти 200")==null);
