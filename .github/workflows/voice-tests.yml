@@ -177,6 +177,7 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/JarvisTaxiCommands.java \
             android/app/src/main/java/com/andriy/jarvis/BoltUiLabels.java \
             android/app/src/main/java/com/andriy/jarvis/FinanceVoiceCommands.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceInsightsCommands.java \
             android/app/src/main/java/com/andriy/jarvis/FinanceManagerUiLabels.java \
             android/app/src/main/java/com/andriy/jarvis/TelegramReplyCommands.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisMicrophoneChoice.java \
@@ -190,6 +191,7 @@ jobs:
             android/app/src/test/java/com/andriy/jarvis/JarvisTaxiCommandsTest.java \
             android/app/src/test/java/com/andriy/jarvis/BoltUiLabelsTest.java \
             android/app/src/test/java/com/andriy/jarvis/FinanceVoiceCommandsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/FinanceInsightsCommandsTest.java \
             android/app/src/test/java/com/andriy/jarvis/FinanceManagerUiLabelsTest.java \
             android/app/src/test/java/com/andriy/jarvis/TelegramReplyCommandsTest.java \
             android/app/src/main/java/com/andriy/jarvis/SpotifyMusicCommands.java \
@@ -263,6 +265,7 @@ jobs:
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisTaxiCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.BoltUiLabelsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.FinanceVoiceCommandsTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.FinanceInsightsCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.FinanceManagerUiLabelsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.TelegramReplyCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisMicrophoneChoiceTest
