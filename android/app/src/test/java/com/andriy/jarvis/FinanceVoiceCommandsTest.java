@@ -44,6 +44,35 @@ public final class FinanceVoiceCommandsTest {
         yes(FinanceVoiceCommands.parse("запиши витрату 150 на транспорт примітка")==null);
         yes(FinanceVoiceCommands.parse("запиши витрату 150 на щось таксі")==null);
         yes(FinanceVoiceCommands.parse("запиши витрату 150 на транспорт")!=null);
+        // Fast format: verb, amount, known account, exactly ONE category
+        // word; any remaining words become the note (not another category).
+        testNote("витратив 150 готівка транспорт таксі",
+            FinanceVoiceCommands.Kind.EXPENSE,"150","Транспорт","готівка","таксі");
+        testNote("Потратив 50 моно транспорт автобус на роботу",
+            FinanceVoiceCommands.Kind.EXPENSE,"50","Транспорт","карта моно",
+            "автобус на роботу");
+        testNote("Портатив 150 карта моно харчування кава і круасан",
+            FinanceVoiceCommands.Kind.EXPENSE,"150","Харчування","карта моно",
+            "кава і круасан");
+        testNote("Джарвіс, витратив 12,50 грн заначка гривні шопінг футболка",
+            FinanceVoiceCommands.Kind.EXPENSE,"12.5","Шопінг","заначка гривні",
+            "футболка");
+        testNote("витратив 150 готівки транспорт автобус",
+            FinanceVoiceCommands.Kind.EXPENSE,"150","Транспорт","готівка","автобус");
+        test("витратив 180 грн готівка транспорт",
+            FinanceVoiceCommands.Kind.EXPENSE,"180","Транспорт","готівка");
+        test("витратив 90 моно телефон",
+            FinanceVoiceCommands.Kind.EXPENSE,"90","Телефон","карта моно");
+        yes(FinanceVoiceCommands.shortExpenseIntent("джарвіс, портатив 150 готівка транспорт"));
+        yes(FinanceVoiceCommands.shortExpenseIntent("потратив"));
+        yes(FinanceVoiceCommands.parse("витратив 0 готівка транспорт")==null);
+        yes(FinanceVoiceCommands.parse("витратив 1000000 готівка транспорт")==null);
+        yes(FinanceVoiceCommands.parse("витратив 150 транспорт таксі")==null);
+        yes(FinanceVoiceCommands.parse("витратив 150 невідомий транспорт таксі")==null);
+        yes(FinanceVoiceCommands.parse("витратив 150 готівка невідоме таксі")==null);
+        yes(FinanceVoiceCommands.parse("витратив 150 готівка")==null);
+        yes(FinanceVoiceCommands.parse("витратив 150")==null);
+        yes(!FinanceVoiceCommands.shortExpenseIntent("переказ 1000 на карту"));
         yes(FinanceVoiceCommands.parse("переказ 1000 на карту")==null);
         yes(FinanceVoiceCommands.parse("переказ з карти 200")==null);
         yes(FinanceVoiceCommands.parse("запиши витрату 0 на транспорт")==null);
