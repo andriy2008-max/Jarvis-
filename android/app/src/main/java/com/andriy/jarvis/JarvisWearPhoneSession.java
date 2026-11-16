@@ -317,6 +317,13 @@ public final class JarvisWearPhoneSession {
                 out.reply(ok,message,telegramSession,false));
             return;
         }
+        // Finances are evaluated on the phone, even when a manual screen
+        // control session is active on the watch. Never use watch-local data.
+        String financeInsight=FinanceInsightsController.handle(context,command);
+        if(financeInsight!=null) {
+            out.reply(true,financeInsight,session,false);
+            return;
+        }
         if(FinanceManagerController.isRunning()) {
             if(FinanceVoiceCommands.cancel(command)) {
                 FinanceManagerController.cancel();
