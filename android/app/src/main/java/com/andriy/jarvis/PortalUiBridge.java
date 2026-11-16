@@ -192,9 +192,23 @@ final class PortalUiBridge {
 
     private static ScreenPoint choose(JSONArray tree,Target target,Context c) {
         if(tree==null || tree.length()==0)return null;
-        DisplayMetrics screen=c.getResources().getDisplayMetrics();
-        final int width=screen.widthPixels;
-        final int height=screen.heightPixels;
+        // Accessibility bounds use physical display pixels, not the app
+        // content area (which excludes status/navigation bars).
+        android.graphics.Point physical=new android.graphics.Point();
+        try {
+            android.hardware.display.DisplayManager displays=
+                (android.hardware.display.DisplayManager)c.getSystemService(
+                    Context.DISPLAY_SERVICE);
+            android.view.Display current=displays==null?null:
+                displays.getDisplay(android.view.Display.DEFAULT_DISPLAY);
+            if(current!=null)current.getRealSize(physical);
+        }catch(RuntimeException ignored){}
+        if(physical.x<=0 || physical.y<=0) {
+            DisplayMetrics metrics=c.getResources().getDisplayMetrics();
+            physical.set(metrics.widthPixels,metrics.heightPixels);
+        }
+        final int width=physical.x;
+        final int height=physical.y;
         if(width<360 || height<640 || height<width*1.25f)return null;
         ArrayDeque<JSONObject> nodes=new ArrayDeque<>();
         for(int i=0;i<tree.length();i++){
