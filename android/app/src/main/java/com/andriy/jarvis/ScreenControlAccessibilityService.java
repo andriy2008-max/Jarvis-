@@ -2448,6 +2448,62 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
     }
 
+    /** Tap a verified playable track ROW, not a green Play or an action icon.
+     * For named playlists require the exact playlist detail header; for rap
+     * require Liked Songs to be the opened page. The RAP filter was selected
+     * separately in the controller before this method is called.
+     */
+    public static SpotifyStep spotifySelectFirstPlaylistSong(
+            SpotifyUiLabels.Target playlist,String named) {
+        ScreenControlAccessibilityService service=connected.get();
+        if(service==null || !service.sessionActive)return SpotifyStep.BLOCKED;
+        AccessibilityNodeInfo root=service.currentSpotifyRoot();
+        if(root==null)return SpotifyStep.WAIT;
+        if(named!=null && !service.spotifyPlaylistHeaderVisible(root,null,named))
+            return SpotifyStep.WAIT;
+        if(named==null && (playlist==null || !spotifyHasTitle(root,playlist)))
+            return SpotifyStep.WAIT;
+        Rect frame=new Rect();root.getBoundsInScreen(frame);
+        float density=service.getResources().getDisplayMetrics().density;
+        ArrayDeque<AccessibilityNodeInfo> queue=new ArrayDeque<>();
+        queue.add(root);
+        AccessibilityNodeInfo first=null;
+        Rect selected=null;
+        int scanned=0;
+        while(!queue.isEmpty() && ++scanned<=MAX_SCAN){
+            AccessibilityNodeInfo node=queue.removeFirst();
+            if(!node.isVisibleToUser() || !node.isEnabled() || node.isPassword())
+                continue;
+            String label=asString(node.getText());
+            String desc=asString(node.getContentDescription());
+            if(SpotifyPlaylistRowRules.possibleTitle(label) ||
+               SpotifyPlaylistRowRules.possibleTitle(desc)){
+                AccessibilityNodeInfo clickableRow=clickable(node);
+                if(clickableRow!=null && clickableRow.isEnabled() &&
+                   clickableRow.isClickable() && !clickableRow.isPassword()){
+                    Rect bounds=new Rect();
+                    clickableRow.getBoundsInScreen(bounds);
+                    if(SpotifyPlaylistRowRules.row(bounds.left,bounds.top,
+                        bounds.right,bounds.bottom,frame.left,frame.top,
+                        frame.right,frame.bottom,density) &&
+                       (selected==null || bounds.top<selected.top)) {
+                        first=clickableRow;
+                        selected=bounds;
+                    }
+                }
+            }
+            for(int i=0;i<node.getChildCount();i++){
+                AccessibilityNodeInfo child=node.getChild(i);
+                if(child!=null)queue.addLast(child);
+            }
+        }
+        if(scanned>MAX_SCAN || first==null || service.currentSpotifyRoot()==null)
+            return SpotifyStep.WAIT;
+        FloatingJarvisService.avoidControl(selected);
+        return first.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
+    }
+
     /** Open one saved playlist selected by an explicit voice command.
      * A library item must have an exact visible title and a clickable row.
      * Ambiguous duplicates do not get clicked. */
