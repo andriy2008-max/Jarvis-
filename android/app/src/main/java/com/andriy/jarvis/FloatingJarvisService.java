@@ -1213,6 +1213,28 @@ public final class FloatingJarvisService extends Service {
             reply(financeInsight);
             return;
         }
+        // Spoken short expenses must execute exactly like the full finance
+        // format when Jarvis is used from its small floating face.
+        if(FinanceManagerController.isRunning()) {
+            if(FinanceVoiceCommands.cancel(raw))FinanceManagerController.cancel();
+            else reply("Зараз виконую фінансовий запис. Дочекайся завершення або скажи «Скасуй витрату».");
+            return;
+        }
+        if(FinanceVoiceCommands.parse(raw)!=null) {
+            FinanceManagerController.start(this,raw,new FinanceManagerController.Listener(){
+                @Override public void onProgress(String detail){
+                    if(!closing)message(detail);
+                }
+                @Override public void onFinished(boolean success,String detail){
+                    if(!closing)reply(detail);
+                }
+            });
+            return;
+        }
+        if(FinanceVoiceCommands.shortExpenseIntent(raw)) {
+            reply("Не розпізнав коротку витрату. Скажи: «Витратив 150 готівка транспорт таксі».");
+            return;
+        }
         JarvisPhoneMode.Transition transition = JarvisPhoneMode.transition(raw);
         if (transition == JarvisPhoneMode.Transition.ENTER) {
             String result = JarvisPhoneModeManager.enter(this, true);
