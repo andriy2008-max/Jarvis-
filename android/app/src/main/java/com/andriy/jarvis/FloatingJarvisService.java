@@ -1200,6 +1200,32 @@ public final class FloatingJarvisService extends Service {
         if (JarvisMacros.handleVoice(this, raw, result -> {
             if (!closing) reply(result);
         })) return;
+        if(FinanceVoiceQueries.matches(raw)){
+            String answer;
+            try(FinanceLedger ledger=new FinanceLedger(this)){
+                android.app.KeyguardManager lock=(android.app.KeyguardManager)
+                    getSystemService(KEYGUARD_SERVICE);
+                answer=lock!=null && lock.isDeviceLocked() &&
+                    !"true".equals(ledger.setting("finance_voice_locked","false"))
+                    ? "Розблокуй Pixel для фінансового звіту."
+                    : FinanceVoiceQueries.answer(ledger,raw);
+            }catch(RuntimeException error){
+                answer="Не вдалося прочитати фінансовий журнал.";
+            }
+            reply(answer);
+            return;
+        }
+        if(FinanceVoiceCommands.parse(raw)!=null){
+            FinanceManagerController.start(this,raw,new FinanceManagerController.Listener(){
+                @Override public void onProgress(String step){if(!closing)message(step);}
+                @Override public void onFinished(boolean ok,String detail){if(!closing)reply(detail);}
+            });
+            return;
+        }
+        if(FinanceVoiceCommands.shortFinanceIntent(raw)){
+            reply("Формат: «Витратив 150 готівка транспорт таксі» або «Заробив 350 моно чайові столик 5».");
+            return;
+        }
         JarvisPhoneMode.Transition transition = JarvisPhoneMode.transition(raw);
         if (transition == JarvisPhoneMode.Transition.ENTER) {
             String result = JarvisPhoneModeManager.enter(this, true);
