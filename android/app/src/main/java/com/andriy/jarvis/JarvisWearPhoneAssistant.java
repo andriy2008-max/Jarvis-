@@ -96,7 +96,9 @@ public final class JarvisWearPhoneAssistant {
         }
         if (looksLikeFinanceCommand(normalized)) {
             completion.finished(false,
-                FinanceVoiceCommands.shortExpenseIntent(raw)
+                FinanceVoiceCommands.shortIncomeIntent(raw)
+                    ? "Не розпізнав короткий дохід. Скажи: «Заробив 350 готівка чайові столик 5»."
+                    : FinanceVoiceCommands.shortExpenseIntent(raw)
                     ? "Не розпізнав коротку витрату. Скажи: «Витратив 150 готівка транспорт таксі»."
                     : "Не розпізнав суму або категорію. Скажи: «Запиши витрату 350 гривень на харчування».");
             return;
@@ -460,7 +462,7 @@ public final class JarvisWearPhoneAssistant {
     }
 
     private static boolean looksLikeFinanceCommand(String normalized) {
-        return FinanceVoiceCommands.shortExpenseIntent(normalized) ||
+        return FinanceVoiceCommands.shortFinanceIntent(normalized) ||
             normalized.matches(
                 "^(?:запиши|додай|занеси|зафіксуй)\\s+" +
                 "(?:витрату|витрати|дохід|доход|надходження)(?:\\s+.*)?$");
