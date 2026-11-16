@@ -5011,11 +5011,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
             });
             return;
         }
-        if (!isWatchDevice && FinanceVoiceCommands.shortExpenseIntent(raw)) {
-            String detail="Не розпізнав коротку витрату. Скажи: "+
-                "«Витратив 150 готівка транспорт таксі». "+
-                "Рахунок: готівка, моно або заначка гривні; "+
-                "наступне одне слово — категорія, решта — примітка.";
+        if (!isWatchDevice && FinanceVoiceCommands.shortFinanceIntent(raw)) {
+            String detail=FinanceVoiceCommands.shortIncomeIntent(raw)
+                ? "Не розпізнав короткий дохід. Скажи: «Заробив 350 готівка чайові столик 5». "+
+                  "Рахунок: готівка, моно або заначка гривні; категорія — одне слово."
+                : "Не розпізнав коротку витрату. Скажи: "+
+                  "«Витратив 150 готівка транспорт таксі». "+
+                  "Рахунок: готівка, моно або заначка гривні; "+
+                  "наступне одне слово — категорія, решта — примітка.";
             appendDialogue("Джарвіс",detail);
             setStatus(detail);
             if(voiceEnabled)speakReply(detail);
