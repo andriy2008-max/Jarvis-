@@ -36,12 +36,73 @@ public final class FinanceVoiceCommands {
         PREFIX+"(?:дохід|доход|надходження)\\s+([0-9]{1,7}(?:[,.][0-9]{1,2})?)"+
         "\\s*(?:грн\\.?|грив(?:ня|ні|ень|ню))?(?:\\s+(?:від|за|категорія|категорію))?\\s+(.+)$",
         Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
+    // Fast spoken format: «витратив 150 готівка транспорт таксі на роботу».
+    // The account is mandatory, the category is ONE exact word,
+    // and every following word belongs exclusively to the note.
+    private static final Pattern SHORT_EXP=Pattern.compile(
+        "^(?:витратив|потратив|портатив)\\s+" +
+        "([0-9]{1,7}(?:[,.][0-9]{1,2})?)" +
+        "(?:\\s*(?:грн\\.?|грив(?:ня|ні|ень|ню)))?\\s+(.+)$",
+        Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
+
+    private static final String[][] SHORT_ACCOUNTS={
+        {"карта моно","карта моно"},{"карти моно","карта моно"},
+        {"картка моно","карта моно"},{"картки моно","карта моно"},
+        {"моно","карта моно"},
+        {"готівка","готівка"},{"готівки","готівка"},
+        {"заначка гривні","заначка гривні"},
+        {"заначки гривні","заначка гривні"},
+        {"заначка","заначка гривні"},
+        {"заначки","заначка гривні"}
+    };
     private FinanceVoiceCommands(){}
+
+    /** Recognized short expense prefix, even if its arguments are invalid.
+     * Callers must provide an error rather than route it to conversational AI. */
+    public static boolean shortExpenseIntent(String voice) {
+        String normalized=CommandPatterns.normalize(voice);
+        return normalized.matches("^(?:витратив|потратив|портатив)(?:\\s+.*)?$");
+    }
+
+    private static Entry parseShortExpense(String normalized) {
+        Matcher m=SHORT_EXP.matcher(normalized);
+        if(!m.matches())return null;
+        String amount=positiveAmount(m.group(1));
+        if(amount==null)return null;
+        String details=m.group(2).replaceAll("\\s+"," ").trim();
+        if(details.isEmpty())return null;
+        for(String[] alias:SHORT_ACCOUNTS){
+            String prefix=alias[0]+" ";
+            if(!details.startsWith(prefix))continue;
+            String rest=details.substring(prefix.length()).trim();
+            if(rest.isEmpty())return null;
+            String[] parts=rest.split(" ",2);
+            // One word is the entire category, NOT a free-form description.
+            String category=category(Kind.EXPENSE,parts[0]);
+            if(category==null)return null;
+            String note=parts.length>1?parts[1].trim():null;
+            if(note!=null && !validNote(note))return null;
+            return new Entry(Kind.EXPENSE,amount,category,alias[1],note);
+        }
+        return null;
+    }
+
+    private static String positiveAmount(String raw) {
+        try {
+            java.math.BigDecimal value=new java.math.BigDecimal(raw.replace(',','.'));
+            if(value.signum()<=0 || value.compareTo(new java.math.BigDecimal("999999"))>0)
+                return null;
+            return value.stripTrailingZeros().toPlainString();
+        } catch(NumberFormatException bad) {
+            return null;
+        }
+    }
 
     public static Entry parse(String voice) {
         if(voice==null||voice.length()>230)return null;
         String s=voice.toLowerCase(Locale.forLanguageTag("uk-UA")).trim()
             .replaceAll("[.!?]+$","");
+        if(shortExpenseIntent(s))return parseShortExpense(CommandPatterns.normalize(s));
         Matcher m=EXP.matcher(s);
         Kind kind=Kind.EXPENSE;
         if(!m.matches()) {
