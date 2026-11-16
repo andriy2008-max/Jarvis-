@@ -60,6 +60,22 @@ public final class CommandPatterns {
         return s.matches("^(?:(?:постав|поставити|встанови|встановити|запусти|увімкни|включи|заведи)\\s+)?таймер(?:\\s+.*)?$");
     }
 
+    /** Watch7 cancels ONLY its own locally scheduled timer. */
+    public static boolean timerCancelIntent(String raw) {
+        String s=normalize(raw);
+        return s.matches("^(?:скасуй|скасувати|зупини|зупинити|вимкни|відміни)\\s+таймер$");
+    }
+
+    /** Watch7 queries ONLY its own timer; no accidental Pixel lookup. */
+    public static boolean timerRemainingIntent(String raw) {
+        String s=normalize(raw);
+        return s.matches("^(?:скільки\\s+(?:ще\\s+)?(?:залишилось|залишилося|лишилося)" +
+            "\\s+(?:до\\s+)?(?:кінця\\s+)?таймера" +
+            "|скільки\\s+(?:ще\\s+)?(?:залишилось|залишилося)\\s+на\\s+таймері" +
+            "|(?:скільки|який)\\s+(?:ще\\s+)?час\\s+(?:на\\s+)?таймері" +
+            "|(?:покажи|перевір)\\s+таймер)$");
+    }
+
     private static int timerNumber(String raw) {
         switch(raw) {
             case "один": case "одна": case "одну": return 1;
