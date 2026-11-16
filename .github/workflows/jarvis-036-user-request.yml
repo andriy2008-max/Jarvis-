@@ -2,6 +2,7 @@ name: JARVIS 0.1.36 signed build - requested by owner
 
 # Explicit owner request to package all accumulated Watch7 local timer, TTS, Portal and Spotify fixes. One shot.
 # This path-only push event does not rebuild on further application commits.
+# Rerun: corrected Android lint-required includeSubdomains on local-only Portal domain allowlist.
 on:
   push:
     branches:
