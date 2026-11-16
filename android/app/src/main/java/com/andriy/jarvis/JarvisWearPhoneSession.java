@@ -331,6 +331,12 @@ public final class JarvisWearPhoneSession {
             } else out.reply(false,"Фінансова команда ще виконується.",session,false);
             return;
         }
+        if(FinanceVoiceCommands.shortExpenseIntent(command) &&
+           FinanceVoiceCommands.parse(command)==null){
+            out.reply(false,"Не розпізнав коротку витрату. Скажи: "+
+                "«Витратив 150 готівка транспорт таксі».",session,false);
+            return;
+        }
         if(FinanceVoiceCommands.parse(command)!=null) {
             final String token=session;
             FinanceManagerController.start(context,command,new FinanceManagerController.Listener(){
