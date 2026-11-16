@@ -96,7 +96,9 @@ public final class JarvisWearPhoneAssistant {
         }
         if (looksLikeFinanceCommand(normalized)) {
             completion.finished(false,
-                "Не розпізнав суму або категорію. Скажи: «Запиши витрату 350 гривень на харчування».");
+                FinanceVoiceCommands.shortExpenseIntent(raw)
+                    ? "Не розпізнав коротку витрату. Скажи: «Витратив 150 готівка транспорт таксі»."
+                    : "Не розпізнав суму або категорію. Скажи: «Запиши витрату 350 гривень на харчування».");
             return;
         }
 
@@ -458,8 +460,9 @@ public final class JarvisWearPhoneAssistant {
     }
 
     private static boolean looksLikeFinanceCommand(String normalized) {
-        return normalized.matches(
-            "^(?:запиши|додай|занеси|зафіксуй)\\s+" +
-            "(?:витрату|витрати|дохід|доход|надходження)(?:\\s+.*)?$");
+        return FinanceVoiceCommands.shortExpenseIntent(normalized) ||
+            normalized.matches(
+                "^(?:запиши|додай|занеси|зафіксуй)\\s+" +
+                "(?:витрату|витрати|дохід|доход|надходження)(?:\\s+.*)?$");
     }
 }
