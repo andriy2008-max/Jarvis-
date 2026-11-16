@@ -64,6 +64,41 @@ public final class TimerScheduler {
         finally { JarvisControlFeedback.finish(feedback,success,android.os.SystemClock.uptimeMillis()); }
     }
 
+    /** Spoken timer results are descriptive and deterministic across Watch/Pixel.
+     * The phone owns the actual alarm, even if the user spoke on Watch7. */
+    public static final class VoiceResult {
+        public final boolean ok;
+        public final String message;
+        VoiceResult(boolean ok,String message){this.ok=ok;this.message=message;}
+    }
+
+    public static VoiceResult startForVoice(Context context,int seconds) {
+        if(!TimerRules.valid(seconds))
+            return new VoiceResult(false,
+                "Некоректний час таймера. Назви від однієї секунди до трьох годин.");
+        if(!canScheduleExact(context))
+            return new VoiceResult(false,
+                "Таймер не запущено: на Pixel немає дозволу «Будильники й нагадування». "+
+                "Відкрий Налаштування Pixel → Програми → Спеціальний доступ → "+
+                "Будильники й нагадування → Джарвіс → Дозволити.");
+        if(!start(context,seconds))
+            return new VoiceResult(false,
+                "Таймер не запущено на Pixel. Перевір дозвіл на точні будильники "+
+                "й системні обмеження Джарвіса.");
+        long remaining=remainingSeconds(context);
+        if(remaining<0)return new VoiceResult(false,
+            "Не зміг підтвердити запуск таймера на Pixel.");
+        String duration=seconds%3600==0 ? (seconds/3600)+" год" :
+            seconds%60==0 ? (seconds/60)+" хв" : seconds+" с";
+        String detail="Таймер на "+duration+" встановлено на Pixel. Залишилось "+
+            remaining+" секунд.";
+        if(android.os.Build.VERSION.SDK_INT>=33 &&
+           context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)!=
+               android.content.pm.PackageManager.PERMISSION_GRANTED)
+            detail+=" Дозволь сповіщення Джарвіса на Pixel, щоб не пропустити завершення.";
+        return new VoiceResult(true,detail);
+    }
+
     private static boolean startInternal(Context context, int seconds) {
         if (!TimerRules.valid(seconds)) return false;
         Context c = context.getApplicationContext();
