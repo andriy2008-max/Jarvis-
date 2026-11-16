@@ -113,7 +113,7 @@ public final class FinanceVoiceCommands {
      * a verified editable field; never in a command or an API guess. */
     public static boolean validNote(String note) {
         return note!=null && !note.trim().isEmpty() && note.length()<=100 &&
-            note.indexOf('\\n')<0 && note.indexOf('\\r')<0 &&
+            note.indexOf('\n')<0 && note.indexOf('\r')<0 &&
             note.chars().noneMatch(ch->Character.isISOControl(ch));
     }
 
