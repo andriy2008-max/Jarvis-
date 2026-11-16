@@ -52,6 +52,10 @@ public final class PortalUiSettingsActivity extends Activity {
             else result.setText("Встанови Mobilerun Portal на Pixel. "+
                 "https://github.com/droidrun/mobilerun-portal");
         }));
+        body.addView(button("Знайти Mobilerun Portal на GitHub",()->{
+            startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse(
+                "https://github.com/droidrun/mobilerun-portal/releases")));
+        }));
         body.addView(text("2. Скопіюй токен локального API з головного екрана Portal "+
             "та встав нижче. Токен зберігається зашифрованим Android Keystore.",14));
         token=new EditText(this);
