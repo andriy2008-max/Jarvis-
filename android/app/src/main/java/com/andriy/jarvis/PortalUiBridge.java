@@ -79,6 +79,7 @@ final class PortalUiBridge {
         IO.execute(()->{
             State result;
             String note;
+            boolean gestureRequested=false;
             try {
                 JSONObject snapshot=state(c);
                 JSONObject phone=snapshot.optJSONObject("phone_state");
@@ -98,6 +99,7 @@ final class PortalUiBridge {
                     } else {
                         // Read immediately before action; only the exact UI
                         // element in a known foreground package is actionable.
+                        gestureRequested=true;
                         result=sendTap(c,picked.x,picked.y) ?
                             State.CLICKED:State.UNSURE;
                         note=result==State.CLICKED
@@ -106,8 +108,12 @@ final class PortalUiBridge {
                     }
                 }
             } catch(java.io.IOException notConnected) {
-                result=State.UNAVAILABLE;
-                note="Локальний сервер Portal недоступний";
+                // A lost reply AFTER sending a tap is not proof that it
+                // failed. Never retry the gesture or tap fixed coordinates.
+                result=gestureRequested?State.UNSURE:State.UNAVAILABLE;
+                note=gestureRequested
+                    ?"Portal не підтвердив натискання — повтор небезпечний"
+                    :"Локальний сервер Portal недоступний";
             } catch(Exception malformed) {
                 result=State.UNSURE;
                 note="Відповідь Portal неоднозначна; дія не повторюється";
@@ -241,11 +247,9 @@ final class PortalUiBridge {
 
     private static boolean safeRegion(Target target,ScreenPoint p,int w,int h) {
         if(target==Target.BOLT_RIDES)
-            return p.x>w*.05 && p.x<w*.93 &&
-                p.y>h*.12 && p.y<h*.67;
+            return BoltUiLabels.letsGoRegion(p.x,p.y,0,0,w,h);
         if(target==Target.BOLT_DROPOFF)
-            return p.x>w*.10 && p.x<w*.95 &&
-                p.y>h*.10 && p.y<h*.55;
+            return BoltUiLabels.dropoffRegion(p.x,p.y,w,h);
         return p.x>=0 && p.x<w && p.y>h*.68 && p.y<h;
     }
 
