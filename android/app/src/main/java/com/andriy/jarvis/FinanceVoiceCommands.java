@@ -15,11 +15,16 @@ public final class FinanceVoiceCommands {
         public final String category;
         public final String account; // null means selected account in app
         public final int daysAgo; // 0=today, 1=yesterday, 2=day before yesterday
+        public final String note; // trailing words of the short finance command
         public Entry(Kind kind,String amount,String category,String account) {
-            this(kind,amount,category,account,0);
+            this(kind,amount,category,account,0,null);
         }
         private Entry(Kind kind,String amount,String category,String account,int daysAgo) {
-            this.kind=kind;this.amount=amount;this.category=category;this.account=account;this.daysAgo=daysAgo;
+            this(kind,amount,category,account,daysAgo,null);
+        }
+        private Entry(Kind kind,String amount,String category,String account,int daysAgo,String note) {
+            this.kind=kind;this.amount=amount;this.category=category;
+            this.account=account;this.daysAgo=daysAgo;this.note=note;
         }
         /** Keypad chars, without extra zeros or a hidden negative sign. */
         public String keypad() {return amount.replace('.',',');}
@@ -35,6 +40,54 @@ public final class FinanceVoiceCommands {
         PREFIX+"(?:дохід|доход|надходження)\\s+([0-9]{1,7}(?:[,.][0-9]{1,2})?)"+
         "\\s*(?:грн\\.?|грив(?:ня|ні|ень|ню))?(?:\\s+(?:від|за|категорія|категорію))?\\s+(.+)$",
         Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
+    // Short form: "витратив/потратив/заробив [sum] [account] [one-word category] [memo...]".
+    // A malformed recognized financial command is NEVER an instruction for the AI.
+    // "портатив" was a transcription mistake and is intentionally unsupported.
+    private static final Pattern SHORT=Pattern.compile(
+        "^(витратив|потратив|заробив)\\s+([0-9]{1,7}(?:[,.][0-9]{1,2})?)" +
+        "(?:\\s*(?:грн\\.?|грив(?:ня|ні|ень|ню)))?\\s+(.+)$",
+        Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
+    private static final String[][] SHORT_ACCOUNTS={
+        {"карта моно","карта моно"},{"карти моно","карта моно"},
+        {"картка моно","карта моно"},{"картки моно","карта моно"},
+        {"заначка гривні","заначка гривні"},{"заначки гривні","заначка гривні"},
+        {"готівка","готівка"},{"готівки","готівка"},
+        {"монобанк","монобанк"},{"моно","карта моно"},
+        {"заначка","заначка гривні"},{"заначки","заначка гривні"}
+    };
+
+    public static boolean shortFinanceIntent(String words) {
+        String s=CommandPatterns.normalize(words);
+        return s.matches("^(?:витратив|потратив|заробив)(?:\\s+.*)?$");
+    }
+
+    private static Entry shortEntry(String speech,int daysAgo) {
+        Matcher m=SHORT.matcher(speech);
+        if(!m.matches())return null;
+        Kind kind=m.group(1).equals("заробив") ? Kind.INCOME : Kind.EXPENSE;
+        String amount;
+        try {
+            java.math.BigDecimal value=new java.math.BigDecimal(m.group(2).replace(',','.'));
+            if(value.signum()<=0 || value.compareTo(new java.math.BigDecimal("999999"))>0)
+                return null;
+            amount=value.stripTrailingZeros().toPlainString();
+        } catch(NumberFormatException error) { return null; }
+        String tail=m.group(3).replaceAll("\\s+"," ").trim();
+        for(String[] hint:SHORT_ACCOUNTS) {
+            if(!tail.startsWith(hint[0]+" "))continue;
+            String remainder=tail.substring(hint[0].length()).trim();
+            if(remainder.isEmpty())return null;
+            String[] words=remainder.split(" ",2);
+            String selected=category(kind,words[0]);
+            if(selected==null)return null; // never infer income from expense
+            String memo=words.length==2 ? words[1].trim() : null;
+            if(memo!=null && (memo.length()>100 || memo.isEmpty() ||
+                memo.chars().anyMatch(Character::isISOControl)))return null;
+            return new Entry(kind,amount,selected,hint[1],daysAgo,memo);
+        }
+        return null; // never silently substitute a default account
+    }
+
     private FinanceVoiceCommands(){}
 
     public static Entry parse(String voice) {
@@ -45,6 +98,8 @@ public final class FinanceVoiceCommands {
             .replaceAll("[.!?]+$","");
         int daysAgo=s.endsWith(" позавчора")?2:s.endsWith(" вчора")?1:0;
         s=s.replaceFirst("\\s+(?:позавчора|вчора|сьогодні)$","").trim();
+        String bare=CommandPatterns.normalize(s);
+        if(shortFinanceIntent(bare))return shortEntry(bare,daysAgo);
         Matcher m=EXP.matcher(s);
         Kind kind=Kind.EXPENSE;
         if(!m.matches()) {
