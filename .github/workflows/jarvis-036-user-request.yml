@@ -1,0 +1,208 @@
+name: JARVIS 0.1.36 signed build - requested by owner
+
+# Explicit owner request to package all accumulated Watch7 local timer, TTS, Portal and Spotify fixes. One shot.
+# This path-only push event does not rebuild on further application commits.
+on:
+  push:
+    branches:
+      - 'release/jarvis-0.1.36-full'
+    paths:
+      - '.github/workflows/jarvis-036-user-request.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK 35
+        shell: bash
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Verify command parser regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android/build/parser-tests
+          javac -encoding UTF-8 -d android/build/parser-tests \
+            android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java \
+            android/app/src/main/java/com/andriy/jarvis/AssistantIntents.java \
+            android/app/src/main/java/com/andriy/jarvis/AppNameMatcher.java \
+            android/app/src/main/java/com/andriy/jarvis/DeviceCommands.java \
+            android/app/src/main/java/com/andriy/jarvis/AiChatPolicy.java \
+            android/app/src/main/java/com/andriy/jarvis/WakeConversation.java \
+            android/app/src/main/java/com/andriy/jarvis/TimerRules.java \
+            android/app/src/main/java/com/andriy/jarvis/JarvisWearProtocol.java \
+            android/app/src/main/java/com/andriy/jarvis/JarvisWatchAlarmRequest.java \
+            android/app/src/main/java/com/andriy/jarvis/JarvisWearReplyPages.java \
+            android/app/src/main/java/com/andriy/jarvis/JarvisWearImageCommands.java \
+            android/app/src/main/java/com/andriy/jarvis/JarvisWatchMicVisualRules.java \
+            android/app/src/main/java/com/andriy/jarvis/VoiceRanking.java \
+            android/app/src/main/java/com/andriy/jarvis/NeuralSpeechPolicy.java \
+            android/app/src/main/java/com/andriy/jarvis/OfflineVoicePackRules.java \
+            android/app/src/test/java/com/andriy/jarvis/CommandPatternsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/AssistantIntentsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/AppNameMatcherTest.java \
+            android/app/src/test/java/com/andriy/jarvis/DeviceCommandsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/AiChatPolicyTest.java \
+            android/app/src/test/java/com/andriy/jarvis/WakeConversationTest.java \
+            android/app/src/test/java/com/andriy/jarvis/TimerRulesTest.java \
+            android/app/src/test/java/com/andriy/jarvis/JarvisWearReplyPagesTest.java \
+            android/app/src/test/java/com/andriy/jarvis/JarvisWearImageCommandsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/JarvisWatchAlarmRequestTest.java \
+            android/app/src/test/java/com/andriy/jarvis/JarvisWatchMicVisualRulesTest.java \
+            android/app/src/test/java/com/andriy/jarvis/VoiceRankingTest.java \
+            android/app/src/test/java/com/andriy/jarvis/NeuralSpeechPolicyTest.java \
+            android/app/src/test/java/com/andriy/jarvis/OfflineVoicePackRulesTest.java
+          for test in CommandPatternsTest AssistantIntentsTest AppNameMatcherTest DeviceCommandsTest AiChatPolicyTest WakeConversationTest TimerRulesTest JarvisWearReplyPagesTest JarvisWearImageCommandsTest JarvisWatchAlarmRequestTest JarvisWatchMicVisualRulesTest VoiceRankingTest NeuralSpeechPolicyTest OfflineVoicePackRulesTest; do
+            java -cp android/build/parser-tests "com.andriy.jarvis.$test"
+          done
+      - name: Verify accumulated 0.1.34 - 0.1.36 features are included
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "versionCode 46" android/app/build.gradle
+          grep -Fq "versionName '0.1.36'" android/app/build.gradle
+          grep -Fq 'FinanceManagerController' android/app/src/main/java/com/andriy/jarvis/MainActivity.java
+          grep -Fq 'JarvisWatchSessionService.startFromVisibleWatch(this)' android/app/src/main/java/com/andriy/jarvis/MainActivity.java
+          grep -Fq 'JarvisWatchSessionRestoreReceiver' android/app/src/main/AndroidManifest.xml
+          grep -Fq 'TTS failure at ' android/app/src/main/java/com/andriy/jarvis/MainActivity.java
+          grep -Fq 'CommandPatterns.timerIntent(timerSpeech)' android/app/src/main/java/com/andriy/jarvis/MainActivity.java
+          grep -Fq 'String result=startTimer(seconds)' android/app/src/main/java/com/andriy/jarvis/MainActivity.java
+          grep -Fq 'SpotifyAppRemoteBridge' android/app/src/main/java/com/andriy/jarvis/SpotifyPlaybackController.java
+          grep -Fq 'PortalUiBridge.tap' android/app/src/main/java/com/andriy/jarvis/BoltTaxiController.java
+          grep -Fq 'PortalUiBridge.tap' android/app/src/main/java/com/andriy/jarvis/SpotifyPlaybackController.java
+          grep -Fq 'safeActionDisplay()' android/app/src/main/java/com/andriy/jarvis/ScreenControlAccessibilityService.java
+          test -s android/QA-0.1.34-REGRESSION.md
+          test -s android/QA-0.1.35-REGRESSION.md
+          test -s android/QA-0.1.36-NEW-FEATURES.md
+          echo 'All required features present; proceeding to signed release'
+
+      - name: Restore stable signing keystore (stable only)
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          JARVIS_SIGNING_KEYSTORE_BASE64: ${{ secrets.JARVIS_SIGNING_KEYSTORE_BASE64 }}
+          JARVIS_RELEASE_STORE_PASSWORD: ${{ secrets.JARVIS_RELEASE_STORE_PASSWORD }}
+          JARVIS_RELEASE_KEY_ALIAS: ${{ secrets.JARVIS_RELEASE_KEY_ALIAS }}
+          JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${JARVIS_SIGNING_KEYSTORE_BASE64:?Missing GitHub secret JARVIS_SIGNING_KEYSTORE_BASE64}"
+          : "${JARVIS_RELEASE_STORE_PASSWORD:?Missing GitHub secret JARVIS_RELEASE_STORE_PASSWORD}"
+          : "${JARVIS_RELEASE_KEY_ALIAS:?Missing GitHub secret JARVIS_RELEASE_KEY_ALIAS}"
+          : "${JARVIS_RELEASE_KEY_PASSWORD:?Missing GitHub secret JARVIS_RELEASE_KEY_PASSWORD}"
+          printf '%s' "$JARVIS_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/jarvis-stable.jks"
+          chmod 600 "$RUNNER_TEMP/jarvis-stable.jks"
+          echo "JARVIS_RELEASE_STORE_FILE=$RUNNER_TEMP/jarvis-stable.jks" >> "$GITHUB_ENV"
+      - name: Compile APK, pass 1
+        shell: bash
+        env:
+          JARVIS_RELEASE_STORE_PASSWORD: ${{ secrets.JARVIS_RELEASE_STORE_PASSWORD }}
+          JARVIS_RELEASE_KEY_ALIAS: ${{ secrets.JARVIS_RELEASE_KEY_ALIAS }}
+          JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ "stable" = stable ]; then
+            gradle -p android --no-daemon --stacktrace :app:assembleRelease
+          else
+            gradle -p android --no-daemon --stacktrace :app:assembleDebug
+          fi
+      - name: Compile APK, pass 2
+        shell: bash
+        env:
+          JARVIS_RELEASE_STORE_PASSWORD: ${{ secrets.JARVIS_RELEASE_STORE_PASSWORD }}
+          JARVIS_RELEASE_KEY_ALIAS: ${{ secrets.JARVIS_RELEASE_KEY_ALIAS }}
+          JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ "stable" = stable ]; then
+            gradle -p android --no-daemon --rerun-tasks --stacktrace :app:assembleRelease
+          else
+            gradle -p android --no-daemon --rerun-tasks --stacktrace :app:assembleDebug
+          fi
+      - name: Verify signature, package, version and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          variant='stable'
+          if [ "$variant" = stable ]; then
+            apk='android/app/build/outputs/apk/release/app-release.apk'
+            package='com.andriy.jarvis.stable'
+          else
+            apk='android/app/build/outputs/apk/debug/app-debug.apk'
+            package='com.andriy.jarvis.preview'
+          fi
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+          if [ "$variant" = stable ]; then
+            # Never ship a new signing key as an alleged in-place update.
+            expected="$(tr -d '[:space:]' < android/RELEASE-CERT-SHA256.txt | tr '[:upper:]' '[:lower:]')"
+            actual="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n1)"
+            if [ "$actual" != "$expected" ]; then
+              echo "::error::Stable signing certificate does not match the pinned JARVIS identity."
+              exit 1
+            fi
+          fi
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" > "$RUNNER_TEMP/jarvis-badging.txt"
+          grep -Fq "package: name='$package'" "$RUNNER_TEMP/jarvis-badging.txt"
+          version_code="$(sed -nE 's/^[[:space:]]*versionCode[[:space:]]+([0-9]+).*/\1/p' android/app/build.gradle | head -n1)"
+          version_name="$(sed -nE "s/^[[:space:]]*versionName[[:space:]]+'([^']+)'.*/\1/p" android/app/build.gradle | head -n1)"
+          test -n "$version_code" && test -n "$version_name"
+          grep -Fq "versionCode='$version_code'" "$RUNNER_TEMP/jarvis-badging.txt"
+          grep -Fq "versionName='$version_name'" "$RUNNER_TEMP/jarvis-badging.txt"
+          mkdir -p android/dist
+          cp "$apk" "android/dist/JARVIS-$version_name-$variant.apk"
+          (cd android/dist && sha256sum "JARVIS-$version_name-$variant.apk" > "JARVIS-$version_name-$variant.sha256")
+          echo "JARVIS_VERSION_NAME=$version_name" >> "$GITHUB_ENV"
+          echo "JARVIS_VERSION_CODE=$version_code" >> "$GITHUB_ENV"
+      - name: Upload verified APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: JARVIS-${{ env.JARVIS_VERSION_NAME }}-stable-APK
+          path: |
+            android/dist/JARVIS-${{ env.JARVIS_VERSION_NAME }}-stable.apk
+            android/dist/JARVIS-${{ env.JARVIS_VERSION_NAME }}-stable.sha256
+          if-no-files-found: error
+      - name: Publish stable signed APK to direct GitHub release
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test -s "android/dist/JARVIS-$JARVIS_VERSION_NAME-stable.apk"
+          # A version tag is immutable: do not overwrite older release packages.
+          if gh release view "v$JARVIS_VERSION_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error::Release v$JARVIS_VERSION_NAME already exists. Bump versionCode and versionName."
+            exit 1
+          fi
+          gh release create "v$JARVIS_VERSION_NAME" \
+            "android/dist/JARVIS-$JARVIS_VERSION_NAME-stable.apk" \
+            "android/dist/JARVIS-$JARVIS_VERSION_NAME-stable.sha256" \
+            "android/QA-0.1.34-REGRESSION.md" \
+            "android/QA-0.1.35-REGRESSION.md" \
+            "android/QA-0.1.36-NEW-FEATURES.md" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "JARVIS $JARVIS_VERSION_NAME — stable signed Android" \
+            --notes 'JARVIS 0.1.36 (versionCode 46), підписаний наступник 0.1.35 зі збереженням пакета com.andriy.jarvis.stable та повного JARVIS Finance. Watch7: власні локальні таймери, захист від збоїв TTS, фоновий постійний сеанс, діагностика голосу, ручне завершення. Pixel: Spotify App Remote з URI для треків і плейлистів, необов’язкова інтеграція локального Mobilerun Portal для Bolt і Spotify, резервне Accessibility. Дані користувача зберігаються під час встановлення поверх попередньої стабільної версії, якщо підпис збігається. Додано три QA-чеклісти 0.1.34, 0.1.35, 0.1.36. Автоматична збірка не замінює фізичних тестів Pixel і Galaxy Watch7. Перед оновленням зроби резервну копію JARVIS Finance.' \
+
+      - name: Clean up signing material
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/jarvis-stable.jks"
