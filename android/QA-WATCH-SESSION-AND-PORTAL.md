@@ -13,6 +13,8 @@
 - [x] An edge-back gesture in the full-screen Watch7 activity does not automatically exit; the system Home key still works.
 - [x] The three-dot menu provides **⏹ Завершити Джарвіса (вручну)** with explicit confirmation; the ongoing notification also has a stop action.
 - [x] The foreground service does not use microphone, wake locks or automatic background activity launches.
+- [x] An owner-enabled session is restored after watch reboot or app upgrade when Android allows its foreground-service restart.
+- [x] Phone-only AI / offline neural voice managers are no longer initialized on the resource-constrained watch.
 - [x] `FLAG_KEEP_SCREEN_ON` remains while the watch screen is visible; it is cleared on pause, respecting Android's battery and screen-off policy.
 - [ ] Confirm on a real Galaxy Watch7 that the Activity stays visible after voice commands and after TTS.
 - [ ] Confirm the ongoing indicator returns to Jarvis after the user presses the Home key.
@@ -29,6 +31,7 @@
 - [ ] Tap Back gesture once; Jarvis remains visible, with a status message explaining how to exit.
 - [ ] Press Home; Android may show the watch face, but the ongoing notification offers a shortcut back.
 - [ ] Close and reopen the watch Activity; ongoing service survives while enabled.
+- [ ] Reboot the watch and check restoration of the ongoing session without automatic microphone activation.
 - [ ] Use menu ⋮ → Завершити Джарвіса → Завершити; watch service and notification stop.
 - [ ] Check Wear OS battery/notification permission and device power-saving behavior separately.
 
