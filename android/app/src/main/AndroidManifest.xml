@@ -45,6 +45,8 @@
         <package android:name="com.arlosoft.macrodroid" />
         <!-- Spotify: user-requested app launch and verified accessibility controls. -->
         <package android:name="com.spotify.music" />
+        <!-- Optional owner-installed local UI inspection companion. -->
+        <package android:name="com.mobilerun.portal" />
         <intent><action android:name="android.speech.RecognitionService" /></intent>
         <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
         <!-- Query launcher-visible activities only, without QUERY_ALL_PACKAGES. -->
@@ -61,6 +63,7 @@
         android:icon="@drawable/ic_launcher"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:usesCleartextTraffic="false"
+        android:networkSecurityConfig="@xml/jarvis_local_portal_network"
         android:allowBackup="true"
         android:fullBackupContent="@xml/jarvis_finance_backup_rules"
         android:dataExtractionRules="@xml/jarvis_finance_extraction_rules"
@@ -156,6 +159,8 @@
         <activity android:name=".JarvisTaxiPlacesActivity"
             android:exported="false" android:screenOrientation="unspecified" />
         <activity android:name=".SpotifyDirectSettingsActivity"
+            android:exported="false" android:screenOrientation="unspecified" />
+        <activity android:name=".PortalUiSettingsActivity"
             android:exported="false" android:screenOrientation="unspecified" />
         <activity android:name=".FinanceApiSettingsActivity"
             android:exported="false" android:screenOrientation="unspecified" />
