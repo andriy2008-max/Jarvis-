@@ -662,7 +662,7 @@ public final class FloatingJarvisService extends Service {
     }
 
     private void message(String text) {
-        ui.post(() -> Toast.makeText(this, text, Toast.LENGTH_LONG).show());
+        JarvisActionNotice.show(this, text);
     }
 
     private void cancelPendingSend() {
@@ -1179,6 +1179,9 @@ public final class FloatingJarvisService extends Service {
     }
 
     private void executeCommand(String raw) {
+        if(JarvisTaxiCommands.cancelRequested(raw)) {BoltTaxiController.cancel();message("Очікування Bolt скасовано.");return;}
+        if(CommandPatterns.normalize(raw).equals("скасуй виконання") &&
+            ScreenControlAccessibilityService.cancelWaitingAction()) return;
         if (closing) return;
         if (JarvisMacros.cancelIfRequested(raw, result -> {
             if (!closing) reply(result);

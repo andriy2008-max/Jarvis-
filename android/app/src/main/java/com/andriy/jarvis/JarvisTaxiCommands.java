@@ -9,6 +9,12 @@ public final class JarvisTaxiCommands {
         "(?iu)^(?:(?:джарвіс|джарвис|jarvis)[\\s,:—-]*)?(?:таксі|такси|taxi|виклич\\s+таксі|замов\\s+таксі)(?:[\\s,:—-]+(.*))?$");
     private static final Pattern PREPOSITION=Pattern.compile(
         "(?iu)^(?:до|на|в|у|за\\s+адресою|адреса|адресу)\\s+");
+    public static boolean cancelRequested(String raw) {
+        String s=CommandPatterns.normalize(raw);
+        return s.equals("скасуй таксі") || s.equals("скасуй bolt") ||
+            s.equals("зупини таксі") || s.equals("скасуй болт");
+    }
+
     private JarvisTaxiCommands() {}
     public static String destination(String raw) {
         if(raw==null)return null;

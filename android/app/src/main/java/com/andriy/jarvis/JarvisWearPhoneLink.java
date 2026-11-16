@@ -81,8 +81,9 @@ public final class JarvisWearPhoneLink {
     public JarvisWearPhoneLink(Context context) {
         this.context = context.getApplicationContext();
         this.messageClient = Wearable.getMessageClient(this.context);
-        listenerRegistration = messageClient.addListener(replies,
-            Uri.parse("wear://*" + JarvisWearProtocol.REPLY), MessageClient.FILTER_LITERAL);
+        // onReply accepts only the exact reply/progress paths and the pending
+        // request's phone node/id. A reply-only registration hides progress.
+        listenerRegistration = messageClient.addListener(replies);
         listenerRegistration.addOnSuccessListener(v -> {
             listenerReady = true;
             if (!closed) main.post(sync);
@@ -102,6 +103,17 @@ public final class JarvisWearPhoneLink {
 
     /** Local taxi command: phone controls Bolt without invoking conversational AI. */
     public void taxi(String voice, Callback callback) {
+        if(JarvisTaxiCommands.cancelRequested(voice)) {
+            if(requesting && JarvisWearProtocol.TAXI.equals(requestingType)) {
+                requestEpoch++;requesting=false;requestingType=null;
+            } else if(busy() && !taxiRunning()) {
+                callback.finished(false,"Зараз очікується інша команда. Її не скасовував.");return;
+            }
+            Callback previous=pendingCallback;
+            clearPending();
+            if(previous!=null)previous.finished(false,"Скасовую очікування Bolt...");
+            send(JarvisWearProtocol.TAXI,voice,callback);return;
+        }
         if (!JarvisWearProtocol.validCommand(voice) ||
             JarvisTaxiCommands.destination(voice) == null) {
             callback.finished(false, "Невідома команда таксі.");
@@ -466,13 +478,26 @@ public final class JarvisWearPhoneLink {
     }
 
     private void onReply(MessageEvent event) {
-        if (!JarvisWearProtocol.REPLY.equals(event.getPath()) ||
+        if ((!JarvisWearProtocol.REPLY.equals(event.getPath()) &&
+             !JarvisWearProtocol.PROGRESS.equals(event.getPath())) ||
             pendingId == null || pendingNode == null ||
             !pendingNode.equals(event.getSourceNodeId())) return;
         if (event.getData() == null || event.getData().length > JarvisWearProtocol.MAX_BYTES) return;
         try {
             JSONObject data = new JSONObject(new String(event.getData(),StandardCharsets.UTF_8));
             if (!pendingId.equals(data.optString("id"))) return;
+            if (JarvisWearProtocol.PROGRESS.equals(event.getPath())) {
+                // Identity and source-node checks above apply before extending
+                // any timer. Never clear pending state or finance receipts here.
+                if (!JarvisWearProtocol.acceptsProgress(pendingType) ||
+                    !pendingType.equals(data.optString("action"))) return;
+                if (timeout != null) {
+                    main.removeCallbacks(timeout);
+                    main.postDelayed(timeout,JarvisWearProtocol.timeoutMs(pendingType));
+                }
+                JarvisActionNotice.show(context,data.optString("detail","Телефон продовжує виконання..."));
+                return;
+            }
             final boolean financeAcknowledged=pendingId.equals(FinanceWatchQueue.firstId(context));
             if(financeAcknowledged){
                 if(data.optBoolean("ok",false))FinanceWatchQueue.acknowledge(context,pendingId);

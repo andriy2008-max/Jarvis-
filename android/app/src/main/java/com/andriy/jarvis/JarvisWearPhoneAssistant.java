@@ -31,6 +31,16 @@ public final class JarvisWearPhoneAssistant {
     public static void execute(Context context, String watchNode, String raw,
                                Completion completion) {
         if (completion == null) return;
+        JarvisActionNotice.show(context,"Виконую команду з годинника...");
+        executeWithFeedback(context,watchNode,raw,(ok,text)->{
+            JarvisActionNotice.show(context,text);
+            completion.finished(ok,text);
+        });
+    }
+
+    private static void executeWithFeedback(Context context, String watchNode, String raw,
+                               Completion completion) {
+        if (completion == null) return;
         if (context == null || !JarvisWearProtocol.validCommand(raw)) {
             completion.finished(false,"Порожня або надто довга команда з годинника.");
             return;
@@ -47,6 +57,12 @@ public final class JarvisWearPhoneAssistant {
             return;
         }
 
+        if(JarvisTaxiCommands.cancelRequested(raw)) {
+            BoltTaxiController.cancel();completion.finished(true,"Очікування Bolt скасовано.");return;
+        }
+        if(normalized.equals("скасуй виконання") && ScreenControlAccessibilityService.cancelWaitingAction()) {
+            completion.finished(true,"Очікування кнопки скасовано.");return;
+        }
         if (handleMacro(phone,raw,completion)) return;
 
         // Telegram: explicit user-authored messages only. Do not give an AI
@@ -79,7 +95,7 @@ public final class JarvisWearPhoneAssistant {
         }
         if (FinanceVoiceCommands.parse(raw) != null) {
             FinanceManagerController.start(phone,raw,new FinanceManagerController.Listener() {
-                @Override public void onProgress(String message) { }
+                @Override public void onProgress(String message) { JarvisActionNotice.show(phone,message); }
                 @Override public void onFinished(boolean ok,String message) {
                     completion.finished(ok,message);
                 }
@@ -108,7 +124,7 @@ public final class JarvisWearPhoneAssistant {
         if(songCommand!=null) {
             if(musicController==null)musicController=new SpotifyPlaybackController(phone);
             musicController.start(songCommand,raw,new SpotifyPlaybackController.Listener(){
-                @Override public void onProgress(String progress) { }
+                @Override public void onProgress(String progress) { JarvisActionNotice.show(phone,progress); }
                 @Override public void onFinished(boolean success,String detail) {
                     completion.finished(success,detail);
                 }
@@ -130,7 +146,7 @@ public final class JarvisWearPhoneAssistant {
                 return;
             }
             sequences.start(plan,new JarvisSequenceExecutor.Listener() {
-                @Override public void onProgress(int step,int total,String detail) { }
+                @Override public void onProgress(int step,int total,String detail) { JarvisActionNotice.show(phone,detail); }
                 @Override public void onFinished(boolean ok,String description) {
                     completion.finished(ok,description);
                 }

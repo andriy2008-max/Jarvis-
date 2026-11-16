@@ -13,7 +13,7 @@ public final class JarvisSequenceEngineTest {
         boolean inputReady;
         boolean permission = true;
         boolean blocked;
-        int opens, clicks, types, volumes;
+        int opens, clicks, types, volumes, attempts;
         String written;
         String target;
         int percent;
@@ -25,6 +25,7 @@ public final class JarvisSequenceEngineTest {
         }
         @Override public String visiblePackage() { return visible; }
         @Override public JarvisSequenceEngine.Attempt click(String label) {
+            attempts++;
             if (blocked) return JarvisSequenceEngine.Attempt.DENY;
             if (!buttonReady) return JarvisSequenceEngine.Attempt.WAIT;
             clicks++;
@@ -72,18 +73,20 @@ public final class JarvisSequenceEngineTest {
         check(fake.clicks == 0 && fake.types == 0, "No click until search appears");
         fake.buttonReady = true;
         engine.tick(2000);
+        check(fake.attempts == 1 && fake.clicks == 0,"Missing button waits 4 seconds before next check");
+        engine.tick(5600);
         check(fake.clicks == 1 && engine.completedSteps() == 2, "Click exactly once");
-        engine.tick(2400); // focused input not ready
+        engine.tick(6000); // focused input not ready
         check(fake.types == 0 && fake.volumes == 0, "No text or volume before search field");
         fake.inputReady = true;
-        engine.tick(2800);
+        engine.tick(10000);
         check(fake.types == 1 && "тварини".equals(fake.written),
             "Insert exactly requested phrase only after focus");
         check(fake.volumes == 0, "Volume cannot overtake typing");
-        check(engine.tick(3200) == JarvisSequenceEngine.Progress.COMPLETED,
+        check(engine.tick(10400) == JarvisSequenceEngine.Progress.COMPLETED,
             "All steps complete");
         check(fake.volumes == 1 && fake.percent == 70, "Media volume is last");
-        engine.tick(3800);
+        engine.tick(10800);
         check(fake.clicks == 1 && fake.types == 1 && fake.volumes == 1,
             "No duplicated actions after completion");
 
@@ -103,10 +106,30 @@ public final class JarvisSequenceEngineTest {
         noField.buttonReady = true;
         fieldEngine.tick(800);
         fieldEngine.tick(1000);
-        check(fieldEngine.tick(15000) == JarvisSequenceEngine.Progress.FAILED,
-            "Missing edit field must time out, not type");
+        check(fieldEngine.tick(15000) == JarvisSequenceEngine.Progress.WAITING,
+            "Missing edit field keeps waiting without typing");
         check(noField.clicks == 1 && noField.types == 0 && noField.volumes == 0,
-            "Do not type or change volume after failed input wait");
+            "Do not type or change volume while waiting for input");
+
+        noField.inputReady = true;
+        fieldEngine.tick(16000);
+        check(noField.types==0,"Subsequent wait is 2 seconds");
+        fieldEngine.tick(17000);
+        check(noField.types==1,"Late field appears and is typed exactly once");
+        fieldEngine.cancel();
+        fieldEngine.tick(20000);
+        check(noField.volumes==0,"Cancel prevents remaining steps after long wait");
+
+        Fake delayed = new Fake();
+        JarvisSequenceEngine delayedEngine = newChain(delayed);
+        delayedEngine.tick(0);delayed.visible="com.google.android.youtube";delayedEngine.tick(1);
+        delayedEngine.tick(2);delayedEngine.tick(4001);
+        check(delayed.attempts==1,"No premature button retry");
+        delayedEngine.tick(4002);delayedEngine.tick(6001);
+        check(delayed.attempts==2,"4 second retry then 2 second interval");
+        delayedEngine.tick(6002);check(delayed.attempts==3,"Repeat missing button every 2 seconds");
+        delayed.buttonReady=true;delayedEngine.tick(8002);delayedEngine.tick(9000);
+        check(delayed.clicks==1,"Late button clicked once then waits for field");
 
         Fake lostPermission = new Fake();
         JarvisSequenceEngine stopEngine = newChain(lostPermission);

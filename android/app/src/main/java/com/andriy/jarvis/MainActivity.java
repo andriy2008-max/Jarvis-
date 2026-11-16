@@ -1563,6 +1563,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     /** Prefer fully-local two-speaker ONNX, then private TTS server, then Android TTS. */
     private void speakReply(String text) {
+        JarvisActionNotice.show(this, text);
         if (phoneListening && !isWatchDevice) return; // phone overlay owns its audio loop
         if (!voiceEnabled || text == null || text.trim().isEmpty()) {
             endSpeaking();
@@ -2584,6 +2585,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private void setStatus(String message) {
+        JarvisActionNotice.show(this, message);
         if (status != null) status.setText(message);
         // Full-screen watch has no text controls. Show short status/error
         // directly on the face, without replacing words while listening.
@@ -4699,6 +4701,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void processCommand(String raw) {
         if (raw == null || raw.trim().isEmpty()) return;
+        if(JarvisTaxiCommands.cancelRequested(raw)) {
+            if(isWatchDevice && watchPhoneLink!=null)
+                watchPhoneLink.taxi(raw,(ok,text)->setStatus(text));
+            else {BoltTaxiController.cancel();setStatus("Очікування Bolt скасовано.");}
+            return;
+        }
+        if(!isWatchDevice && CommandPatterns.normalize(raw).equals("скасуй виконання") &&
+            ScreenControlAccessibilityService.cancelWaitingAction()) return;
         if (!isWatchDevice && JarvisMacros.cancelIfRequested(raw, result -> {
             appendDialogue("Джарвіс", result);
             setStatus(result);

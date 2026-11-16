@@ -62,6 +62,48 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     private SpotifyPlaybackController spotifyPlayback;
     private JarvisMacroPointPicker macroPointPicker;
 
+    private android.widget.TextView actionNotice;
+    private final Runnable hideActionNotice = () -> {
+        if (actionNotice != null) {
+            try { ((WindowManager)getSystemService(WINDOW_SERVICE)).removeView(actionNotice); }
+            catch (RuntimeException ignored) { }
+            actionNotice = null;
+        }
+    };
+
+    public static boolean showActionNotice(String message) {
+        ScreenControlAccessibilityService service = connected.get();
+        if (service == null) return false;
+        try {
+            service.main.removeCallbacks(service.hideActionNotice);
+            if (service.actionNotice == null) {
+                android.widget.TextView view = new android.widget.TextView(service);
+                view.setTextColor(android.graphics.Color.WHITE);
+                view.setTextSize(15);
+                view.setMaxLines(4);
+                view.setPadding(24, 16, 24, 16);
+                view.setBackgroundColor(0xEE17232B);
+                // This transient status cannot cover a touch target or become
+                // part of the external app's accessibility search results.
+                view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+                WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.WRAP_CONTENT,
+                    WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE |
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                    PixelFormat.TRANSLUCENT);
+                params.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+                params.y = Math.round(64 * service.getResources().getDisplayMetrics().density);
+                ((WindowManager)service.getSystemService(WINDOW_SERVICE)).addView(view, params);
+                service.actionNotice = view;
+            }
+            service.actionNotice.setText(message);
+            service.main.postDelayed(service.hideActionNotice, 3500L);
+            return true;
+        } catch (RuntimeException unavailable) { return false; }
+    }
+
     public static boolean isConnected() { return connected.get() != null; }
 
     /** Uses Android's supported lock-screen global action, not PIN injection. */
@@ -520,11 +562,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if(root==null)return FinanceStep.WAIT;
         if(detectFinanceScreen(root)!=expected)return FinanceStep.WAIT;
         android.graphics.Point display=new android.graphics.Point();
-        android.view.Display screen=getDisplay();
-        if(screen==null){
-            WindowManager wm=(WindowManager)getSystemService(Context.WINDOW_SERVICE);
-            if(wm!=null)screen=wm.getDefaultDisplay();
-        }
+        android.view.Display screen=JarvisServiceDisplay.resolve(this);
         if(screen==null)return FinanceStep.WAIT;
         screen.getRealSize(display);
         if(!FinanceManagerUiLabels.screenshotShape(display.x,display.y))
@@ -562,11 +600,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     }
 
     private int[] financeDisplaySize() {
-        android.view.Display screen=getDisplay();
-        if(screen==null){
-            WindowManager wm=(WindowManager)getSystemService(Context.WINDOW_SERVICE);
-            if(wm!=null)screen=wm.getDefaultDisplay();
-        }
+        android.view.Display screen=JarvisServiceDisplay.resolve(this);
         if(screen==null)return null;
         android.graphics.Point p=new android.graphics.Point();
         screen.getRealSize(p);
@@ -781,11 +815,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             return;
         }
         android.graphics.Point size=new android.graphics.Point();
-        android.view.Display display=getDisplay();
-        if(display==null) {
-            WindowManager wm=(WindowManager)getSystemService(Context.WINDOW_SERVICE);
-            if(wm!=null)display=wm.getDefaultDisplay();
-        }
+        android.view.Display display=JarvisServiceDisplay.resolve(this);
         if(display==null) {
             cb.finished(false,"Не вдалося визначити екран.");return;
         }
@@ -1131,11 +1161,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     private Rect findBoltDropoffTarget(AccessibilityNodeInfo root) {
         if (root == null || !root.isVisibleToUser()) return null;
         android.graphics.Point displaySize = new android.graphics.Point();
-        android.view.Display display = getDisplay();
-        if (display == null) {
-            WindowManager window = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
-            if (window != null) display = window.getDefaultDisplay();
-        }
+        android.view.Display display=JarvisServiceDisplay.resolve(this);
         if (display == null) return null;
         display.getRealSize(displaySize);
         int width=displaySize.x,height=displaySize.y;
@@ -1279,11 +1305,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if (!routePage && screen.height() > screen.width() * 1.45f &&
             BoltUiLabels.ridesHomeFallback(homeHeading,plan,food,send,homeSearch)) {
             android.graphics.Point physical = new android.graphics.Point();
-            android.view.Display display = getDisplay();
-            if (display == null) {
-                WindowManager wm = (WindowManager)getSystemService(Context.WINDOW_SERVICE);
-                if (wm != null)display = wm.getDefaultDisplay();
-            }
+            android.view.Display display=JarvisServiceDisplay.resolve(this);
             if (display != null) {
                 display.getRealSize(physical);
                 int[] point = BoltUiLabels.screenshotRidesPoint(physical.x,physical.y);
@@ -1379,11 +1401,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             return BoltStep.READY;
 
         android.graphics.Point physical=new android.graphics.Point();
-        android.view.Display display=getDisplay();
-        if(display==null){
-            WindowManager wm=(WindowManager)getSystemService(Context.WINDOW_SERVICE);
-            if(wm!=null)display=wm.getDefaultDisplay();
-        }
+        android.view.Display display=JarvisServiceDisplay.resolve(this);
         if(display==null)return BoltStep.BLOCKED;
         display.getRealSize(physical);
         int[] point=BoltUiLabels.screenshotRidesPoint(physical.x,physical.y);
@@ -1631,7 +1649,89 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
 
     private Completion gestureCompletion;
 
+    private PendingScreenAction pendingScreenAction;
+    public static boolean hasPendingAction() {
+        ScreenControlAccessibilityService s=connected.get();
+        return s!=null && s.pendingScreenAction!=null;
+    }
+    public static boolean cancelWaitingAction() {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null || s.pendingScreenAction==null)return false;
+        s.pendingScreenAction.finish(false,"Очікування елемента скасовано.");
+        return true;
+    }
+
+
     public static void perform(ScreenControlCommands.Action action, Completion callback) {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null) {callback.finished(false,"Служба керування екраном недоступна.");return;}
+        if(s.pendingScreenAction!=null)s.pendingScreenAction.finish(false,"Попереднє очікування скасовано новою командою.");
+        PendingScreenAction task=s.new PendingScreenAction(action,callback);
+        s.pendingScreenAction=task;
+        task.run();
+    }
+
+    private static String actionDescription(ScreenControlCommands.Action action) {
+        if(action==null)return "команду";
+        switch(action.kind) {
+            case CLICK:return "натискання кнопки";
+            case LONG_PRESS:return "довге натискання";
+            case TYPE_TEXT:return "введення тексту";
+            case BACK:return "повернення назад";
+            default:return "дію на екрані";
+        }
+    }
+
+    private final class PendingScreenAction implements Runnable {
+        final ScreenControlCommands.Action action;
+        final Completion callback;
+        String expectedPackage;
+        boolean done;
+        int waits;
+        PendingScreenAction(ScreenControlCommands.Action action,Completion callback) {
+            this.action=action;this.callback=callback;
+            this.expectedPackage=visibleExternalPackage();
+        }
+        void finish(boolean ok,String text) {
+            if(done)return;done=true;main.removeCallbacks(this);
+            if(pendingScreenAction==this)pendingScreenAction=null;
+            JarvisActionNotice.show(ScreenControlAccessibilityService.this,text);
+            callback.finished(ok,text);
+        }
+        @Override public void run() {
+            if(done)return;
+            if(!sessionActive || !JarvisPhoneScreenGuard.available(ScreenControlAccessibilityService.this)) {
+                finish(false,"Очікування скасовано: керування вимкнено або телефон заблоковано.");return;
+            }
+            String current=visibleExternalPackage();
+            if((expectedPackage==null || expectedPackage.isEmpty()) && current!=null && !current.isEmpty())
+                expectedPackage=current;
+            if(expectedPackage!=null && !expectedPackage.isEmpty() && current!=null &&
+                !current.isEmpty() && !expectedPackage.equals(current)) {
+                finish(false,"Відкрито іншу програму. Очікування попередньої кнопки скасовано.");return;
+            }
+            JarvisActionNotice.show(ScreenControlAccessibilityService.this,
+                "Виконую " + actionDescription(action));
+            performOnce(action,(ok,text)->{
+                if(done)return;
+                boolean missing=text.startsWith("Не зміг однозначно визначити кнопку") ||
+                    text.startsWith("Відкрий потрібну програму") ||
+                    text.startsWith("Не знайшов кнопку «") ||
+                    text.startsWith("Немає активного текстового поля");
+                if(!ok && missing && action!=null &&
+                    (action.kind==ScreenControlCommands.Kind.CLICK ||
+                     action.kind==ScreenControlCommands.Kind.LONG_PRESS ||
+                     action.kind==ScreenControlCommands.Kind.TYPE_TEXT)) {
+                    long delay=waits++==0?4000L:2000L;
+                    JarvisActionNotice.show(ScreenControlAccessibilityService.this,
+                        "Очікую потрібний елемент. Повторна перевірка через " + delay/1000 + " с. Нова команда скасує очікування.");
+                    main.postDelayed(this,delay);
+                } else finish(ok,text);
+            });
+        }
+    }
+
+    private static void performOnce(ScreenControlCommands.Action action, Completion callback) {
         ScreenControlAccessibilityService service = connected.get();
         if (service == null) {
             callback.finished(false,"Служба керування екраном недоступна.");
@@ -1777,6 +1877,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     }
 
     private void stopSession() {
+        if(pendingScreenAction!=null)pendingScreenAction.finish(false,"Очікування скасовано: керування зупинено.");
         sessionActive = false;
         JarvisPhoneMode.setActive(false);
         if (sequences != null) sequences.cancel();
@@ -1789,6 +1890,8 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     }
 
     @Override public void onDestroy() {
+        main.removeCallbacks(hideActionNotice);
+        hideActionNotice.run();
         if(macroPointPicker!=null){ macroPointPicker.close(); macroPointPicker=null; }
         stopSession();
         if (recognizer != null) {
@@ -1800,7 +1903,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     }
 
     private void toast(String message) {
-        main.post(() -> Toast.makeText(this, message, Toast.LENGTH_LONG).show());
+        JarvisActionNotice.show(this, message);
     }
 
     private void showOverlay() {
@@ -1996,7 +2099,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                             action.kind == ScreenControlCommands.Kind.SCROLL_DOWN ||
                             action.kind == ScreenControlCommands.Kind.SCROLL_UP ||
                             action.kind == ScreenControlCommands.Kind.BACK) {
-                            toast(perform(action));
+                            perform(action,(ok,text)->toast(text));
                         } else {
                             toast("Режим уже запущено. Для зупинки утримуй кнопку.");
                         }
@@ -2215,9 +2318,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if(service==null || !service.sessionActive)return SpotifyStep.BLOCKED;
         AccessibilityNodeInfo root=service.currentSpotifyRoot();
         if(root==null)return SpotifyStep.WAIT;
-        if(service.spotifySearchEditor(root)!=null)return SpotifyStep.ALREADY;
-        SpotifyStep words=service.spotifyClickWords("Пошук","Search","Поиск");
-        if(words==SpotifyStep.CLICKED)return words;
+        boolean editorReady=service.spotifySearchEditor(root)!=null;
         Rect frame=new Rect();root.getBoundsInScreen(frame);
         ArrayDeque<AccessibilityNodeInfo> nodes=new ArrayDeque<>();nodes.add(root);
         AccessibilityNodeInfo found=null;Rect labelBox=null;
@@ -2242,8 +2343,8 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                 if(child!=null)nodes.addLast(child);
             }
         }
-        if(scanned>MAX_SCAN || labelBox==null ||
-           service.currentSpotifyRoot()==null)return SpotifyStep.WAIT;
+        if(scanned>MAX_SCAN || service.currentSpotifyRoot()==null)return SpotifyStep.WAIT;
+        if(labelBox==null)return editorReady?SpotifyStep.ALREADY:SpotifyStep.WAIT;
         FloatingJarvisService.avoidControl(labelBox);
         if(found!=null && found.isEnabled() &&
            found.performAction(AccessibilityNodeInfo.ACTION_CLICK))
@@ -2392,6 +2493,128 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,title);
         return input.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)
             ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
+    }
+
+    public static boolean spotifyCollectionReady(SpotifyUiLabels.Target page,String named) {
+        ScreenControlAccessibilityService s=connected.get();
+        AccessibilityNodeInfo root=s==null?null:s.currentSpotifyRoot();
+        return s!=null && s.sessionActive && root!=null &&
+            s.spotifyPlaylistHeaderVisible(root,page,named);
+    }
+
+    public static boolean spotifyLibraryReady() {
+        ScreenControlAccessibilityService s=connected.get();
+        AccessibilityNodeInfo root=s==null?null:s.currentSpotifyRoot();
+        if(root==null)return false;
+        Rect frame=new Rect();root.getBoundsInScreen(frame);
+        ArrayDeque<AccessibilityNodeInfo> q=new ArrayDeque<>();q.add(root);
+        int count=0;
+        while(!q.isEmpty() && ++count<=MAX_SCAN) {
+            AccessibilityNodeInfo n=q.removeFirst();
+            Rect b=new Rect();n.getBoundsInScreen(b);
+            if(n.isVisibleToUser() && b.centerY()<frame.top+frame.height()*.20f &&
+                spotifyTextMatches(SpotifyUiLabels.Target.LIBRARY,n))return true;
+            for(int i=0;i<n.getChildCount();i++) {AccessibilityNodeInfo c=n.getChild(i);if(c!=null)q.add(c);}
+        }
+        return false;
+    }
+
+    public static boolean spotifySearchEditorReady() {
+        ScreenControlAccessibilityService s=connected.get();
+        AccessibilityNodeInfo root=s==null?null:s.currentSpotifyRoot();
+        AccessibilityNodeInfo field=root==null?null:s.spotifySearchEditor(root);
+        return field!=null && field.isFocused();
+    }
+
+    public static boolean spotifySearchPageOpen() {
+        ScreenControlAccessibilityService s=connected.get();
+        AccessibilityNodeInfo root=s==null?null:s.currentSpotifyRoot();
+        if(root==null)return false;
+        if(s.spotifySearchEditor(root)!=null)return true;
+        Rect frame=new Rect();root.getBoundsInScreen(frame);
+        ArrayDeque<AccessibilityNodeInfo> q=new ArrayDeque<>();q.add(root);
+        int count=0;
+        while(!q.isEmpty() && ++count<=MAX_SCAN) {
+            AccessibilityNodeInfo n=q.removeFirst();
+            Rect b=new Rect();n.getBoundsInScreen(b);
+            if(n.isVisibleToUser()) {
+                String text=asString(n.getText()),desc=asString(n.getContentDescription());
+                if(b.centerY()<frame.top+frame.height()*.32f && b.width()>frame.width()*.4f &&
+                    (SpotifyTrackSearchRules.searchField(text) || SpotifyTrackSearchRules.searchField(desc)))return true;
+                AccessibilityNodeInfo target=clickable(n);
+                if(b.centerY()>frame.top+frame.height()*.72f &&
+                    (SpotifyTrackSearchRules.searchTab(text) || SpotifyTrackSearchRules.searchTab(desc)) &&
+                    (n.isSelected() || target!=null && target.isSelected()))return true;
+            }
+            for(int i=0;i<n.getChildCount();i++) {AccessibilityNodeInfo c=n.getChild(i);if(c!=null)q.add(c);}
+        }
+        return false;
+    }
+
+    /** Scan row metadata, not arbitrary coordinates or the mini-player. */
+    public static String spotifySelectSongRow(String query,SpotifyUiLabels.Target page,
+                                              String named,Set<String> excluded) {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null || !s.sessionActive)return null;
+        AccessibilityNodeInfo root=s.currentSpotifyRoot();
+        if(root==null || (query!=null ? !s.spotifyQueryPresent(root,query) :
+            !s.spotifyPlaylistHeaderVisible(root,page,named)))return null;
+        Rect frame=new Rect();root.getBoundsInScreen(frame);
+        ArrayDeque<AccessibilityNodeInfo> q=new ArrayDeque<>();q.add(root);
+        AccessibilityNodeInfo chosen=null;Rect chosenBounds=null;String chosenKey=null;
+        Set<String> boundsSeen=new HashSet<>();int count=0;
+        while(!q.isEmpty() && ++count<=MAX_SCAN) {
+            AccessibilityNodeInfo n=q.removeFirst();
+            if(!n.isVisibleToUser())continue;
+            Rect b=new Rect();n.getBoundsInScreen(b);
+            if(n.isClickable() && n.isEnabled() && !n.isPassword() &&
+                SpotifyTrackSearchRules.songRowRegion(b.left,b.top,b.right,b.bottom,
+                    frame.left,frame.top,frame.right,frame.bottom) && boundsSeen.add(b.toShortString())) {
+                ArrayDeque<AccessibilityNodeInfo> children=new ArrayDeque<>();children.add(n);
+                StringBuilder labels=new StringBuilder(),ids=new StringBuilder();
+                java.util.LinkedHashSet<String> texts=new java.util.LinkedHashSet<>();
+                int scanned=0;boolean artwork=false;
+                while(!children.isEmpty() && ++scanned<=100) {
+                    AccessibilityNodeInfo child=children.removeFirst();
+                    if(!child.isVisibleToUser())continue;
+                    String text=asString(child.getText());
+                    if(!text.isEmpty())texts.add(text);
+                    labels.append(text).append(" · ").append(asString(child.getContentDescription())).append(" · ");
+                    ids.append(asString(child.getViewIdResourceName())).append(' ');
+                    artwork|=asString(child.getClassName()).contains("Image");
+                    for(int i=0;i<child.getChildCount();i++) {AccessibilityNodeInfo c=child.getChild(i);if(c!=null)children.add(c);}
+                }
+                if(scanned<=100 && SpotifyTrackSearchRules.songRowEvidence(labels.toString(),ids.toString(),
+                    query==null,artwork,texts.size())) {
+                    String key=SpotifyTrackSearchRules.normal(texts.isEmpty()?labels.toString():String.join(" · ",texts));
+                    if(!excluded.contains(key) && (chosenBounds==null || b.top<chosenBounds.top)) {
+                        chosen=n;chosenBounds=b;chosenKey=key;
+                    }
+                }
+            }
+            for(int i=0;i<n.getChildCount();i++) {AccessibilityNodeInfo c=n.getChild(i);if(c!=null)q.add(c);}
+        }
+        if(count>MAX_SCAN || chosen==null || s.currentSpotifyRoot()==null)return null;
+        FloatingJarvisService.avoidControl(chosenBounds);
+        // ACTION_CLICK is accepted once. The controller reports a tap, not
+        // unverified playback, and records the identity only after acceptance.
+        return chosen.performAction(AccessibilityNodeInfo.ACTION_CLICK)?chosenKey:null;
+    }
+
+    public static boolean spotifyScrollSongResults() {
+        ScreenControlAccessibilityService s=connected.get();
+        AccessibilityNodeInfo root=s==null?null:s.currentSpotifyRoot();
+        if(root==null || !s.sessionActive)return false;
+        Rect frame=new Rect();root.getBoundsInScreen(frame);
+        ArrayDeque<AccessibilityNodeInfo> q=new ArrayDeque<>();q.add(root);int count=0;
+        while(!q.isEmpty() && ++count<=MAX_SCAN) {
+            AccessibilityNodeInfo n=q.removeFirst();Rect b=new Rect();n.getBoundsInScreen(b);
+            if(n.isVisibleToUser() && n.isEnabled() && n.isScrollable() &&
+                b.height()>frame.height()*.35f && b.width()>frame.width()*.6f &&
+                n.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD))return true;
+            for(int i=0;i<n.getChildCount();i++) {AccessibilityNodeInfo c=n.getChild(i);if(c!=null)q.add(c);}
+        }
+        return false;
     }
 
     /** Select the FIRST exact-title song on the search-results page only.
@@ -2667,11 +2890,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             x=best.centerX();y=best.centerY();
         } else {
             android.graphics.Point physical=new android.graphics.Point();
-            android.view.Display display=getDisplay();
-            if(display==null) {
-                WindowManager wm=(WindowManager)getSystemService(Context.WINDOW_SERVICE);
-                if(wm!=null)display=wm.getDefaultDisplay();
-            }
+            android.view.Display display=JarvisServiceDisplay.resolve(this);
             if(display==null)return SpotifyStep.WAIT;
             display.getRealSize(physical);
             int[] point=SpotifyUiLabels.screenshotPlaylistPlayPoint(
@@ -2981,11 +3200,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
            spotifyLikedHeaderNearTop(root,frame)) {
             // User-confirmed Pixel 9 screenshot, scaled to physical display.
             android.graphics.Point physical=new android.graphics.Point();
-            android.view.Display display=getDisplay();
-            if(display==null) {
-                WindowManager window=(WindowManager)getSystemService(Context.WINDOW_SERVICE);
-                if(window!=null)display=window.getDefaultDisplay();
-            }
+            android.view.Display display=JarvisServiceDisplay.resolve(this);
             if(display!=null) {
                 display.getRealSize(physical);
                 position=SpotifyUiLabels.screenshotShufflePoint(physical.x,physical.y);
@@ -3146,8 +3361,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                 best.node.isSelected(), best.node.isChecked()))
                 return SpotifyStep.ALREADY;
         }
-        if ((target == SpotifyUiLabels.Target.LIBRARY ||
-             target == SpotifyUiLabels.Target.RAP_FILTER) &&
+        if (target == SpotifyUiLabels.Target.RAP_FILTER &&
              (best.node.isSelected() || best.node.isChecked()))
             return SpotifyStep.ALREADY;
 

@@ -26,7 +26,7 @@ public final class JarvisWearProtocol {
     public static final String SPOTIFY = "spotify";
     public static final String CANCEL_SPOTIFY = "cancel_spotify";
     public static final int SPOTIFY_ACK_TIMEOUT_MS = 145000;
-    // Bolt UI flow is bounded to 45 s; allow delivery and result latency.
+    // Connection deadline; authenticated progress renews it during UI waits.
     public static final int TAXI_ACK_TIMEOUT_MS = 65000;
     // Includes slow personal AI requests and consented phone-side app workflows.
     public static final int ASSISTANT_ACK_TIMEOUT_MS = 150000;
@@ -34,8 +34,15 @@ public final class JarvisWearProtocol {
     // PIN verification plus the original asynchronous phone-side UI action.
     public static final int UNLOCK_ACK_TIMEOUT_MS = 140000;
 
-    // Six sequential screen steps can each take 18 seconds.
+    // ACK deadline is renewed while the phone reports a pending UI command.
     public static final int COMMAND_ACK_TIMEOUT_MS = 150000;
+
+    /** Progress renews the ACK deadline but can never complete a command. */
+    public static final String PROGRESS = "/jarvis/phone-control/v1/progress";
+    public static boolean acceptsProgress(String action) {
+        return SPOTIFY.equals(action) || TAXI.equals(action) || COMMAND.equals(action) ||
+            ASSISTANT.equals(action) || UNLOCK.equals(action);
+    }
 
     public static int timeoutMs(String action) {
         if (SPOTIFY.equals(action)) return SPOTIFY_ACK_TIMEOUT_MS;

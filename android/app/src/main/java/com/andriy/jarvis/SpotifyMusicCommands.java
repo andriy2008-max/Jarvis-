@@ -8,7 +8,7 @@ import java.util.Locale;
  * commands into AI or interprets "stop music" as "start".
  */
 public final class SpotifyMusicCommands {
-    public enum Kind { OPEN, RAP, UKRAINIAN, PLAYLIST, TRACK }
+    public enum Kind { OPEN, RAP, UKRAINIAN, PLAYLIST, TRACK, NEXT_RESULT }
     private SpotifyMusicCommands() {}
 
     public static final class NamedPlaylist {
@@ -59,6 +59,10 @@ public final class SpotifyMusicCommands {
     }
 
     public static Kind parse(String raw) {
+        String followup = CommandPatterns.normalize(raw).replaceAll("\\s+", " ");
+        if (followup.equals("не та пісня") || followup.equals("інша") ||
+            followup.equals("інша пісня") || followup.equals("не та песня") ||
+            followup.equals("другая")) return Kind.NEXT_RESULT;
         if (namedPlaylist(raw)!=null) return Kind.PLAYLIST;
         if (namedTrack(raw)!=null) return Kind.TRACK;
         if (raw == null) return null;

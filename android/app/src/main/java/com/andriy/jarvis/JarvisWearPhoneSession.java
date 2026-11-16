@@ -70,6 +70,7 @@ public final class JarvisWearPhoneSession {
                 JarvisControlFeedback.begin() : 0L;
         Result out = (ok, detail, token, ended) -> {
             JarvisControlFeedback.finish(feedback,ok,SystemClock.uptimeMillis());
+            if(!JarvisWearProtocol.SYNC.equals(action))JarvisActionNotice.show(context,detail);
             originalOut.reply(ok,detail,token,ended);
         };
         String suppliedToken = request.optString("session","");
@@ -177,6 +178,9 @@ public final class JarvisWearPhoneSession {
             return;
         }
         if (JarvisWearProtocol.TAXI.equals(action)) {
+            if(JarvisTaxiCommands.cancelRequested(command)) {
+                BoltTaxiController.cancel();out.reply(true,"Очікування Bolt скасовано.","",false);return;
+            }
             // Taxi is a local command executed by the phone. No AI, no
             // mandatory manual "Телефон" session and no automatic booking.
             if (!JarvisWearProtocol.validCommand(command) ||
@@ -436,6 +440,7 @@ public final class JarvisWearPhoneSession {
             if (!session.isEmpty() && SystemClock.elapsedRealtime() >= deadline) {
                 if ((sequences != null && sequences.isRunning()) ||
                     (spotify != null && spotify.isRunning()) ||
+                    BoltTaxiController.isRunning() || ScreenControlAccessibilityService.hasPendingAction() ||
                     FinanceManagerController.isRunning() || JarvisMacros.isRunning()) extend();
                 else endSession();
             }

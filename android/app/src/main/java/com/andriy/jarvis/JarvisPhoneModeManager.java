@@ -88,6 +88,7 @@ public final class JarvisPhoneModeManager {
 
     public static void perform(Context context, ScreenControlCommands.Action action,
                                ScreenControlAccessibilityService.Completion completion) {
+        ScreenControlAccessibilityService.cancelWaitingAction();
         Lease lease = acquireForCommand(context);
         if (!lease.granted) { completion.finished(false,lease.message); return; }
         ScreenControlAccessibilityService.perform(action,(ok,detail) -> {
