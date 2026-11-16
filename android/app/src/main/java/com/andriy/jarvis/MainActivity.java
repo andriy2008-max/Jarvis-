@@ -636,7 +636,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
         // idle, replies and microphone recovery, independently of listening mode.
         if (isWatchDevice) {
             getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-            JarvisWatchOngoing.show(this);
+            // Command completion is NOT an Activity exit. A user-started
+            // foreground session survives this UI being recreated or hidden.
+            JarvisWatchSessionService.startFromVisibleWatch(this);
             if (Build.VERSION.SDK_INT >= 33 &&
                 checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
                     PackageManager.PERMISSION_GRANTED &&
@@ -2489,7 +2491,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     JarvisSpeechLanguages.PREF,JarvisSpeechLanguages.AUTO)),
             "🖼 Останнє зображення",
             "⏰ Поставити будильник",
-            "🗣 Перевірити голос Watch7"
+            "🗣 Перевірити голос Watch7",
+            "⏹ Завершити Джарвіса (вручну)"
         };
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("Налаштування Джарвіса")
@@ -2566,6 +2569,18 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         // On-device end-to-end speech test, independent of
                         // the phone, AI and microphone recognition.
                         processCommand("Скажи Перевірка голосу. Джарвіс працює на годиннику.");
+                        break;
+                    case 17:
+                        new AlertDialog.Builder(this)
+                            .setTitle("Завершити Джарвіса?")
+                            .setMessage("Джарвіс припинить активний сеанс Watch7. "+
+                                "Таймери, уже заплановані системою, не видаляються. "+
+                                "Для повторного запуску відкрий Джарвіса.")
+                            .setNegativeButton("Залишити",null)
+                            .setPositiveButton("Завершити",(stopDialog,whichButton)->{
+                                JarvisWatchSessionService.stopByOwner(this);
+                                finish();
+                            }).show();
                         break;
                     case 12:
                         shakeEnabled = !shakeEnabled;
@@ -5421,6 +5436,19 @@ public final class MainActivity extends Activity implements RecognitionListener 
         });
     }
 
+    /** Avoid accidentally exiting Jarvis with Wear OS edge-back gestures.
+     * System Home still takes precedence; user may explicitly end the
+     * foreground session via the three-dot menu or its notification. */
+    @Override @Deprecated
+    public void onBackPressed() {
+        if(isWatchDevice) {
+            setStatus("Джарвіс активний. Щоб завершити — відкрий меню ⋮.");
+            if(face!=null)face.invalidate();
+            return;
+        }
+        super.onBackPressed();
+    }
+
     @Override
     protected void onDestroy() {
         if(isWatchDevice) {
@@ -5428,7 +5456,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 "onDestroy; finishing="+isFinishing()+
                 " changingConfig="+isChangingConfigurations());
             cancelPendingWatchTtsStart();
-            if(!isChangingConfigurations())JarvisWatchOngoing.hide(this);
+            // DO NOT remove the Wear OngoingActivity on normal UI destroy:
+            // it belongs to the explicitly started watch session service.
+            // Only the owner's stop action removes it.
         }
         if (headsetRoute != null) headsetRoute.end();
         JarvisPhoneMode.unsubscribe(phoneModeListener);
