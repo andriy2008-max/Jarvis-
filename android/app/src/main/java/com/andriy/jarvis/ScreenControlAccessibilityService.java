@@ -2730,8 +2730,8 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if(scanned>MAX_SCAN || firstTitle==null)return SpotifyStep.WAIT;
         // The text label itself is well left of the row's three-dot/+ actions.
         int x=firstTitle.centerX(),y=firstTitle.centerY();
-        if(s.currentSpotifyRoot()==null ||
-           !s.spotifyQueryPresent(s.currentSpotifyRoot(),title))
+        AccessibilityNodeInfo still=s.currentSpotifyRoot();
+        if(still==null || !s.spotifyQueryPresent(still,title))
             return SpotifyStep.WAIT;
         Path p=new Path();
         p.moveTo(x,y);
