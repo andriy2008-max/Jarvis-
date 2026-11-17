@@ -123,6 +123,28 @@ public final class BoltUiLabels {
             expected.length() <= 250 && actual != null && expected.contentEquals(actual);
     }
 
+    /**
+     * Results start below the two route fields. A suggestion may have a
+     * place name and an address on separate lines (as in Bolt's UI).
+     * Never mistake the editable destination field or booking CTA for a row.
+     */
+    public static boolean firstSuggestionRegion(int x,int y,int width,int height) {
+        return width>0 && height>width*1.65f &&
+            x>width*.09f && x<width*.92f &&
+            y>height*.245f && y<height*.52f;
+    }
+
+    public static boolean suggestionLabel(String value) {
+        String label=normal(value);
+        return label.length()>=3 && !routeTitle(value) &&
+            !pickup(value) && !destination(value) &&
+            !unsafeForTimedRidesTap(value) &&
+            !label.equals("bolt") && !label.equals("назад") &&
+            !label.equals("back") && !label.equals("закрити") &&
+            !label.equals("close") && !label.equals("пошук") &&
+            !label.equals("search");
+    }
+
     public static boolean pickup(String s){
         String v=normal(s);
         return v.contains("звідки")||v.contains("откуда")||
