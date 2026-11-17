@@ -92,6 +92,27 @@ public final class SpotifyTrackSearchRules {
             s.startsWith("пісня ") || s.contains(" пісня ");
     }
 
+    /** Mini-player track title appears above the bottom navigation bar.
+     * Require a precise title, not just a substring of another track. */
+    public static boolean miniPlayerTitle(String requested,String label) {
+        String wanted=normal(requested),shown=normal(label);
+        return !wanted.isEmpty() && !shown.isEmpty() &&
+            (shown.equals(wanted) || shown.startsWith(wanted+" пісня ") ||
+             shown.startsWith(wanted+" song ") ||
+             shown.startsWith(wanted+" трек ") ||
+             shown.startsWith(wanted+" track ") ||
+             shown.startsWith(wanted+" "));
+    }
+
+    public static boolean miniPlayerRegion(int x,int y,int w,int h,
+                                           int left,int top,int right,int bottom) {
+        int pw=right-left,ph=bottom-top;
+        return pw>=240 && ph>=400 && w>12 && h>8 &&
+            w<pw*.93f && h<ph*.16f &&
+            x>left+pw*.035f && x<right-pw*.035f &&
+            y>top+ph*.73f && y<top+ph*.95f;
+    }
+
     /** A search result must be in the content area and not be a bottom
      * player, input field, filter tab, or full-screen carousel. */
     public static boolean resultRegion(int x,int y,int w,int h,
