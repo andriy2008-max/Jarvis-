@@ -123,6 +123,38 @@ public final class BoltUiLabels {
             expected.length() <= 250 && actual != null && expected.contentEquals(actual);
     }
 
+    /** The first passenger destination SEARCH suggestion is below the
+     * start/destination form, not one of its two editable route fields.
+     * Based on the owner's Bolt screenshot (684 x 1536) showing a result at
+     * approximately y=420..495. The bounds, rather than a raw coordinate,
+     * determine the actual tap.
+     */
+    public static boolean suggestionRegion(int x,int y,int width,int height) {
+        return width>=360 && height>width*1.65f &&
+            x>width*.055f && x<width*.94f &&
+            y>height*.245f && y<height*.59f;
+    }
+
+    /** Deny buttons, headers, confirmation, or generic form labels.
+     * Suggestions may contain names in Ukrainian, Russian or English.
+     */
+    public static boolean suggestionLabel(String raw) {
+        String v=normal(raw);
+        return v.length()>=3 && v.length()<=140 &&
+            !routeTitle(raw) && !destination(raw) && !pickup(raw) &&
+            !letsGo(raw) && !rides(raw) && !unsafeForTimedRidesTap(raw) &&
+            !v.equals("пошук") && !v.equals("search") &&
+            !v.equals("змінити") && !v.equals("change") &&
+            !v.equals("додати") && !v.equals("add") &&
+            !v.equals("готово") && !v.equals("done");
+    }
+
+    /** A Bolt launch state is only tappable after it remains unchanged
+     * across two samples; 4 seconds elapsed alone never proves readiness. */
+    public static boolean stablePage(long ageMs) {
+        return ageMs>=900L;
+    }
+
     public static boolean pickup(String s){
         String v=normal(s);
         return v.contains("звідки")||v.contains("откуда")||
