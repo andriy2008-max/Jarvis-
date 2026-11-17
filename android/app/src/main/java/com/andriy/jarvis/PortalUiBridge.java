@@ -26,7 +26,8 @@ import java.util.concurrent.Executors;
  * A read-only diagnostic is available after the user explicitly enables Portal.
  */
 final class PortalUiBridge {
-    enum Target { BOLT_RIDES, BOLT_DROPOFF, SPOTIFY_SEARCH, SPOTIFY_LIBRARY }
+    enum Target { BOLT_RIDES, BOLT_DROPOFF, BOLT_FIRST_SUGGESTION,
+                  SPOTIFY_SEARCH, SPOTIFY_LIBRARY }
     enum State { CLICKED, WAIT, UNAVAILABLE, UNSURE }
     interface Callback { void completed(State state,String note); }
     interface Inspection { void done(boolean ok,String note); }
@@ -125,7 +126,8 @@ final class PortalUiBridge {
     }
 
     private static String packageFor(Target target) {
-        return target==Target.BOLT_RIDES || target==Target.BOLT_DROPOFF ?
+        return target==Target.BOLT_RIDES || target==Target.BOLT_DROPOFF ||
+            target==Target.BOLT_FIRST_SUGGESTION ?
             "ee.mtakso.client":"com.spotify.music";
     }
 
@@ -217,9 +219,16 @@ final class PortalUiBridge {
         }
         List<ScreenPoint> choices=new ArrayList<>();
         int scanned=0;
+        boolean routeTitleFound=false;
+        boolean unsafe=false;
         while(!nodes.isEmpty() && ++scanned<=900){
             JSONObject n=nodes.removeFirst();
             String value=n.optString("text","");
+            if(target==Target.BOLT_FIRST_SUGGESTION) {
+                if(BoltUiLabels.routeTitle(value))routeTitleFound=true;
+                if(BoltUiLabels.unsafeForTimedRidesTap(value) &&
+                   !BoltUiLabels.routeTitle(value))unsafe=true;
+            }
             if(matches(target,value)) {
                 ScreenPoint point=parseBounds(n.optString("bounds",""),width,height);
                 if(point!=null && safeRegion(target,point,width,height)) {
@@ -238,6 +247,14 @@ final class PortalUiBridge {
             }
         }
         if(scanned>900 || choices.isEmpty())return null;
+        if(target==Target.BOLT_FIRST_SUGGESTION) {
+            // The first suggestion is top-to-bottom, not an arbitrary row.
+            if(!routeTitleFound || unsafe)return null;
+            ScreenPoint top=choices.get(0);
+            for(ScreenPoint candidate:choices)
+                if(candidate.y<top.y)top=candidate;
+            return top;
+        }
         return choices.size()==1 ? choices.get(0):new ScreenPoint(-1,-1);
     }
 
@@ -251,6 +268,8 @@ final class PortalUiBridge {
                     !s.contains("оплат") && !s.contains("замовити");
             case BOLT_DROPOFF:
                 return BoltUiLabels.destination(s) && !BoltUiLabels.pickup(s);
+            case BOLT_FIRST_SUGGESTION:
+                return BoltUiLabels.suggestionLabel(s);
             case SPOTIFY_SEARCH:
                 return s.equals("пошук") || s.equals("search");
             case SPOTIFY_LIBRARY:
@@ -264,6 +283,8 @@ final class PortalUiBridge {
             return BoltUiLabels.letsGoRegion(p.x,p.y,0,0,w,h);
         if(target==Target.BOLT_DROPOFF)
             return BoltUiLabels.dropoffRegion(p.x,p.y,w,h);
+        if(target==Target.BOLT_FIRST_SUGGESTION)
+            return BoltUiLabels.suggestionRegion(p.x,p.y,w,h);
         return p.x>=0 && p.x<w && p.y>h*.68 && p.y<h;
     }
 
