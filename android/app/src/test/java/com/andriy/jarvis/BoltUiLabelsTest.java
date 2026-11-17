@@ -72,6 +72,18 @@ public final class BoltUiLabelsTest {
         yes(!BoltUiLabels.typedDestinationMatches("вулиця Шевченка 5", "інша адреса"));
         yes(!BoltUiLabels.typedDestinationMatches("", ""));
         yes(!BoltUiLabels.typedDestinationMatches("вулиця Шевченка 5", null));
+        // 684x1536 Bolt screenshot: first suggestion under the route editor,
+        // about y=420, not in the pickup or destination text fields.
+        yes(BoltUiLabels.firstSuggestionRegion(220,425,684,1536));
+        yes(!BoltUiLabels.firstSuggestionRegion(250,322,684,1536));
+        yes(!BoltUiLabels.firstSuggestionRegion(220,150,684,1536));
+        yes(!BoltUiLabels.firstSuggestionRegion(220,425,1536,684));
+        yes(BoltUiLabels.suggestionLabel("A Hotel by Apartel"));
+        yes(BoltUiLabels.suggestionLabel("Східниця, Львівська область"));
+        yes(!BoltUiLabels.suggestionLabel("Маршрут"));
+        yes(!BoltUiLabels.suggestionLabel("Місце висадки"));
+        yes(!BoltUiLabels.suggestionLabel("Підтвердити поїздку"));
+        yes(!BoltUiLabels.suggestionLabel("Оплата"));
         yes(BoltUiLabels.pickup("Звідки?"));
         yes(BoltUiLabels.pickup("Pickup location"));
         yes(!BoltUiLabels.pickup("Куди?"));
