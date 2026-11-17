@@ -877,6 +877,18 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             (spotify && ((x==-1 && y==510) ||
                 (x==665 && y==2224) ||
                 (playlistPlay && verifiedPlaylistName!=null)));
+        // The package being in foreground is not proof that Bolt completed
+        // loading. The owner-calibrated points are enabled only on their
+        // recognized page; unknown/splash/previous route never receives them.
+        if(bolt) {
+            BoltScreen actual=inspectBoltScreen();
+            BoltScreen required=x==333?BoltScreen.HOME:BoltScreen.ROUTE;
+            if(actual!=required) {
+                cb.finished(false,"Bolt ще не відкрив потрібний екран: "+
+                    required.name()+". Координати не натискав.");
+                return;
+            }
+        }
         if(!allowed || !sessionActive || !trustedExternalApp(packageName) ||
            (playlistPlay && !verifiedNamedPlaylistReady(verifiedPlaylistName))) {
             cb.finished(false,"Програма або сторінка потрібного плейлиста не підтверджена.");
@@ -920,9 +932,11 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             main.postDelayed(()->{
                 try {
                     if(!sessionActive || !trustedExternalApp(packageName) ||
+                       (bolt && inspectBoltScreen()!=
+                         (x==333?BoltScreen.HOME:BoltScreen.ROUTE)) ||
                        (playlistPlay && !verifiedNamedPlaylistReady(verifiedPlaylistName))) {
                         finishTap.finished(false,
-                            "Bolt або Spotify більше не на передньому плані.");
+                            "Bolt або Spotify змінив екран до початку жесту.");
                         return;
                     }
                     Path path=new Path();
