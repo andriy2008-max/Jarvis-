@@ -709,6 +709,85 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     /** Only the user-requested Bolt passenger app may be controlled by these methods. */
     public enum BoltStep { WAIT, CLICKED, READY, ENTERED, SUBMITTED, BLOCKED }
 
+    /** Android reports the Bolt package before its content has finished
+     * loading. This status reads actual Bolt UI markers before authorizing a
+     * calibrated tap or the owner's requested two Back actions.
+     */
+    public enum BoltScreen { WAIT, HOME, ROUTE, SEARCH, OTHER, UNSAFE }
+
+    public static BoltScreen boltScreen() {
+        ScreenControlAccessibilityService svc=connected.get();
+        return svc==null || !svc.sessionActive ? BoltScreen.WAIT :
+            svc.inspectBoltScreen();
+    }
+
+    private BoltScreen inspectBoltScreen() {
+        AccessibilityNodeInfo root=currentBoltRoot();
+        if(root==null)return BoltScreen.WAIT;
+        if(isBoltDestinationFocused())return BoltScreen.SEARCH;
+        ArrayDeque<AccessibilityNodeInfo> all=new ArrayDeque<>();
+        all.add(root);
+        int scanned=0,meaningful=0;
+        boolean route=false,heading=false,rides=false;
+        boolean plan=false,food=false,send=false,search=false,unsafe=false;
+        while(!all.isEmpty() && ++scanned<=MAX_SCAN) {
+            AccessibilityNodeInfo n=all.removeFirst();
+            if(!n.isVisibleToUser())continue;
+            String a=asString(n.getText());
+            String b=asString(n.getContentDescription());
+            String combined=(a+" "+b).toLowerCase(Locale.ROOT);
+            if(!a.trim().isEmpty() || !b.trim().isEmpty())meaningful++;
+            if(BoltUiLabels.routeTitle(a)||BoltUiLabels.routeTitle(b))route=true;
+            if(BoltUiLabels.ridesHomeHeading(a)||
+               BoltUiLabels.ridesHomeHeading(b))heading=true;
+            if(BoltUiLabels.rides(a)||BoltUiLabels.rides(b))rides=true;
+            if(combined.contains("запланувати")||
+               combined.contains("schedule"))plan=true;
+            if(combined.contains("bolt food"))food=true;
+            if(combined.contains("bolt send"))send=true;
+            if(BoltUiLabels.destination(a)||
+               BoltUiLabels.destination(b))search=true;
+            if((BoltUiLabels.unsafeForTimedRidesTap(a) &&
+                !BoltUiLabels.routeTitle(a)) ||
+               (BoltUiLabels.unsafeForTimedRidesTap(b) &&
+                !BoltUiLabels.routeTitle(b)))unsafe=true;
+            for(int i=0;i<n.getChildCount();i++) {
+                AccessibilityNodeInfo child=n.getChild(i);
+                if(child!=null)all.addLast(child);
+            }
+        }
+        if(scanned>MAX_SCAN)return BoltScreen.WAIT;
+        if(unsafe)return BoltScreen.UNSAFE;
+        if(route || findBoltDropoffTarget(root)!=null)return BoltScreen.ROUTE;
+        if(findBoltRidesTarget(root)!=null ||
+            (rides && (heading ||
+            BoltUiLabels.ridesHomeFallback(heading,plan,food,send,search))))
+            return BoltScreen.HOME;
+        if(meaningful>=3 && scanned>=6)return BoltScreen.OTHER;
+        return BoltScreen.WAIT;
+    }
+
+    /** A single system Back, ONLY when Bolt is visibly on a non-home,
+     * non-loading page. The controller may issue at most two, rechecking
+     * actual screen identity between presses; never exit a verified home.
+     */
+    public static BoltStep boltBackTowardHome() {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null || !s.sessionActive || !s.boltWindowTrusted())
+            return BoltStep.BLOCKED;
+        BoltScreen current=s.inspectBoltScreen();
+        if(current==BoltScreen.HOME)return BoltStep.READY;
+        if(current==BoltScreen.WAIT)return BoltStep.WAIT;
+        if(current==BoltScreen.UNSAFE)return BoltStep.BLOCKED;
+        try {
+            return s.performGlobalAction(GLOBAL_ACTION_BACK)
+                ? BoltStep.CLICKED:BoltStep.BLOCKED;
+        } catch(RuntimeException denied) {
+            android.util.Log.w("JARVIS_BOLT","Back navigation blocked",denied);
+            return BoltStep.BLOCKED;
+        }
+    }
+
     public static boolean boltVisible() {
         ScreenControlAccessibilityService service = connected.get();
         return service != null && service.sessionActive && service.currentBoltRoot() != null;
@@ -1597,6 +1676,79 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         } catch (SecurityException | IllegalStateException error) {
             return BoltStep.BLOCKED;
         }
+    }
+
+    /** First visible address suggestion from Bolt's route search result
+     * (for example the owner's «A Hotel by Apartel» result). No hardcoded
+     * screen Y is used; never touches pickup, payment or booking controls.
+     */
+    private Rect firstBoltSuggestion(AccessibilityNodeInfo root) {
+        if(root==null || !root.isVisibleToUser())return null;
+        android.view.Display display=safeActionDisplay();
+        if(display==null)return null;
+        android.graphics.Point size=new android.graphics.Point();
+        display.getRealSize(size);
+        if(size.x<360 || size.y<size.x*1.65f)return null;
+        ArrayDeque<AccessibilityNodeInfo> q=new ArrayDeque<>();
+        q.add(root);
+        int scanned=0;
+        boolean route=false,unsafe=false;
+        Rect first=null;
+        while(!q.isEmpty() && ++scanned<=MAX_SCAN) {
+            AccessibilityNodeInfo n=q.removeFirst();
+            if(!n.isVisibleToUser() || !n.isEnabled() || n.isPassword())continue;
+            String txt=asString(n.getText()),description=asString(n.getContentDescription());
+            if(BoltUiLabels.routeTitle(txt)||BoltUiLabels.routeTitle(description))
+                route=true;
+            if((BoltUiLabels.unsafeForTimedRidesTap(txt) &&
+                !BoltUiLabels.routeTitle(txt)) ||
+               (BoltUiLabels.unsafeForTimedRidesTap(description) &&
+                !BoltUiLabels.routeTitle(description)))unsafe=true;
+            Rect bounds=new Rect();
+            n.getBoundsInScreen(bounds);
+            if(bounds.width()>=25 && bounds.height()>=12 &&
+                bounds.width()<size.x*.92f && bounds.height()<size.y*.14f &&
+                BoltUiLabels.suggestionRegion(bounds.centerX(),bounds.centerY(),
+                    size.x,size.y) &&
+                (BoltUiLabels.suggestionLabel(txt) ||
+                 BoltUiLabels.suggestionLabel(description))) {
+                // The topmost visible result is the first Bolt suggestion,
+                // not the pickup or destination field above it.
+                if(first==null || bounds.top<first.top ||
+                   (bounds.top==first.top && bounds.left<first.left))
+                    first=bounds;
+            }
+            for(int i=0;i<n.getChildCount();i++) {
+                AccessibilityNodeInfo child=n.getChild(i);
+                if(child!=null)q.addLast(child);
+            }
+        }
+        return scanned>MAX_SCAN || unsafe || !route ? null:first;
+    }
+
+    public static boolean boltFirstSuggestionVisible() {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null || !s.sessionActive)return false;
+        AccessibilityNodeInfo root=s.currentBoltRoot();
+        return root!=null && s.firstBoltSuggestion(root)!=null;
+    }
+
+    /** Exactly ONE gesture on the verified first suggestion, with completion
+     * callback; the controller must never interpret gesture-queued as done. */
+    public static BoltStep boltSelectFirstSuggestion(Completion done) {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null || !s.sessionActive || done==null)return BoltStep.BLOCKED;
+        AccessibilityNodeInfo root=s.currentBoltRoot();
+        Rect row=s.firstBoltSuggestion(root);
+        if(row==null)return BoltStep.WAIT;
+        if(s.inspectBoltScreen()==BoltScreen.UNSAFE)return BoltStep.BLOCKED;
+        Path path=new Path();
+        path.moveTo(row.exactCenterX(),row.exactCenterY());
+        GestureDescription tap=new GestureDescription.Builder()
+            .addStroke(new GestureDescription.StrokeDescription(path,0,90))
+            .build();
+        return s.dispatchTrackedGesture(tap,done) ?
+            BoltStep.CLICKED:BoltStep.BLOCKED;
     }
 
     public interface Completion { void finished(boolean success, String detail); }
