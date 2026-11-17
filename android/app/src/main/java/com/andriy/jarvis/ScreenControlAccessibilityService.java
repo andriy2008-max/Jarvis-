@@ -807,6 +807,78 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         return s!=null && s.sessionActive && s.boltWindowTrusted();
     }
 
+    /** Bolt being foreground is not enough: a splash screen has no rides tile. */
+    public static boolean boltHomeReady() {
+        ScreenControlAccessibilityService s=connected.get();
+        return s!=null && s.sessionActive && s.boltHomeVerified();
+    }
+
+    private boolean boltHomeVerified() {
+        AccessibilityNodeInfo root=currentBoltRoot();
+        if(root==null || findBoltRidesTarget(root)==null)return false;
+        ArrayDeque<AccessibilityNodeInfo> nodes=new ArrayDeque<>();
+        nodes.add(root);
+        int scanned=0;
+        boolean rides=false,letsGo=false,heading=false,plan=false,food=false,send=false;
+        while(!nodes.isEmpty() && ++scanned<=MAX_SCAN) {
+            AccessibilityNodeInfo n=nodes.removeFirst();
+            if(!n.isVisibleToUser())continue;
+            String label=boltNodeLabel(n);
+            String title=asString(n.getText());
+            String description=asString(n.getContentDescription());
+            if(BoltUiLabels.routeTitle(title) || BoltUiLabels.routeTitle(description) ||
+               BoltUiLabels.unsafeForTimedRidesTap(title) ||
+               BoltUiLabels.unsafeForTimedRidesTap(description))return false;
+            rides|=BoltUiLabels.rides(title)||BoltUiLabels.rides(description);
+            letsGo|=BoltUiLabels.letsGo(title)||BoltUiLabels.letsGo(description);
+            heading|=BoltUiLabels.ridesHomeHeading(title) ||
+                BoltUiLabels.ridesHomeHeading(description);
+            String lower=label.toLowerCase(Locale.ROOT);
+            plan|=lower.contains("запланувати")||lower.contains("schedule");
+            food|=lower.contains("bolt food");
+            send|=lower.contains("bolt send");
+            for(int i=0;i<n.getChildCount();i++) {
+                AccessibilityNodeInfo child=n.getChild(i);
+                if(child!=null)nodes.addLast(child);
+            }
+        }
+        return scanned<=MAX_SCAN && ((rides && (letsGo || heading)) ||
+            BoltUiLabels.ridesHomeFallback(heading,plan,food,send,rides));
+    }
+
+    /** A populated non-home Bolt page may be backed out of; blank/loading
+     * pages are never treated as ready just because the app is foreground. */
+    public static boolean boltPageReadyForBack() {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null || !s.sessionActive || s.boltHomeVerified())return false;
+        AccessibilityNodeInfo root=s.currentBoltRoot();
+        if(root==null)return false;
+        ArrayDeque<AccessibilityNodeInfo> queue=new ArrayDeque<>();
+        queue.add(root);
+        int scanned=0,labels=0;
+        while(!queue.isEmpty() && ++scanned<=MAX_SCAN) {
+            AccessibilityNodeInfo n=queue.removeFirst();
+            if(!n.isVisibleToUser())continue;
+            String title=asString(n.getText());
+            String description=asString(n.getContentDescription());
+            if(BoltUiLabels.routeTitle(title)||BoltUiLabels.routeTitle(description))
+                return true;
+            if(title.trim().length()>2||description.trim().length()>2)labels++;
+            for(int i=0;i<n.getChildCount();i++) {
+                AccessibilityNodeInfo child=n.getChild(i);
+                if(child!=null)queue.addLast(child);
+            }
+        }
+        return scanned<=MAX_SCAN && labels>=3;
+    }
+
+    /** One Android Back, only while Bolt actually owns the foreground. */
+    public static boolean boltBack() {
+        ScreenControlAccessibilityService s=connected.get();
+        return s!=null && s.sessionActive && s.boltWindowTrusted() &&
+            s.performGlobalAction(GLOBAL_ACTION_BACK);
+    }
+
     private boolean trustedExternalApp(String packageName) {
         if(!JarvisPhoneScreenGuard.available(this)) return false;
         try {
