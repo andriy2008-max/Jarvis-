@@ -1274,6 +1274,80 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             asString(node.getViewIdResourceName());
     }
 
+    /**
+     * Pick the topmost visible search suggestion below the route's two
+     * address fields. A text node is used as the gesture target; do not tap
+     * the Enter field, route header, pickup row, or checkout controls.
+     * No blind fixed-coordinate fallback when Bolt hides the result list.
+     */
+    private Rect firstBoltAddressSuggestion() {
+        AccessibilityNodeInfo root=currentBoltRoot();
+        if(root==null)return null;
+        android.view.Display display=safeActionDisplay();
+        if(display==null)return null;
+        android.graphics.Point screen=new android.graphics.Point();
+        display.getRealSize(screen);
+        if(screen.x<360||screen.y<screen.x*1.65f)return null;
+
+        ArrayDeque<AccessibilityNodeInfo> queue=new ArrayDeque<>();
+        queue.add(root);
+        Rect chosen=null;
+        int scanned=0;
+        boolean route=false,unsafe=false;
+        while(!queue.isEmpty() && ++scanned<=MAX_SCAN) {
+            AccessibilityNodeInfo node=queue.removeFirst();
+            if(!node.isVisibleToUser() || !node.isEnabled() || node.isPassword())
+                continue;
+            String title=asString(node.getText());
+            String description=asString(node.getContentDescription());
+            if(BoltUiLabels.routeTitle(title)||BoltUiLabels.routeTitle(description))
+                route=true;
+            if(BoltUiLabels.unsafeForTimedRidesTap(title) ||
+               BoltUiLabels.unsafeForTimedRidesTap(description))unsafe=true;
+            Rect b=new Rect();
+            node.getBoundsInScreen(b);
+            if(!node.isEditable() && b.width()>24 && b.height()>9 &&
+               b.height()<screen.y*.10f &&
+               BoltUiLabels.firstSuggestionRegion(b.centerX(),b.centerY(),
+                   screen.x,screen.y) &&
+               (BoltUiLabels.suggestionLabel(title) ||
+                BoltUiLabels.suggestionLabel(description))) {
+                // First non-empty result in reading order. A subtitle belonging
+                // to the same row comes later and cannot displace the title.
+                if(chosen==null || b.top<chosen.top ||
+                   (b.top==chosen.top && b.left<chosen.left))chosen=b;
+            }
+            for(int i=0;i<node.getChildCount();i++) {
+                AccessibilityNodeInfo child=node.getChild(i);
+                if(child!=null)queue.addLast(child);
+            }
+        }
+        return route && !unsafe && scanned<=MAX_SCAN ? chosen : null;
+    }
+
+    public static boolean boltFirstSuggestionReady() {
+        ScreenControlAccessibilityService s=connected.get();
+        return s!=null && s.sessionActive &&
+            s.firstBoltAddressSuggestion()!=null;
+    }
+
+    /** Selection ends at the destination suggestion; never request a car. */
+    public static BoltStep boltSelectFirstSuggestion(Completion callback) {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null || !s.sessionActive || callback==null)
+            return BoltStep.BLOCKED;
+        AccessibilityNodeInfo root=s.currentBoltRoot();
+        Rect target=s.firstBoltAddressSuggestion();
+        if(root==null || target==null)return BoltStep.WAIT;
+        Path p=new Path();
+        p.moveTo(target.exactCenterX(),target.exactCenterY());
+        GestureDescription g=new GestureDescription.Builder()
+            .addStroke(new GestureDescription.StrokeDescription(p,0,95))
+            .build();
+        return s.dispatchTrackedGesture(g,callback) ?
+            BoltStep.CLICKED : BoltStep.BLOCKED;
+    }
+
     /** A recognized route/drop-off screen means Bolt has opened «Поїздки»,
      * even when the destination editor is NOT focused yet. */
     public static boolean boltRidesReady() {
