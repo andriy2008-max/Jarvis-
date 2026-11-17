@@ -96,12 +96,12 @@ public final class SpotifyTrackSearchRules {
      * Require a precise title, not just a substring of another track. */
     public static boolean miniPlayerTitle(String requested,String label) {
         String wanted=normal(requested),shown=normal(label);
-        return !wanted.isEmpty() && !shown.isEmpty() &&
-            (shown.equals(wanted) || shown.startsWith(wanted+" пісня ") ||
-             shown.startsWith(wanted+" song ") ||
-             shown.startsWith(wanted+" трек ") ||
-             shown.startsWith(wanted+" track ") ||
-             shown.startsWith(wanted+" "));
+        if(wanted.isEmpty() || shown.isEmpty())return false;
+        if(shown.equals(wanted))return true;
+        // A real combined mini-player label separates title and metadata.
+        // A plain prefix such as "Пачка сигарет (Live)" is NOT a match.
+        String[] parts=label.split("[,•·\\n]",2);
+        return parts.length==2 && normal(parts[0]).equals(wanted);
     }
 
     public static boolean miniPlayerRegion(int x,int y,int w,int h,
