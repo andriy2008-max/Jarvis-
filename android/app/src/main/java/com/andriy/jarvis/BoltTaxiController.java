@@ -11,26 +11,35 @@ public final class BoltTaxiController {
     private static final String BOLT="ee.mtakso.client";
     private static final Handler HANDLER=new Handler(Looper.getMainLooper());
     // Poll the app foreground conservatively; only user-calibrated taps run.
-    private static final long POLL_MS=650L;
-    private static final long TOTAL_TIMEOUT_MS=45000L;
+    private static final long POLL_MS=2000L;
+    // A cold start of Bolt may be much slower than its previous 4s grace
+    // period; never interpret timeout as permission to tap blindly.
+    private static final long TOTAL_TIMEOUT_MS=90000L;
     private static BoltTaxiController active;
     public interface Listener {
         void onProgress(String status);
         void onFinished(boolean ok,String status);
     }
-    private enum Stage { COORD_RIDES, COORD_DROPOFF, COORD_TYPE, COORD_ENTER }
+    private enum Stage { PREPARE, COORD_RIDES, COORD_DROPOFF, COORD_TYPE,
+                         COORD_ENTER, SELECT_FIRST }
     private final Context context;
     private final Listener listener;
     private final String address;
     private final JarvisPhoneModeManager.Lease lease;
     private final Runnable tick=this::pollSafely;
-    private Stage stage=Stage.COORD_RIDES;
+    private Stage stage=Stage.PREPARE;
     private long started=SystemClock.elapsedRealtime();
     private final long flowStarted=started;
     private boolean finished;
     private boolean portalPending;
     private boolean portalSkipped;
     private boolean portalStartedRides;
+    private ScreenControlAccessibilityService.BoltScreen lastObservedScreen;
+    private long sameScreenSince;
+    private int backPressedCount;
+    private boolean selectionPending;
+    private long firstSuggestionSeenAt;
+    private long lastWaitNotice;
     /** A non-sensitive marker for the exact operation that failed.
      * Keep street addresses and recognition transcripts out of logs. */
     private String operation="WAIT_BOLT";
@@ -73,16 +82,35 @@ public final class BoltTaxiController {
         }
         BoltTaxiController job=new BoltTaxiController(context,listener,address,lease);
         synchronized(BoltTaxiController.class){active=job;}
-        listener.onProgress(PortalUiBridge.available(context)
-            ? "Відкриваю Bolt. Спробую знайти кнопки через локальний Mobilerun Portal..."
-            : "Відкриваю Bolt. Служба Portal вимкнена; збережені координати — резервний варіант.");
-        HANDLER.postDelayed(job.tick,POLL_MS);
+        listener.onProgress("Відкриваю Bolt. Чекаю, поки повністю "+
+            "завантажиться головний екран; на інших сторінках повернуся «Назад» "+
+            "до двох разів.");
+        HANDLER.postDelayed(job.tick,500L);
     }
     private void move(Stage next,String info){
         stage=next;started=SystemClock.elapsedRealtime();
         portalPending=false;
         portalSkipped=false;
         listener.onProgress(info);
+    }
+
+    /** Stable screen across two snapshots, not just a 4-second timer. */
+    private boolean observedStable(ScreenControlAccessibilityService.BoltScreen current){
+        if(current!=lastObservedScreen) {
+            lastObservedScreen=current;
+            sameScreenSince=SystemClock.elapsedRealtime();
+            return false;
+        }
+        return BoltUiLabels.stablePage(
+            SystemClock.elapsedRealtime()-sameScreenSince);
+    }
+
+    private void waitMessage(String message) {
+        long now=SystemClock.elapsedRealtime();
+        if(now-lastWaitNotice>=5500L || lastWaitNotice==0L) {
+            lastWaitNotice=now;
+            listener.onProgress(message);
+        }
     }
 
     /** Portal reads the current Bolt tree and taps ONE verified target.
@@ -202,7 +230,8 @@ public final class BoltTaxiController {
         if(finished)return;
         long elapsed=SystemClock.elapsedRealtime()-started;
         if(SystemClock.elapsedRealtime()-flowStarted>=TOTAL_TIMEOUT_MS) {
-            finish(false,"Bolt не завершив послідовність за 45 секунд. Поїздку не замовлено.");
+            finish(false,"Bolt не завершив послідовність за 90 секунд. "+
+                "Не натискав на невідомі кнопки; поїздку не замовлено.");
             return;
         }
         operation="CHECK_ACCESSIBILITY";
@@ -212,17 +241,69 @@ public final class BoltTaxiController {
             return;
         }
         switch(stage) {
-            case COORD_RIDES:
-                // Preserve the existing 4s app-load grace period. Never tap
-                // merely because a timer elapsed: require Bolt foreground too.
-                if(elapsed<BoltUiLabels.RIDES_TAP_DELAY_MS) {
+            case PREPARE: {
+                // Never tap during Bolt splash/loading or resume into an old
+                // route/search screen. Back at most twice until HOME is visible.
+                if(SystemClock.elapsedRealtime()-flowStarted<
+                    BoltUiLabels.RIDES_TAP_DELAY_MS) {
                     HANDLER.postDelayed(tick,POLL_MS);return;
                 }
-                operation="CHECK_BOLT_FOREGROUND";
-                if(!ScreenControlAccessibilityService.boltCoordinateReady()) {
-                    if(elapsed>12000L) {
-                        finish(false,"Не вдалося підтвердити, що відкритий Bolt. Натискання зупинено.");
-                    } else HANDLER.postDelayed(tick,POLL_MS);
+                operation="WAIT_BOLT_LOADED";
+                ScreenControlAccessibilityService.BoltScreen page=
+                    ScreenControlAccessibilityService.boltScreen();
+                boolean stable=observedStable(page);
+                if(page==ScreenControlAccessibilityService.BoltScreen.WAIT) {
+                    waitMessage("Bolt ще завантажується. "+
+                        "Перевірю екран знову через 2 секунди...");
+                    HANDLER.postDelayed(tick,POLL_MS);return;
+                }
+                if(page==ScreenControlAccessibilityService.BoltScreen.UNSAFE) {
+                    finish(false,"Bolt відкрив екран підтвердження або оплати. "+
+                        "Не натискаю «Назад» і не продовжую поїздку автоматично.");
+                    return;
+                }
+                if(!stable) {
+                    HANDLER.postDelayed(tick,POLL_MS);return;
+                }
+                if(page==ScreenControlAccessibilityService.BoltScreen.HOME) {
+                    move(Stage.COORD_RIDES,
+                        "Головний екран Bolt завантажений. Шукаю «Рушаймо»...");
+                    HANDLER.post(tick);return;
+                }
+                if(backPressedCount>=2) {
+                    finish(false,"Два рази повернувся «Назад», але головний "+
+                        "екран Bolt не з'явився. Натискання зупинено.");
+                    return;
+                }
+                operation="BOLT_BACK_TO_HOME";
+                ScreenControlAccessibilityService.BoltStep back=
+                    ScreenControlAccessibilityService.boltBackTowardHome();
+                if(back==ScreenControlAccessibilityService.BoltStep.READY) {
+                    HANDLER.postDelayed(tick,POLL_MS);return;
+                }
+                if(back==ScreenControlAccessibilityService.BoltStep.WAIT) {
+                    HANDLER.postDelayed(tick,POLL_MS);return;
+                }
+                if(back!=ScreenControlAccessibilityService.BoltStep.CLICKED) {
+                    finish(false,"Android не дозволив повернутися до "+
+                        "головного екрана Bolt. Дії зупинено.");
+                    return;
+                }
+                backPressedCount++;
+                lastObservedScreen=null;
+                listener.onProgress("Bolt відкрив попередній екран. "+
+                    "Емулював «Назад» "+backPressedCount+"/2. "+
+                    "Перевіряю наступний екран...");
+                HANDLER.postDelayed(tick,1800L);
+                return;
+            }
+            case COORD_RIDES:
+                operation="CHECK_BOLT_HOME";
+                if(ScreenControlAccessibilityService.boltScreen()!=
+                    ScreenControlAccessibilityService.BoltScreen.HOME) {
+                    waitMessage("Чекаю підтвердження головного екрана Bolt "+
+                        "перед «Рушаймо»...");
+                    HANDLER.postDelayed(tick,POLL_MS);
                     return;
                 }
                 if(maybeTapThroughPortal(Stage.COORD_RIDES,
@@ -243,9 +324,23 @@ public final class BoltTaxiController {
                 if(elapsed<2000L) {
                     HANDLER.postDelayed(tick,2000L-elapsed);return;
                 }
-                if(!ScreenControlAccessibilityService.boltCoordinateReady()) {
-                    finish(false,"Bolt не підтверджено перед натисканням «Місце висадки».");
-                    return;
+                ScreenControlAccessibilityService.BoltScreen dropoffScreen=
+                    ScreenControlAccessibilityService.boltScreen();
+                if(dropoffScreen==ScreenControlAccessibilityService.BoltScreen.SEARCH) {
+                    if(address.isEmpty()) {
+                        finish(true,"Bolt уже відкрив поле адреси.");return;
+                    }
+                    move(Stage.COORD_TYPE,"Поле адреси вже активне. Вводжу адресу...");
+                    HANDLER.post(tick);return;
+                }
+                if(dropoffScreen==ScreenControlAccessibilityService.BoltScreen.UNSAFE){
+                    finish(false,"Bolt відкрив екран підтвердження/оплати. "+
+                        "Нічого не натискаю.");return;
+                }
+                if(dropoffScreen!=ScreenControlAccessibilityService.BoltScreen.ROUTE){
+                    waitMessage("Чекаю завантаження сторінки «Маршрут» "+
+                        "перед натисканням «Місце висадки»...");
+                    HANDLER.postDelayed(tick,POLL_MS);return;
                 }
                 if(maybeTapThroughPortal(Stage.COORD_DROPOFF,
                     PortalUiBridge.Target.BOLT_DROPOFF))return;
@@ -297,14 +392,61 @@ public final class BoltTaxiController {
                 ScreenControlAccessibilityService.BoltStep enter=
                     ScreenControlAccessibilityService.boltSubmitDestinationSearch();
                 if(enter==ScreenControlAccessibilityService.BoltStep.SUBMITTED) {
-                    finish(true,"Ввів адресу «"+address+
-                        "» і один раз натиснув Enter у пошуку Bolt. "+
-                        "Перевір правильність результату. Поїздку не замовляв.");
+                    move(Stage.SELECT_FIRST,
+                        "Enter натиснуто. Очікую перший варіант адреси зі списку Bolt...");
+                    HANDLER.postDelayed(tick,900L);
                 } else if(enter==ScreenControlAccessibilityService.BoltStep.BLOCKED) {
                     finish(false,"Android не дозволив натиснути Enter у Bolt. "+
                         "Адресу вже введено. Поїздку не замовляв.");
                 } else HANDLER.postDelayed(tick,POLL_MS);
                 return;
+            case SELECT_FIRST: {
+                if(selectionPending)return;
+                if(elapsed>18000L) {
+                    finish(false,"Bolt не показав доступний перший варіант адреси "+
+                        "після Enter. Адресу введено, але результат не вибрано.");
+                    return;
+                }
+                if(!ScreenControlAccessibilityService.boltFirstSuggestionVisible()) {
+                    firstSuggestionSeenAt=0L;
+                    waitMessage("Шукаю першу підказку адреси Bolt. "+
+                        "Перевірю через 2 секунди...");
+                    HANDLER.postDelayed(tick,POLL_MS);return;
+                }
+                long now=SystemClock.elapsedRealtime();
+                if(firstSuggestionSeenAt==0L) {
+                    firstSuggestionSeenAt=now;
+                    HANDLER.postDelayed(tick,950L);return;
+                }
+                if(!BoltUiLabels.stablePage(now-firstSuggestionSeenAt)) {
+                    HANDLER.postDelayed(tick,500L);return;
+                }
+                operation="BOLT_FIRST_ADDRESS_SUGGESTION";
+                selectionPending=true;
+                ScreenControlAccessibilityService.BoltStep selected=
+                    ScreenControlAccessibilityService.boltSelectFirstSuggestion(
+                        (ok,detail)->{
+                            selectionPending=false;
+                            if(finished || stage!=Stage.SELECT_FIRST)return;
+                            finish(ok,ok
+                                ? "Натиснув перший видимий варіант адреси в "+
+                                  "Bolt після Enter. Перевір назву й маршрут; "+
+                                  "поїздку не замовляв."
+                                : "Bolt не підтвердив вибір першої адреси: "+
+                                  detail+". Повторно не натискав.");
+                        });
+                if(selected!=ScreenControlAccessibilityService.BoltStep.CLICKED) {
+                    selectionPending=false;
+                    if(selected==ScreenControlAccessibilityService.BoltStep.BLOCKED) {
+                        finish(false,"Перший варіант адреси в Bolt не можна "+
+                            "безпечно натиснути. Поїздку не замовляв.");
+                    } else {
+                        HANDLER.postDelayed(tick,POLL_MS);
+                    }
+                } else listener.onProgress(
+                    "Натискаю перший варіант адреси, як на скриншоті...");
+                return;
+            }
             default:
                 finish(false,"Невідома стадія введення адреси Bolt.");
         }
