@@ -38,6 +38,7 @@ public final class BoltTaxiController {
     private long sameScreenSince;
     private int backPressedCount;
     private boolean selectionPending;
+    private boolean portalSuggestionDisabled;
     private long firstSuggestionSeenAt;
     private long lastWaitNotice;
     /** A non-sensitive marker for the exact operation that failed.
@@ -111,6 +112,55 @@ public final class BoltTaxiController {
             lastWaitNotice=now;
             listener.onProgress(message);
         }
+    }
+
+    /** When Bolt's Compose list is invisible to Jarvis Accessibility,
+     * use the separately authorized local Portal to click its first
+     * SEMANTIC address row. Portal verifies Bolt's foreground package and
+     * a visible route header; no uncertain click or raw fallback coordinates.
+     */
+    private boolean maybeSelectViaPortal() {
+        if(portalSuggestionDisabled || !PortalUiBridge.available(context))
+            return false;
+        selectionPending=true;
+        final Runnable restore;
+        try { restore=FloatingJarvisService.hideForGesture(); }
+        catch(RuntimeException failure) {
+            selectionPending=false;
+            finish(false,"Не вдалося приховати плаваюче обличчя "+
+                "перед вибором адреси через Portal.");
+            return true;
+        }
+        listener.onProgress("Не бачу результату в Accessibility. "+
+            "Перевіряю перший варіант адреси через Mobilerun Portal...");
+        PortalUiBridge.tap(context,PortalUiBridge.Target.BOLT_FIRST_SUGGESTION,
+            (state,note)->{
+                selectionPending=false;
+                try { restore.run(); }
+                catch(RuntimeException err) {
+                    finish(false,"Не вдалося відновити обличчя після Portal.");
+                    return;
+                }
+                if(finished || stage!=Stage.SELECT_FIRST)return;
+                switch(state) {
+                    case CLICKED:
+                        finish(true,"Portal натиснув перший варіант адреси Bolt. "+
+                            "Перевір результат перед замовленням; поїздку не замовляв.");
+                        return;
+                    case UNSURE:
+                        finish(false,"Portal не зміг підтвердити натискання "+
+                            "першої адреси. Не повторював ризиковане натискання.");
+                        return;
+                    case UNAVAILABLE:
+                        portalSuggestionDisabled=true;
+                        break;
+                    case WAIT:
+                    default:
+                        break;
+                }
+                HANDLER.postDelayed(tick,POLL_MS);
+            });
+        return true;
     }
 
     /** Portal reads the current Bolt tree and taps ONE verified target.
@@ -409,6 +459,7 @@ public final class BoltTaxiController {
                 }
                 if(!ScreenControlAccessibilityService.boltFirstSuggestionVisible()) {
                     firstSuggestionSeenAt=0L;
+                    if(elapsed>=4500L && maybeSelectViaPortal())return;
                     waitMessage("Шукаю першу підказку адреси Bolt. "+
                         "Перевірю через 2 секунди...");
                     HANDLER.postDelayed(tick,POLL_MS);return;
