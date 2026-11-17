@@ -77,6 +77,28 @@ public final class SpotifyTrackSearchRulesTest {
             "never search bar");
         ok(!SpotifyTrackSearchRules.resultRegion(360,470,684,1536,0,0,684,1536),
             "never full screen control");
+        // Nov 17 Pixel screen: two tracks with the same title. The first
+        // is Kino at y~310, the second is Lizer at y~510 (684x1536).
+        ok(SpotifyTrackSearchRules.exactTypedSong("Пачка сигарет",
+            "Пачка сигарет • Пісня • Kino"),"first correct Kino song");
+        ok(SpotifyTrackSearchRules.resultRegion(255,320,260,44,
+            0,0,684,1536),"first result title region");
+        ok(SpotifyTrackSearchRules.resultRegion(255,520,260,44,
+            0,0,684,1536),"second song exists but must not win");
+        ok(!SpotifyTrackSearchRules.resultRegion(340,151,530,48,
+            0,0,684,1536),"exclude top search query header");
+        ok(!SpotifyTrackSearchRules.exactTypedSong("Пачка сигарет",
+            "Пачка сигарет • Виконавець • Kino"),"exclude artist row");
+        ok(SpotifyTrackSearchRules.miniPlayerTitle("Пачка сигарет",
+            "Пачка сигарет"),"playing song title in mini player");
+        ok(!SpotifyTrackSearchRules.miniPlayerTitle("Пачка сигарет",
+            "Пачка сигарет (Live)"),"different version not playback proof");
+        ok(SpotifyTrackSearchRules.miniPlayerRegion(210,1240,240,36,
+            0,0,684,1536),"mini player lower area");
+        ok(!SpotifyTrackSearchRules.miniPlayerRegion(210,320,240,36,
+            0,0,684,1536),"song result is not mini player");
+        ok(!SpotifyTrackSearchRules.miniPlayerRegion(210,1480,240,36,
+            0,0,684,1536),"navigation bar is not mini player");
         System.out.println("PASS SpotifyTrackSearchRulesTest");
     }
 }
