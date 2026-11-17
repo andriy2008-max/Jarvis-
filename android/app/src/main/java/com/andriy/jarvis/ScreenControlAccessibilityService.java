@@ -1302,8 +1302,10 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             String description=asString(node.getContentDescription());
             if(BoltUiLabels.routeTitle(title)||BoltUiLabels.routeTitle(description))
                 route=true;
-            if(BoltUiLabels.unsafeForTimedRidesTap(title) ||
-               BoltUiLabels.unsafeForTimedRidesTap(description))unsafe=true;
+            if((BoltUiLabels.unsafeForTimedRidesTap(title) &&
+                !BoltUiLabels.routeTitle(title)) ||
+               (BoltUiLabels.unsafeForTimedRidesTap(description) &&
+                !BoltUiLabels.routeTitle(description)))unsafe=true;
             Rect b=new Rect();
             node.getBoundsInScreen(b);
             if(!node.isEditable() && b.width()>24 && b.height()>9 &&
