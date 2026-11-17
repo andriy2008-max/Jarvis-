@@ -2678,6 +2678,101 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
     }
 
+    /**
+     * Tap the visible TITLE of the first exact-title song result, not a fixed
+     * Y coordinate. Spotify may prepend recommended releases or change row
+     * heights; avoid selecting an artist, a playlist or a second cover.
+     *
+     * A gesture is used because some Spotify Compose rows ignore ACTION_CLICK.
+     * Callback reports actual Android gesture completion. No speculative
+     * additional taps while waiting for the callback.
+     */
+    public static SpotifyStep spotifyTapFirstTrackResult(
+        String title, Completion callback) {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null || !s.sessionActive || callback==null ||
+           title==null || title.trim().isEmpty() || title.length()>100)
+            return SpotifyStep.BLOCKED;
+        AccessibilityNodeInfo root=s.currentSpotifyRoot();
+        if(root==null || !s.spotifyQueryPresent(root,title))return SpotifyStep.WAIT;
+        Rect frame=new Rect();
+        root.getBoundsInScreen(frame);
+        ArrayDeque<AccessibilityNodeInfo> nodes=new ArrayDeque<>();
+        nodes.add(root);
+        Rect firstTitle=null;
+        int scanned=0;
+        while(!nodes.isEmpty() && ++scanned<=MAX_SCAN) {
+            AccessibilityNodeInfo node=nodes.removeFirst();
+            if(!node.isVisibleToUser() || !node.isEnabled() || node.isPassword())
+                continue;
+            String text=asString(node.getText());
+            String desc=asString(node.getContentDescription());
+            if(!node.isEditable() &&
+               (SpotifyTrackSearchRules.exactSong(title,text) ||
+                SpotifyTrackSearchRules.exactSong(title,desc) ||
+                SpotifyTrackSearchRules.exactTypedSong(title,desc) ||
+                SpotifyTrackSearchRules.exactTypedSong(title,text))) {
+                Rect box=new Rect();
+                node.getBoundsInScreen(box);
+                if(SpotifyTrackSearchRules.resultRegion(
+                    box.centerX(),box.centerY(),box.width(),box.height(),
+                    frame.left,frame.top,frame.right,frame.bottom) &&
+                   (firstTitle==null || box.top<firstTitle.top ||
+                    (box.top==firstTitle.top && box.left<firstTitle.left))) {
+                    firstTitle=box;
+                }
+            }
+            for(int i=0;i<node.getChildCount();i++) {
+                AccessibilityNodeInfo child=node.getChild(i);
+                if(child!=null)nodes.addLast(child);
+            }
+        }
+        if(scanned>MAX_SCAN || firstTitle==null)return SpotifyStep.WAIT;
+        // The text label itself is well left of the row's three-dot/+ actions.
+        int x=firstTitle.centerX(),y=firstTitle.centerY();
+        if(s.currentSpotifyRoot()==null ||
+           !s.spotifyQueryPresent(s.currentSpotifyRoot(),title))
+            return SpotifyStep.WAIT;
+        Path p=new Path();
+        p.moveTo(x,y);
+        GestureDescription g=new GestureDescription.Builder()
+            .addStroke(new GestureDescription.StrokeDescription(p,0,95))
+            .build();
+        return s.dispatchTrackedGesture(g,callback)
+            ? SpotifyStep.CLICKED : SpotifyStep.BLOCKED;
+    }
+
+    /** Verify the chosen track in Spotify's BOTTOM mini-player, rather than
+     * trusting the Android gesture's completion as proof that audio started. */
+    public static boolean spotifyMiniPlayerHasTrack(String title) {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null || !s.sessionActive || title==null || title.isEmpty())return false;
+        AccessibilityNodeInfo root=s.currentSpotifyRoot();
+        if(root==null)return false;
+        Rect frame=new Rect();root.getBoundsInScreen(frame);
+        ArrayDeque<AccessibilityNodeInfo> nodes=new ArrayDeque<>();
+        nodes.add(root);
+        int scanned=0;
+        while(!nodes.isEmpty() && ++scanned<=MAX_SCAN) {
+            AccessibilityNodeInfo n=nodes.removeFirst();
+            if(!n.isVisibleToUser() || n.isPassword())continue;
+            String label=asString(n.getText());
+            String desc=asString(n.getContentDescription());
+            Rect b=new Rect();n.getBoundsInScreen(b);
+            if(SpotifyTrackSearchRules.miniPlayerRegion(
+                b.centerX(),b.centerY(),b.width(),b.height(),
+                frame.left,frame.top,frame.right,frame.bottom) &&
+               (SpotifyTrackSearchRules.miniPlayerTitle(title,label) ||
+                SpotifyTrackSearchRules.miniPlayerTitle(title,desc)))
+                return true;
+            for(int i=0;i<n.getChildCount();i++) {
+                AccessibilityNodeInfo child=n.getChild(i);
+                if(child!=null)nodes.addLast(child);
+            }
+        }
+        return false;
+    }
+
     /** Open one saved playlist selected by an explicit voice command.
      * A library item must have an exact visible title and a clickable row.
      * Ambiguous duplicates do not get clicked. */
