@@ -28,7 +28,7 @@ public final class SpotifyPlaybackController {
         WAIT_APP, OPEN_LIBRARY, OPEN_COLLECTION, WAIT_PLAYLIST_PAGE,
         CHOOSE_RAP, PLAY, VERIFY_PLAY,
         OPEN_SEARCH_TAB, FOCUS_SEARCH, TYPE_SEARCH, SUBMIT_SEARCH,
-        COORD_SELECT_FIRST
+        COORD_SELECT_FIRST, VERIFY_TRACK_PLAY
     }
 
     private final Context context;
@@ -241,7 +241,10 @@ public final class SpotifyPlaybackController {
                     reason = "Не вдалося підтвердити пошук пісні клавішею Пошук/Enter.";
                     break;
                 case COORD_SELECT_FIRST:
-                    reason = "Не вдалося натиснути першу пісню по центру на Y=510.";
+                    reason = "Пошук завершено, але Spotify не показав доступний перший результат із потрібною назвою.";
+                    break;
+                case VERIFY_TRACK_PLAY:
+                    reason = "Натискання виконано, але назва пісні не з'явилася у мініпрогравачі Spotify.";
                     break;
                 case VERIFY_PLAY:
                     reason = "Натиснув Play, але Spotify не підтвердив відтворення. " +
@@ -313,18 +316,41 @@ public final class SpotifyPlaybackController {
                 if(successful(ScreenControlAccessibilityService.spotifySubmitTrackSearch(namedTrack)))
                     move(Stage.COORD_SELECT_FIRST,"Очікую результати пошуку Spotify...");
                 break;
-            case COORD_SELECT_FIRST:
-                // One tap after submission and a loading delay. Never repeat it
-                // or claim playback merely because Android accepted the gesture.
-                if(age<3000L)break;
-                ScreenControlAccessibilityService.spotifyTapCalibrated(-1,510,
-                    (ok,detail)->{
-                        if(!active || stage!=Stage.COORD_SELECT_FIRST)return;
-                        finish(ok,ok
-                            ? "Натиснув першу пісню по центру екрана на Y=510. Перевір відтворення."
-                            : "Не вдалося натиснути першу пісню Spotify: "+detail);
-                    });
+            case COORD_SELECT_FIRST: {
+                // Spotify's first result moves when a "More releases" section,
+                // filters, or a mini-player changes the layout. Do not assume
+                // Y=510 or that the foreground app is already displaying songs.
+                if(age<1100L)break;
+                ScreenControlAccessibilityService.SpotifyStep selected=
+                    ScreenControlAccessibilityService.spotifyTapFirstTrackResult(
+                        namedTrack,(ok,detail)->{
+                            if(!active || stage!=Stage.COORD_SELECT_FIRST)return;
+                            if(!ok) {
+                                finish(false,"Spotify не зміг натиснути першу пісню: "+detail);
+                                return;
+                            }
+                            move(Stage.VERIFY_TRACK_PLAY,
+                                "Першу пісню натиснуто. Перевіряю мініпрогравач Spotify...");
+                            handler.postDelayed(poll,650L);
+                        });
+                if(selected==ScreenControlAccessibilityService.SpotifyStep.WAIT)
+                    handler.postDelayed(poll,2000L);
+                else if(selected==ScreenControlAccessibilityService.SpotifyStep.BLOCKED &&
+                        active && stage==Stage.COORD_SELECT_FIRST)
+                    finish(false,"Spotify не дозволив вибрати першу пісню.");
+                // CLICKED: gesture completion callback owns the next stage;
+                // no repeated taps while it is pending.
                 return;
+            }
+            case VERIFY_TRACK_PLAY:
+                if(ScreenControlAccessibilityService.spotifyMiniPlayerHasTrack(namedTrack)) {
+                    finish(true,"Spotify показує пісню «"+namedTrack+
+                        "» у мініпрогравачі. Перевір, чи є звук.");
+                } else if(age>=6500L) {
+                    finish(false,"Перша пісня була натиснута, але Spotify не "+
+                        "підтвердив її появу в мініпрогравачі. Повторно не натискав.");
+                }
+                break;
             case WAIT_PLAYLIST_PAGE: {
                 ScreenControlAccessibilityService.SpotifyStep ready=
                     ScreenControlAccessibilityService.spotifyNamedPlaylistDetailReady(
