@@ -1,6 +1,8 @@
 package com.andriy.jarvis;
 
 import android.accessibilityservice.AccessibilityService;
+import android.os.Build;
+import android.view.accessibility.AccessibilityWindowInfo;
 import android.accessibilityservice.GestureDescription;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -52,9 +54,26 @@ public final class JarvisWatchScreenService extends AccessibilityService {
     private AccessibilityNodeInfo appRoot(String expectedPackage) {
         if(expectedPackage==null || expectedPackage.isEmpty())return null;
         AccessibilityNodeInfo root=getRootInActiveWindow();
-        if(root==null || !root.isVisibleToUser() || root.getPackageName()==null ||
-           !expectedPackage.contentEquals(root.getPackageName()))return null;
-        return root;
+        if(root!=null && root.isVisibleToUser() && root.getPackageName()!=null &&
+           expectedPackage.contentEquals(root.getPackageName()))return root;
+        // The Wear OS keyboard sometimes becomes the active accessibility
+        // window. Read the still-visible Spotify window beneath the IME, but
+        // never operate behind permission dialogs or other applications.
+        boolean imeVisible=false;
+        for(AccessibilityWindowInfo win:getWindows()) {
+            if(win.getType()==AccessibilityWindowInfo.TYPE_INPUT_METHOD &&
+               win.isActive())imeVisible=true;
+        }
+        if(!imeVisible)return null;
+        for(AccessibilityWindowInfo win:getWindows()) {
+            if(win.getType()!=AccessibilityWindowInfo.TYPE_APPLICATION)continue;
+            AccessibilityNodeInfo candidate=win.getRoot();
+            if(candidate!=null && candidate.isVisibleToUser() &&
+               candidate.getPackageName()!=null &&
+               expectedPackage.contentEquals(candidate.getPackageName()))
+                return candidate;
+        }
+        return null;
     }
     public static boolean foreground(String expectedPackage) {
         JarvisWatchScreenService s=connected.get();
@@ -94,7 +113,7 @@ public final class JarvisWatchScreenService extends AccessibilityService {
     // restricted to Spotify's visible accessibility tree on THIS watch.
     // Screen locations are never copied from the paired phone.
     public enum SpotifyStep {
-        OPEN_SEARCH, REVEAL_NAV, FOCUS_SEARCH, SET_QUERY,
+        OPEN_SEARCH, REVEAL_NAV, FOCUS_SEARCH, SET_QUERY, SUBMIT_QUERY,
         SELECT_RESULT, PLAY_PLAYLIST, VERIFY_PLAYLIST
     }
     private static final String SPOTIFY_PKG="com.spotify.music";
@@ -114,6 +133,8 @@ public final class JarvisWatchScreenService extends AccessibilityService {
                 return service.spotifyFocusSearch(root,completion);
             case SET_QUERY:
                 return service.spotifySetQuery(root,title);
+            case SUBMIT_QUERY:
+                return service.spotifySubmitQuery(root);
             case SELECT_RESULT:
                 return service.spotifySelectResult(root,title,completion);
             case PLAY_PLAYLIST:
@@ -233,6 +254,24 @@ public final class JarvisWatchScreenService extends AccessibilityService {
             args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,title);
             return n.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)
                 ?Result.DONE:Result.WAIT;
+        }
+        return Result.WAIT;
+    }
+
+    private Result spotifySubmitQuery(AccessibilityNodeInfo root) {
+        for(AccessibilityNodeInfo n:spotifyNodes(root)) {
+            if(!n.isEditable() || n.isPassword())continue;
+            if(Build.VERSION.SDK_INT>=30) {
+                int enter=AccessibilityNodeInfo.AccessibilityAction
+                    .ACTION_IME_ENTER.getId();
+                for(AccessibilityNodeInfo.AccessibilityAction action:n.getActionList()) {
+                    if(action.getId()==enter)
+                        return n.performAction(enter)?Result.DONE:Result.WAIT;
+                }
+            }
+            // Some Spotify versions update results on each keystroke and
+            // expose no IME Enter. Let the result search decide readiness.
+            return Result.DONE;
         }
         return Result.WAIT;
     }
