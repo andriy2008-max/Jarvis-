@@ -45,6 +45,8 @@
         <package android:name="com.arlosoft.macrodroid" />
         <!-- Spotify: user-requested app launch and verified accessibility controls. -->
         <package android:name="com.spotify.music" />
+        <!-- Google Maps location and walking directions launched locally on Wear OS. -->
+        <package android:name="com.google.android.apps.maps" />
         <intent><action android:name="android.speech.RecognitionService" /></intent>
         <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
         <!-- Query launcher-visible activities only, without QUERY_ALL_PACKAGES. -->
