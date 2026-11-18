@@ -40,7 +40,7 @@ final class JarvisWatchOngoing {
         if (manager == null) return;
         try {
             manager.createNotificationChannel(new NotificationChannel(
-                CHANNEL, "Джарвіс — активний сеанс", NotificationManager.IMPORTANCE_LOW));
+                CHANNEL, "Дімон — активний сеанс", NotificationManager.IMPORTANCE_LOW));
 
             Intent launch = new Intent(context, MainActivity.class);
             launch.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
@@ -49,8 +49,8 @@ final class JarvisWatchOngoing {
             NotificationCompat.Builder notification = new NotificationCompat.Builder(
                 context, CHANNEL)
                 .setSmallIcon(R.drawable.ic_launcher)
-                .setContentTitle("Джарвіс активний на годиннику")
-                .setContentText("Натисни, щоб повернутися до Джарвіса")
+                .setContentTitle("Дімон активний на годиннику")
+                .setContentText("Натисни, щоб повернутися до Дімона")
                 .setContentIntent(resume)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .setOnlyAlertOnce(true)
