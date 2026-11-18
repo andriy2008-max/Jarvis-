@@ -74,6 +74,19 @@ public final class WatchLifecycleTest {
             });
         }
     }
+    @Test public void externalSettingsAndReturn() {
+        Context app=inst.getTargetContext();
+        try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)) {
+            for(int i=0;i<3;i++) {
+                scenario.onActivity(a->a.startActivity(new Intent(android.provider.Settings.ACTION_SETTINGS)));
+                inst.waitForIdleSync();
+                app.startActivity(new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT|Intent.FLAG_ACTIVITY_SINGLE_TOP));
+                inst.waitForIdleSync();
+                scenario.onActivity(a->{ assertFalse(a.isFinishing());assertFalse(a.isDestroyed()); });
+            }
+        }
+    }
     @Test public void reportExcludesExceptionSecrets() throws Exception {
         String secret="sk-proj-private-message-password";
         JarvisDiagnostics.error(JarvisDiagnostics.Event.JAVA_EXCEPTION,new IllegalStateException(secret));

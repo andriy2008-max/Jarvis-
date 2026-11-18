@@ -410,7 +410,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
         super.onCreate(state);
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
-        if (state != null) pendingTimerSeconds = state.getInt("pending_timer_seconds", 0);
+        if (state != null) {
+            pendingTimerSeconds = state.getInt("pending_timer_seconds", 0);
+            pendingWatchMusicUntilMs=state.getLong("watch_music_until",0);
+            String kind=state.getString("watch_music_kind");
+            if(kind!=null && SystemClock.elapsedRealtime()<=pendingWatchMusicUntilMs)
+                try { pendingWatchMusicKind=SpotifyMusicCommands.Kind.valueOf(kind); }
+                catch(IllegalArgumentException ignored) { pendingWatchMusicKind=null; }
+        }
         isWatchDevice = getPackageManager().hasSystemFeature(PackageManager.FEATURE_WATCH);
         // Samsung "Knock knock → Open an app → Jarvis" arrives as a normal
         // launcher intent. There is no public Samsung double-pinch callback.
@@ -726,6 +733,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
     @Override
     protected void onSaveInstanceState(Bundle out) {
         out.putInt("pending_timer_seconds", pendingTimerSeconds);
+        if(pendingWatchMusicKind!=null) {
+            out.putString("watch_music_kind",pendingWatchMusicKind.name());
+            out.putLong("watch_music_until",pendingWatchMusicUntilMs);
+        }
         super.onSaveInstanceState(out);
     }
 
@@ -1893,6 +1904,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private void showVoiceSettings() {
+        if(isWatchDevice) {
+            showDialogWithoutWake(new AlertDialog.Builder(this)
+                .setTitle("Голос Android Watch7")
+                .setMessage("Для надійної роботи годинник використовує системний синтез мовлення. Український голос можна встановити в налаштуваннях Wear OS. Голоси та моделі Pixel збережені.")
+                .setPositiveButton("Налаштування",(d,w)->openSystemVoiceSettings())
+                .setNeutralButton("Перевірити",(d,w)->previewCurrentVoice())
+                .setNegativeButton("Закрити",null).create());
+            return;
+        }
         ArrayList<Voice> available = ukrainianVoices();
         boolean hasDmytro = voiceForProfile(available, VoiceRanking.DMYTRO) != null;
         boolean hasLada = voiceForProfile(available, VoiceRanking.LADA) != null;
@@ -2519,7 +2539,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private void showWatchActions() {
         // Android's list dialog scrolls on small Wear OS screens.
         final String[] actions = {
-            "🔊 Голос: Дмитро / Лада",
+            "🔊 Голос Android Watch7",
             "🔈 Голосові відповіді: " + (voiceEnabled ? "увімкнені" : "вимкнені"),
             "⏳ Пауза після слова: " + speechPauseSeconds() + " с",
             "🤖 ШІ через телефон",

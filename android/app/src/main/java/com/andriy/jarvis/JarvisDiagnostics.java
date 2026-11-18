@@ -35,15 +35,20 @@ public final class JarvisDiagnostics {
         journal=new File(app.getNoBackupFilesDir(),"dimon-work.log");
         Thread.UncaughtExceptionHandler previous=Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread,error)->{
-            // Persist only known code identifiers, not messages or raw stack traces.
-            String report=last+"\n"+safeError(Event.UNCAUGHT,error);
-            AtomicFile crash=new AtomicFile(new File(app.getNoBackupFilesDir(),"dimon-crash.log"));
-            FileOutputStream out=null;
-            try { out=crash.startWrite(); out.write(report.getBytes(StandardCharsets.UTF_8));
-                crash.finishWrite(out); } catch(Exception ignored) { if(out!=null)crash.failWrite(out); }
-            // Preserve Android's crash handling. Never hide an exception or restart in a loop.
-            if(previous!=null) previous.uncaughtException(thread,error);
-            else { android.os.Process.killProcess(android.os.Process.myPid()); System.exit(10); }
+            try {
+                // Persist only known code identifiers, not messages or raw stack traces.
+                String report=last+"\n"+safeError(Event.UNCAUGHT,error);
+                AtomicFile crash=new AtomicFile(new File(app.getNoBackupFilesDir(),"dimon-crash.log"));
+                FileOutputStream out=null;
+                try { out=crash.startWrite(); out.write(report.getBytes(StandardCharsets.UTF_8));
+                    crash.finishWrite(out); } catch(Exception ignored) { if(out!=null)crash.failWrite(out); }
+            } catch(Throwable loggingFailure) {
+                // Even an OOM while producing diagnostics must reach Android's handler.
+            } finally {
+                // Preserve Android's crash handling. Never restart or swallow the original.
+                if(previous!=null) previous.uncaughtException(thread,error);
+                else { android.os.Process.killProcess(android.os.Process.myPid()); System.exit(10); }
+            }
         });
         event(Event.PROCESS_START,android.os.Process.myPid());
     }

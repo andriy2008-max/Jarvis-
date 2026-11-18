@@ -37,13 +37,17 @@ jobs:
       - name: Wear OS emulator lifecycle tests (synthetic commands, no acoustic input)
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30
+          api-level: 35
           target: android-wear
-          arch: x86
+          arch: x86_64
           profile: wearos_large_round
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: gradle -p android --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.andriy.jarvis.WatchLifecycleTest
+          script: |
+            gradle -p android --no-daemon :app:installDebug :app:installDebugAndroidTest
+            adb shell pm grant com.andriy.jarvis.preview android.permission.POST_NOTIFICATIONS
+            adb shell pm grant com.andriy.jarvis.preview android.permission.RECORD_AUDIO
+            gradle -p android --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.andriy.jarvis.WatchLifecycleTest
       - name: Test evidence
         if: always()
         uses: actions/upload-artifact@v4
