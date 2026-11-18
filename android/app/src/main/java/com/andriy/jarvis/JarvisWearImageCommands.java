@@ -6,7 +6,7 @@ import java.util.regex.Pattern;
 /** Pure-Java recognition of explicit watch image commands, preserving prompt spelling. */
 public final class JarvisWearImageCommands {
     private static final Pattern CREATE = Pattern.compile(
-        "^(?:(?:джарвіс|джарвис|jarvis)[,\\s:—-]*)?" +
+        "^(?:(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[,\\s:—-]*)?" +
         "(?:створи\\s+(?:зображення|фото|картинку)|" +
         "згенеруй\\s+(?:зображення|фото|картинку)|" +
         "зроби\\s+(?:зображення|картинку)|намалюй)\\s*(.*)$",
