@@ -23,7 +23,7 @@ public final class CommandPatterns {
     public static String normalize(String raw) {
         if (raw == null) return "";
         return raw.trim().toLowerCase(new Locale("uk", "UA"))
-            .replaceFirst("^(?:джарвіс|джарвис|jarvis)[,\\s:—-]*", "")
+            .replaceFirst("^(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[,\\s:—-]*", "")
             .replaceAll("[.!?]+$", "").trim();
     }
 
@@ -47,7 +47,7 @@ public final class CommandPatterns {
     public static String spokenText(String raw) {
         if (raw == null) return null;
         String text = raw.trim()
-            .replaceFirst("(?iu)^(?:джарвіс|джарвис|jarvis)[,\\s:—-]*", "")
+            .replaceFirst("(?iu)^(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[,\\s:—-]*", "")
             .trim();
         Matcher m = Pattern.compile("(?iu)^скажи(?:[\\s,:—-]+([\\s\\S]*))?$").matcher(text);
         if (!m.matches()) return null;
