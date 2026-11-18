@@ -46,8 +46,8 @@ public final class JarvisTaxiPlacesActivity extends Activity {
         root.setPadding(dp(16),dp(22),dp(16),dp(30));
         scroll.addView(root);setContentView(scroll);
         root.addView(label("📍 Адреси для таксі",24));
-        root.addView(label("Говори: «Джарвіс, таксі [назва]». Адреси залишаються на телефоні.",13));
-        root.addView(button("← Джарвіс",this::finish));
+        root.addView(label("Говори: «Дімон, таксі [назва]». Адреси залишаються на телефоні.",13));
+        root.addView(button("← Дімон",this::finish));
         root.addView(button("＋ Додати адресу",()->edit(null)));
         for(JarvisTaxiPlaces.Place p:JarvisTaxiPlaces.all(this)){
             LinearLayout item=new LinearLayout(this);item.setOrientation(LinearLayout.VERTICAL);
