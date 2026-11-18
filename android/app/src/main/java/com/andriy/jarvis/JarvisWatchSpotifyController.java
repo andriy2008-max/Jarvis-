@@ -89,7 +89,7 @@ public final class JarvisWatchSpotifyController {
         void done(boolean ok,String detail) {
             if(finished)return;
             finished=true;
-            JarvisWatchSpotifyTrace.mark(context,ok?"PLAYBACK_ACTION_DONE":"PLAYBACK_ACTION_FAILED");
+            JarvisWatchSpotifyTrace.finish(context,ok);
             Toast.makeText(context,detail,Toast.LENGTH_SHORT).show();
             callback.finished(ok,detail);
         }
