@@ -389,12 +389,12 @@ public final class TelegramTdClient {
         }
         if(command.kind==TelegramReplyCommands.Kind.HELP){
             cb.done(false,"Скажи: «Напиши в Telegram Яна Привіт, це тест». "+
-                "Джарвіс знайде особистий чат за назвою і попросить підтвердження.");
+                "Дімон знайде особистий чат за назвою і попросить підтвердження.");
             return;
         }
         if(!isAuthorized()){
             start(null);
-            cb.done(false,status()+" Відкрий «💬 Telegram API» в Джарвісі.");
+            cb.done(false,status()+" Відкрий «💬 Telegram API» в Дімоні.");
             return;
         }
         if(command.kind==TelegramReplyCommands.Kind.DRAFT ||
