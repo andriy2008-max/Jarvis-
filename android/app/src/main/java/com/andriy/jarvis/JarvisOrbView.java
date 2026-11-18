@@ -25,7 +25,7 @@ public final class JarvisOrbView extends View {
 
     public JarvisOrbView(Context context) {
         super(context);
-        setContentDescription("Плаваюче 8-бітне обличчя Джарвіса. Натисни, щоб говорити.");
+        setContentDescription("Плаваюче 8-бітне обличчя Дімона. Натисни, щоб говорити.");
         setClickable(true);
         setFocusable(true);
     }
