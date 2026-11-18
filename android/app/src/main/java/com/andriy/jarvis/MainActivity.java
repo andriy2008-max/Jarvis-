@@ -5503,7 +5503,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
             cancelPendingWatchTtsStart();
             // A configuration change is not a user exit; the new Activity
             // will continue the ongoing session when it resumes.
-            if (!isChangingConfigurations()) JarvisWatchOngoing.hide(this);
+            // Opening Spotify or Maps backgrounds the activity; Android may
+            // destroy that background UI without an explicit user exit.
+            // Keep the ongoing Wear OS return shortcut in that case.
+            if(isFinishing() && !isChangingConfigurations())
+                JarvisWatchOngoing.hide(this);
         }
         if (headsetRoute != null) headsetRoute.end();
         JarvisPhoneMode.unsubscribe(phoneModeListener);
