@@ -43,6 +43,7 @@ public final class JarvisWatchLocalController {
             running=false;
             callback.finished(ok,detail);
         };
+        try {
         if(request.opensApp())launch(watch,request.app,done);
         else if(request.usesMaps()) {
             JarvisWatchMapsController.execute(watch,request.maps,
@@ -61,6 +62,12 @@ public final class JarvisWatchLocalController {
                     done.finished(ok,detail);
                 });
         } else handleScreen(watch,request.screen,done);
+        } catch(RuntimeException failure) {
+            android.util.Log.e("DIMON_WATCH_CONTROL",
+                "On-watch action failed before it could finish",failure);
+            done.finished(false,"Дімон не зміг завершити дію на годиннику. "+
+                "Перевір доступ до програми та повтори.");
+        }
     }
 
     private static void launch(Context context,String name,Callback done) {
