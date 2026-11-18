@@ -20,6 +20,7 @@ public final class JarvisWatchSpotifyController {
 
     public static void play(Context context,SpotifyMusicCommands.Kind kind,
                             String title,JarvisWatchLocalController.Callback completion) {
+        JarvisWatchSpotifyTrace.mark(context,"PLAY_ENTERED");
         if(kind!=SpotifyMusicCommands.Kind.TRACK &&
            kind!=SpotifyMusicCommands.Kind.PLAYLIST) {
             completion.finished(false,"На Watch7 підтримано пошук пісні або плейлиста.");
@@ -29,28 +30,38 @@ public final class JarvisWatchSpotifyController {
             completion.finished(false,"Назва пісні або плейлиста не розпізнана.");
             return;
         }
+        JarvisWatchSpotifyTrace.mark(context,"CHECK_ACCESSIBILITY");
         if(!JarvisWatchScreenService.available(context)) {
+            JarvisWatchSpotifyTrace.mark(context,"ACCESSIBILITY_UNAVAILABLE");
             completion.finished(false,"Увімкни на годиннику службу "+
                 "«Дімон — екран годинника» у спеціальних можливостях.");
             return;
         }
+        JarvisWatchSpotifyTrace.mark(context,"CHECK_SPOTIFY_INSTALL");
         Intent intent=context.getPackageManager().getLaunchIntentForPackage(PACKAGE);
         if(intent==null) {
+            JarvisWatchSpotifyTrace.mark(context,"SPOTIFY_LAUNCHER_NOT_FOUND");
             completion.finished(false,"Установи Spotify на Galaxy Watch7 та увійди в акаунт.");
             return;
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
             Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
         try {
+            JarvisWatchSpotifyTrace.mark(context,"START_ACTIVITY_REQUESTED");
             context.startActivity(intent);
+            JarvisWatchSpotifyTrace.mark(context,"START_ACTIVITY_RETURNED");
         } catch(RuntimeException failure) {
+            android.util.Log.e("DIMON_WATCH_SPOTIFY","Failed to launch Spotify",failure);
+            JarvisWatchSpotifyTrace.mark(context,"START_ACTIVITY_FAILED");
             completion.finished(false,"Wear OS не вдалося відкрити Spotify.");
             return;
         }
         Session session=new Session(context.getApplicationContext(),kind,title,completion);
         session.status("Відкриваю Spotify на годиннику…");
-        MAIN.postDelayed(()->session.run(JarvisWatchScreenService.SpotifyStep.OPEN_SEARCH),
-            3000L);
+        // Do not begin tapping until Spotify actually owns the foreground.
+        // This also distinguishes failed app launch from a UI automation failure.
+        MAIN.postDelayed(()->session.waitForSpotify(SystemClock.elapsedRealtime()+13000L),
+            900L);
     }
 
     private static final class Session {
@@ -78,12 +89,30 @@ public final class JarvisWatchSpotifyController {
         void done(boolean ok,String detail) {
             if(finished)return;
             finished=true;
+            JarvisWatchSpotifyTrace.mark(context,ok?"PLAYBACK_ACTION_DONE":"PLAYBACK_ACTION_FAILED");
             Toast.makeText(context,detail,Toast.LENGTH_SHORT).show();
             callback.finished(ok,detail);
         }
 
+        void waitForSpotify(long expires) {
+            if(finished)return;
+            if(JarvisWatchScreenService.foreground(PACKAGE)) {
+                JarvisWatchSpotifyTrace.mark(context,"SPOTIFY_FOREGROUND");
+                run(JarvisWatchScreenService.SpotifyStep.OPEN_SEARCH);
+                return;
+            }
+            if(SystemClock.elapsedRealtime()>=expires) {
+                JarvisWatchSpotifyTrace.mark(context,"SPOTIFY_NOT_FOREGROUND");
+                done(false,"Spotify не з'явився на екрані Watch7. "+
+                    "Скажи «Відкрий Spotify на годиннику» для перевірки.");
+                return;
+            }
+            MAIN.postDelayed(()->waitForSpotify(expires),1500L);
+        }
+
         void run(JarvisWatchScreenService.SpotifyStep step) {
             if(finished)return;
+            JarvisWatchSpotifyTrace.mark(context,"STEP_"+step.name());
             long now=SystemClock.elapsedRealtime();
             if(now>deadline) {
                 done(false,"Spotify не завершив пошук на годиннику. "+
