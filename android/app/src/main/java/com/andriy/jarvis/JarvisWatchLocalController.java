@@ -75,6 +75,28 @@ public final class JarvisWatchLocalController {
 
     private static void launch(Context context,String name,Callback done) {
         PackageManager pm=context.getPackageManager();
+        // Spotify has a known installed package on Wear OS. Prefer its
+        // launcher intent over matching the localized app name in the list.
+        if("spotify".equals(AssistantIntents.appLabel(name))) {
+            Intent spotify=pm.getLaunchIntentForPackage("com.spotify.music");
+            if(spotify==null) {
+                done.finished(false,"Spotify не встановлено на годиннику.");
+                return;
+            }
+            spotify.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
+                Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+            try {
+                context.startActivity(spotify);
+                context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit()
+                    .putString(LAST_PACKAGE,"com.spotify.music").apply();
+                done.finished(true,"Відкриваю Spotify на Watch7.");
+            } catch(RuntimeException error) {
+                android.util.Log.e("DIMON_WATCH_SPOTIFY",
+                    "Cannot open Spotify launcher",error);
+                done.finished(false,"Wear OS не дозволила відкрити Spotify.");
+            }
+            return;
+        }
         Intent launcher=new Intent(Intent.ACTION_MAIN);
         launcher.addCategory(Intent.CATEGORY_LAUNCHER);
         List<AppNameMatcher.App> apps=new ArrayList<>();
