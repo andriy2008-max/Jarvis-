@@ -64,7 +64,7 @@ public final class JarvisShakeWakeProbe implements RecognitionListener {
                 try { recognizer.stopListening(); }
                 catch (Exception error) { finish(false,"Сервіс розпізнавання недоступний."); return; }
                 lastResultTimeout = () -> finish(false,
-                    "Не почув «Джарвіс» за 3 секунди. Мікрофон вимкнено.");
+                    "Не почув «Дімон» за 3 секунди. Мікрофон вимкнено.");
                 main.postDelayed(lastResultTimeout, FINAL_RESULT_GRACE_MS);
             };
             main.postDelayed(windowEnd, WINDOW_MS);
@@ -107,7 +107,7 @@ public final class JarvisShakeWakeProbe implements RecognitionListener {
         if (!active || phrase == null) return;
         if (callback != null) callback.onPartial(phrase);
         if (JarvisShakeGate.containsWakeWord(phrase))
-            finish(true,"Почув «Джарвіс». Кажи команду.");
+            finish(true,"Почув «Дімон». Кажи команду.");
     }
     @Override public void onReadyForSpeech(Bundle params) {}
     @Override public void onBeginningOfSpeech() {}
@@ -115,13 +115,13 @@ public final class JarvisShakeWakeProbe implements RecognitionListener {
     @Override public void onBufferReceived(byte[] buffer) {}
     @Override public void onEndOfSpeech() {}
     @Override public void onError(int error) {
-        finish(false,"Не почув «Джарвіс» за короткий запис.");
+        finish(false,"Не почув «Дімон» за короткий запис.");
     }
     @Override public void onResults(Bundle results) {
         ArrayList<String> list = results == null ? null :
             results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
         if (list != null && !list.isEmpty()) check(list.get(0));
-        if (active) finish(false,"Не почув «Джарвіс» за короткий запис.");
+        if (active) finish(false,"Не почув «Дімон» за короткий запис.");
     }
     @Override public void onPartialResults(Bundle results) {
         ArrayList<String> list = results == null ? null :
