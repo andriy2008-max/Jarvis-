@@ -26,7 +26,7 @@ public final class FinanceVoiceCommands {
         public String keypad() {return amount.replace('.',',');}
     }
     private static final String PREFIX=
-        "^(?:(?:джарвіс|джарвис|jarvis)[\\s,:—-]*)?"+
+        "^(?:(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[\\s,:—-]*)?"+
         "(?:запиши|додай|занеси|зафіксуй)\\s+";
     private static final Pattern EXP=Pattern.compile(
         PREFIX+"(?:витрату|витрати)\\s+([0-9]{1,7}(?:[,.][0-9]{1,2})?)"+
