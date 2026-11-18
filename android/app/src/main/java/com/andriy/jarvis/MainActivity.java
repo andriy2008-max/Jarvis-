@@ -4879,6 +4879,24 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 runWatchImageGeneration(raw);
                 return;
             }
+            // Song and playlist requests spoken ON the Watch7 are local by
+            // default. The older phone Spotify path remains for other intents.
+            JarvisWatchLocalCommands.Request musicOnWatch=
+                JarvisWatchLocalCommands.spotifyOnWatch(raw);
+            if(musicOnWatch!=null) {
+                processing=true;
+                setStatus("Шукаю музику у Spotify на Watch7…");
+                JarvisWatchLocalController.execute(this,musicOnWatch,(ok,detail)->{
+                    processing=false;
+                    if(isFinishing() || isDestroyed())return;
+                    JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+                    appendDialogue("Джарвіс",detail);
+                    setStatus(detail);
+                    if(!ok && voiceEnabled)speakReply(detail);
+                    else if(face!=null)face.setState("idle");
+                });
+                return;
+            }
             SpotifyMusicCommands.Kind watchMusic = SpotifyMusicCommands.parse(raw);
             if (watchMusic != null) {
                 if (watchPhoneLink == null) {
