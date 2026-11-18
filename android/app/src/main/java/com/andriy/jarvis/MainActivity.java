@@ -4727,9 +4727,11 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private void runWatchMusicRequest(JarvisWatchLocalCommands.Request music) {
-        JarvisWatchSpotifyTrace.mark(this,"VOICE_COMMAND_PARSED");
+        if(music.playsSpotify())
+            JarvisWatchSpotifyTrace.mark(this,"VOICE_COMMAND_PARSED");
         processing=true;
-        setStatus("Шукаю музику у Spotify на Watch7…");
+        setStatus(music.opensApp()?"Відкриваю Spotify на Watch7…":
+            "Шукаю музику у Spotify на Watch7…");
         JarvisWatchLocalController.execute(this,music,(ok,detail)->{
             processing=false;
             if(isFinishing() || isDestroyed())return;
@@ -4797,6 +4799,25 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 if(face!=null)face.showTranscript(prompt,false,
                     SystemClock.uptimeMillis()+8000L);
                 if(voiceEnabled)speakReply(prompt);
+                return;
+            }
+            // All Spotify speech INSIDE Watch7 executes on Watch7, with
+            // or without "Дімон" and without explicit "на годиннику".
+            // This must precede phone-mode / legacy remote Spotify checks,
+            // and a rejected Spotify intent never falls back to Pixel.
+            JarvisWatchLocalCommands.Request watchSpotify=
+                JarvisWatchLocalCommands.spotifyOnWatch(raw);
+            if(watchSpotify!=null) {
+                runWatchMusicRequest(watchSpotify);
+                return;
+            }
+            if(JarvisWatchLocalCommands.spotifyRelatedOnWatch(raw)) {
+                String detail="Команду Spotify не вдалося розпізнати на Watch7. "+
+                    "Скажи «Відкрий Spotify», «Увімкни пісню [назва]» "+
+                    "або «Увімкни плейлист [назва]». На телефон нічого "+
+                    "не пересилаю.";
+                setStatus(detail);
+                if(voiceEnabled)speakReply(detail);
                 return;
             }
             // Only an EXPLICIT "на годиннику" target runs locally.
@@ -4966,36 +4987,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 runWatchImageGeneration(raw);
                 return;
             }
-            // Song and playlist requests spoken ON the Watch7 are local by
-            // default. The older phone Spotify path remains for other intents.
-            if(watchPhrase.startsWith("увімкни пісню ") ||
-               watchPhrase.startsWith("умімкни пісню ") ||
-               watchPhrase.startsWith("включи пісню ") ||
-               watchPhrase.startsWith("увімкни плейлист ") ||
-               watchPhrase.startsWith("включи плейлист "))
-                JarvisWatchSpotifyTrace.mark(this,"VOICE_ROUTE_ATTEMPT");
-            JarvisWatchLocalCommands.Request musicOnWatch=
-                JarvisWatchLocalCommands.spotifyOnWatch(raw);
-            if(musicOnWatch!=null) {
-                runWatchMusicRequest(musicOnWatch);
-                return;
-            }
-            SpotifyMusicCommands.Kind watchMusic = SpotifyMusicCommands.parse(raw);
-            if (watchMusic != null) {
-                if (watchPhoneLink == null) {
-                    setStatus("Не можу передати команду Spotify: телефон не підключений.");
-                    return;
-                }
-                watchPhoneLink.spotify(raw, (ok, detail) -> {
-                    if (isFinishing() || isDestroyed()) return;
-                    if (promptForPhonePin(detail)) return;
-                    JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-                    appendDialogue("Дімон", detail);
-                    setStatus(detail);
-                    if (voiceEnabled) speakReply(detail);
-                });
-                return;
-            }
+            // Spotify was already dispatched locally before phone routing.
             // All remaining watch speech is delegated to the companion phone.
             // A manually opened screen-control session is used only for
             // literal screen gestures, not conversational AI or external APIs.
