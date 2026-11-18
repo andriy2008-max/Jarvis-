@@ -42,13 +42,13 @@ android {
         debug {
             // Debug is for CI/local testing only; ephemeral signing cannot deliver in-place updates.
             applicationIdSuffix '.preview'
-            manifestPlaceholders = [appLabel: 'Джарвіс Тест']
+            manifestPlaceholders = [appLabel: 'Дімон Тест']
         }
         release {
             // Freeze this stable applicationId forever; changes break in-place upgrades.
             // All later stable releases can upgrade in-place with the same signing key.
             applicationIdSuffix '.stable'
-            manifestPlaceholders = [appLabel: 'Джарвіс']
+            manifestPlaceholders = [appLabel: 'Дімон']
             if (stableSigningReady) signingConfig signingConfigs.jarvisStable
             minifyEnabled false
         }
