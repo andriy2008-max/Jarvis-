@@ -90,9 +90,9 @@ public final class JarvisCompanionService extends Service {
                 (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
             if (manager != null) {
                 NotificationChannel channel = new NotificationChannel(
-                    CHANNEL,"Джарвіс — зв'язок із годинником",
+                    CHANNEL,"Дімон — зв'язок із годинником",
                     NotificationManager.IMPORTANCE_LOW);
-                channel.setDescription("Телефон приймає запити Galaxy Watch, навіть коли Джарвіс згорнуто.");
+                channel.setDescription("Телефон приймає запити Galaxy Watch, навіть коли Дімон згорнуто.");
                 manager.createNotificationChannel(channel);
             }
             Intent open = new Intent(this,MainActivity.class);
@@ -105,7 +105,7 @@ public final class JarvisCompanionService extends Service {
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             Notification notification = new Notification.Builder(this,CHANNEL)
                 .setSmallIcon(R.drawable.ic_launcher)
-                .setContentTitle("Джарвіс активний")
+                .setContentTitle("Дімон активний")
                 .setContentText("Приймаю команди з годинника. Мікрофон телефона вимкнений.")
                 .setContentIntent(openUi)
                 .setOngoing(true)
