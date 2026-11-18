@@ -4,8 +4,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Explicit watch-local commands. Ordinary Watch7 speech still goes to Pixel.
- * No AI-generated device actions and no silently reinterpreted phone commands.
+ * Explicit watch-local screen actions; every Spotify command spoken in the
+ * watch Activity runs only on Wear OS. No Pixel fallback for Spotify intents.
+ * No AI-generated device actions or silently reinterpreted phone commands.
  */
 public final class JarvisWatchLocalCommands {
     public static final class Request {
@@ -33,7 +34,7 @@ public final class JarvisWatchLocalCommands {
         "(?iu)^(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[\\s,:—-]+");
     private static final Pattern WATCH_SUFFIX=Pattern.compile(
         "(?iu)\\s+(?:на|у|в)\\s+(?:(?:моєму|своєму)\\s+)?"+
-        "(?:годиннику|watch7|watch)\\s*[.!?]*$");
+        "(?:годиннику|годинку|годинник|watch7|watch)\\s*[.!?]*$");
 
     private JarvisWatchLocalCommands() {}
 
@@ -43,11 +44,22 @@ public final class JarvisWatchLocalCommands {
             WATCH_SUFFIX.matcher(raw.trim()).find();
     }
 
-    /** A song/playlist spoken inside the Watch app defaults to Watch7,
-     * even without an explicit suffix. Phone-side parsing is unchanged. */
+    /** Spotify spoken inside the Watch app always stays on Wear OS.
+     * Works without a wake word, including "Відкрий Spotify" and
+     * "відкрити Спотіфай на годинку" transcription variants.
+     * Call this only from a WATCH Activity, not the phone dispatcher. */
     public static Request spotifyOnWatch(String raw) {
-        if(raw==null || raw.length()>450 || targetsWatch(raw))return null;
-        String local=WAKE.matcher(raw.trim()).replaceFirst("").trim();
+        if(raw==null || raw.length()>450)return null;
+        String local=raw.trim();
+        Matcher suffix=WATCH_SUFFIX.matcher(local);
+        if(suffix.find())local=local.substring(0,suffix.start()).trim();
+        local=WAKE.matcher(local).replaceFirst("").trim();
+        if(local.isEmpty())return null;
+        String requested=AssistantIntents.requestedApp(
+            CommandPatterns.normalizeControlVerb(local));
+        if("spotify".equals(AssistantIntents.appLabel(requested)) ||
+           local.matches("(?iu)^(?:відкрити|відкрий|запусти|зайди\\\\s+в|зайди\\\\s+до)\\\\s+(?:(?:програму|додаток|застосунок)\\\\s+)?(?:spotify|спотіфай|спотифай)[.!?]*$"))
+            return new Request("spotify",null,null,null);
         SpotifyMusicCommands.Kind music=SpotifyMusicCommands.parse(local);
         if(music==SpotifyMusicCommands.Kind.TRACK) {
             String title=SpotifyMusicCommands.namedTrack(local);
@@ -58,7 +70,28 @@ public final class JarvisWatchLocalCommands {
                 SpotifyMusicCommands.namedPlaylist(local);
             return playlist==null?null:new Request(null,null,music,playlist.name);
         }
+        if(music==SpotifyMusicCommands.Kind.OPEN)
+            return new Request("spotify",null,null,null);
+        if(music==SpotifyMusicCommands.Kind.RAP)
+            return new Request(null,null,music,"реп");
+        if(music==SpotifyMusicCommands.Kind.UKRAINIAN)
+            return new Request(null,null,music,"українські пісні");
         return null;
+    }
+
+    /** True for Spotify voice intents, even if a particular action cannot
+     * be handled by the installed version. Never send these to Pixel. */
+    public static boolean spotifyRelatedOnWatch(String raw) {
+        if(raw==null || raw.length()>450)return false;
+        String local=raw.trim();
+        Matcher suffix=WATCH_SUFFIX.matcher(local);
+        if(suffix.find())local=local.substring(0,suffix.start()).trim();
+        local=WAKE.matcher(local).replaceFirst("").trim();
+        String normalized=CommandPatterns.normalize(local);
+        return SpotifyMusicCommands.parse(local)!=null ||
+            normalized.matches("(?iu)^(?:скасуй|зупини|пауза|продовж|віднови)\\\\s+(?:spotify|спотіфай|спотифай)$") ||
+            normalized.matches("(?iu)^(?:відкрий|відкрити|запусти|закрий|зайди.*)\\\\s+(?:spotify|спотіфай|спотифай)$") ||
+            normalized.matches("(?iu)^.*\\\\b(?:spotify|спотіфай|спотифай)\\\\b.*$");
     }
 
     /** Location and directions uttered into the Watch app use Watch7 Maps. */
