@@ -26,12 +26,17 @@ public final class JarvisPhoneMode {
             .replaceAll("\\s+", " ");
         if (normalized.equals("телефон") || normalized.equals("режим телефон") ||
             normalized.equals("режим телефона") ||
+            normalized.equals("дімон телефон") ||
+            normalized.equals("димон телефон") ||
+            normalized.equals("dimon phone") ||
             normalized.equals("джарвіс телефон") ||
             normalized.equals("джарвис телефон") ||
             normalized.equals("jarvis phone")) return Transition.ENTER;
         // Four voice aliases for returning to the normal watch face:
         // «Годинник», «Джарвіс», «Jarvis», «Джарвис».
         if (normalized.equals("годинник") ||
+            normalized.equals("дімон") || normalized.equals("димон") ||
+            normalized.equals("dimon") ||
             normalized.equals("джарвіс") || normalized.equals("джарвис") ||
             normalized.equals("jarvis") || normalized.equals("вийди з режиму телефон") ||
             normalized.equals("вийди з режиму телефона")) return Transition.EXIT;
