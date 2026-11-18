@@ -89,7 +89,7 @@ public final class SystemToggleActions {
         if (manager == null) return "Режим «Не турбувати» недоступний.";
         if (!manager.isNotificationPolicyAccessGranted()) {
             return openPermission(context, Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS,
-                "Для керування режимом «Не турбувати» надай Джарвісу доступ до налаштувань сповіщень. Після цього повтори команду.");
+                "Для керування режимом «Не турбувати» надай Дімону доступ до налаштувань сповіщень. Після цього повтори команду.");
         }
         try {
             int desired = enabled ? NotificationManager.INTERRUPTION_FILTER_NONE :
@@ -142,7 +142,7 @@ public final class SystemToggleActions {
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 context.startActivity(intent);
                 return "Для функції «" + title +
-                    "» дозволь Джарвісу змінювати системні налаштування й повтори команду.";
+                    "» дозволь Дімону змінювати системні налаштування й повтори команду.";
             } catch (RuntimeException unavailable) {
                 return "Для функції «" + title + "» потрібен дозвіл Android на зміну системних налаштувань.";
             }
