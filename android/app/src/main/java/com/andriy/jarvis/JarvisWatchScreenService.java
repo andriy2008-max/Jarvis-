@@ -165,7 +165,7 @@ public final class JarvisWatchScreenService extends AccessibilityService {
     }
 
     private static boolean spotifyNodeMatches(AccessibilityNodeInfo n,String... names) {
-        return spotifyNodeMatches(n,names) ||
+        return spotifyMatches(spotifyLabel(n),names) ||
                spotifyMatches(spotifyDescription(n),names);
     }
 
