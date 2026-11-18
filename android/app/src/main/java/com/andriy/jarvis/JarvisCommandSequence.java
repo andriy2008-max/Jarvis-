@@ -39,7 +39,7 @@ public final class JarvisCommandSequence {
     public static final int MAX_STEPS = 6;
 
     private static final Pattern WAKE = Pattern.compile(
-        "^(?:(?:джарвіс|джарвис|jarvis)[\\s,:—-]+)", Pattern.CASE_INSENSITIVE |
+        "^(?:(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[\\s,:—-]+)", Pattern.CASE_INSENSITIVE |
         Pattern.UNICODE_CASE);
 
     // Splits only at a recognized *next command*, never just at "і".
