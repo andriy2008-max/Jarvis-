@@ -35,16 +35,11 @@ public final class JarvisWatchLocalCommands {
             WATCH_SUFFIX.matcher(raw.trim()).find();
     }
 
-    public static Request parse(String raw) {
-        if(raw==null || raw.length()>450)return null;
-        String source=raw.trim();
-        Matcher suffix=WATCH_SUFFIX.matcher(source);
-        if(!suffix.find())return null;
-        String local=WAKE.matcher(source.substring(0,suffix.start()).trim())
-            .replaceFirst("").trim();
-        if(local.isEmpty())return null;
-        // Watch-specific Spotify playback is handled locally, before the
-        // generic app/phone router. Only explicitly named tracks/playlists.
+    /** A song/playlist spoken inside the Watch app defaults to Watch7,
+     * even without an explicit suffix. Phone-side parsing is unchanged. */
+    public static Request spotifyOnWatch(String raw) {
+        if(raw==null || raw.length()>450 || targetsWatch(raw))return null;
+        String local=WAKE.matcher(raw.trim()).replaceFirst("").trim();
         SpotifyMusicCommands.Kind music=SpotifyMusicCommands.parse(local);
         if(music==SpotifyMusicCommands.Kind.TRACK) {
             String title=SpotifyMusicCommands.namedTrack(local);
@@ -55,6 +50,20 @@ public final class JarvisWatchLocalCommands {
                 SpotifyMusicCommands.namedPlaylist(local);
             return playlist==null?null:new Request(null,null,music,playlist.name);
         }
+        return null;
+    }
+
+    public static Request parse(String raw) {
+        if(raw==null || raw.length()>450)return null;
+        String source=raw.trim();
+        Matcher suffix=WATCH_SUFFIX.matcher(source);
+        if(!suffix.find())return null;
+        String local=WAKE.matcher(source.substring(0,suffix.start()).trim())
+            .replaceFirst("").trim();
+        if(local.isEmpty())return null;
+        // For a watch-targeted command the suffix was already removed.
+        Request musicRequest=spotifyOnWatch(local);
+        if(musicRequest!=null)return musicRequest;
         String name=AssistantIntents.requestedApp(
             CommandPatterns.normalizeControlVerb(local));
         if(name!=null && !name.trim().isEmpty() && name.length()<=80)
