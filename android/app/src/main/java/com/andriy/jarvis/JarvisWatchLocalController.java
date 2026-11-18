@@ -44,6 +44,15 @@ public final class JarvisWatchLocalController {
             callback.finished(ok,detail);
         };
         if(request.opensApp())launch(watch,request.app,done);
+        else if(request.usesMaps()) {
+            JarvisWatchMapsController.execute(watch,request.maps,
+                (ok,detail)->{
+                    if(ok)watch.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
+                        .edit().putString(LAST_PACKAGE,
+                            JarvisWatchMapsController.MAPS_PACKAGE).apply();
+                    done.finished(ok,detail);
+                });
+        }
         else if(request.playsSpotify()) {
             JarvisWatchSpotifyController.play(watch,request.music,request.musicTitle,
                 (ok,detail)->{
