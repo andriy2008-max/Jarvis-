@@ -4727,6 +4727,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     }
 
     private void runWatchMusicRequest(JarvisWatchLocalCommands.Request music) {
+        JarvisWatchSpotifyTrace.mark(this,"VOICE_COMMAND_PARSED");
         processing=true;
         setStatus("Шукаю музику у Spotify на Watch7…");
         JarvisWatchLocalController.execute(this,music,(ok,detail)->{
@@ -4748,6 +4749,19 @@ public final class MainActivity extends Activity implements RecognitionListener 
         })) return;
         JarvisPhoneMode.Transition modeTransition = JarvisPhoneMode.transition(raw);
         if (isWatchDevice) {
+            // Speak this after returning from the watch face to see the last
+            // durable stage even when Wear OS killed the previous activity.
+            String watchPhrase=CommandPatterns.normalize(raw).trim();
+            if("діагностика spotify".equals(watchPhrase) ||
+               "статус spotify".equals(watchPhrase) ||
+               "діагностика спотіфай".equals(watchPhrase) ||
+               "статус спотіфай".equals(watchPhrase)) {
+                String diagnostic=JarvisWatchSpotifyTrace.report(this);
+                appendDialogue("Дімон",diagnostic);
+                setStatus(diagnostic);
+                if(voiceEnabled)speakReply(diagnostic);
+                return;
+            }
             if(pendingWatchMusicKind!=null) {
                 SpotifyMusicCommands.Kind pending=pendingWatchMusicKind;
                 pendingWatchMusicKind=null;
@@ -4954,6 +4968,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
             }
             // Song and playlist requests spoken ON the Watch7 are local by
             // default. The older phone Spotify path remains for other intents.
+            if(watchPhrase.startsWith("увімкни пісню ") ||
+               watchPhrase.startsWith("умімкни пісню ") ||
+               watchPhrase.startsWith("включи пісню ") ||
+               watchPhrase.startsWith("увімкни плейлист ") ||
+               watchPhrase.startsWith("включи плейлист "))
+                JarvisWatchSpotifyTrace.mark(this,"VOICE_ROUTE_ATTEMPT");
             JarvisWatchLocalCommands.Request musicOnWatch=
                 JarvisWatchLocalCommands.spotifyOnWatch(raw);
             if(musicOnWatch!=null) {
