@@ -44,7 +44,7 @@ public final class JarvisWearAlertService extends Service {
             Context.NOTIFICATION_SERVICE);
         if(nm!=null) {
             NotificationChannel channel=new NotificationChannel(CHANNEL,
-                "Джарвіс — дзвінок будильника",NotificationManager.IMPORTANCE_HIGH);
+                "Дімон — дзвінок будильника",NotificationManager.IMPORTANCE_HIGH);
             channel.setSound(null,null); // Alarm audio is played separately.
             channel.enableVibration(false);
             nm.createNotificationChannel(channel);
@@ -59,7 +59,7 @@ public final class JarvisWearAlertService extends Service {
             PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Builder(this,CHANNEL)
             .setSmallIcon(R.drawable.ic_launcher)
-            .setContentTitle("Будильник — Джарвіс")
+            .setContentTitle("Будильник — Дімон")
             .setContentText(text)
             .setCategory(Notification.CATEGORY_ALARM)
             .setVisibility(Notification.VISIBILITY_PRIVATE)
@@ -74,9 +74,9 @@ public final class JarvisWearAlertService extends Service {
             stopSelf();return START_NOT_STICKY;
         }
         if(timeout!=null)return START_NOT_STICKY;
-        message=intent==null?"Будильник Джарвіса":
+        message=intent==null?"Будильник Дімона":
             intent.getStringExtra("message");
-        if(message==null || message.isEmpty())message="Будильник Джарвіса";
+        if(message==null || message.isEmpty())message="Будильник Дімона";
         try {
             Notification notice=build(message);
             if(Build.VERSION.SDK_INT>=29)
