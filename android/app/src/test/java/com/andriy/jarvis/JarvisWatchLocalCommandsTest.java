@@ -44,8 +44,51 @@ public final class JarvisWatchLocalCommandsTest {
             "Включи плейлист Вечірній")==null ? false : true);
         yes(JarvisWatchLocalCommands.spotifyOnWatch(
             "Натисни оплатити")==null);
+        JarvisWatchLocalCommands.Request rap=
+            JarvisWatchLocalCommands.spotifyOnWatch("Увімкни реп");
+        yes(rap!=null && rap.playsSpotify());
+        yes(rap.music==SpotifyMusicCommands.Kind.RAP);
+        yes("реп".equals(rap.musicTitle));
+        JarvisWatchLocalCommands.Request ukrainian=
+            JarvisWatchLocalCommands.spotifyOnWatch("Включи українське");
+        yes(ukrainian!=null && ukrainian.playsSpotify());
+        yes(ukrainian.music==SpotifyMusicCommands.Kind.UKRAINIAN);
+        yes("українські пісні".equals(ukrainian.musicTitle));
+
+        // Open Spotify on WATCH without the wake word or watch suffix.
+        for(String speech:new String[]{
+            "Відкрий Spotify",
+            "Відкрий Спотіфай",
+            "Відкрити Спотіфай",
+            "Відкрити Спотіфай на годинку",
+            "Відкрий Spotify на годиннику",
+            "Дімон, відкрий Spotify",
+            "Дімон, відкрий Spotify на годиннику",
+            "Запусти Spotify",
+            "Увімкни спотіфай",
+            "Включи музику"
+        }) {
+            JarvisWatchLocalCommands.Request opened=
+                JarvisWatchLocalCommands.spotifyOnWatch(speech);
+            yes(opened!=null && opened.opensApp() &&
+                "spotify".equals(opened.app));
+        }
+        JarvisWatchLocalCommands.Request naturalPlaylist=
+            JarvisWatchLocalCommands.spotifyOnWatch(
+                "Увімкни плейлист Мій реп");
+        yes(naturalPlaylist!=null && naturalPlaylist.playsSpotify());
         yes(JarvisWatchLocalCommands.spotifyOnWatch(
-            "Увімкни реп")==null);
+            "Увімкни пісню Ніч яка місячна на годиннику").playsSpotify());
+        yes(JarvisWatchLocalCommands.spotifyRelatedOnWatch(
+            "Зупини Spotify"));
+        yes(!JarvisWatchLocalCommands.spotifyRelatedOnWatch(
+            "Відкрий Telegram"));
+        yes(!JarvisWatchLocalCommands.spotifyRelatedOnWatch(
+            "Хто створив Spotify?"));
+        yes(JarvisWatchLocalCommands.spotifyOnWatch(
+            "Відкрий Telegram")==null);
+        yes(JarvisWatchLocalCommands.spotifyOnWatch(
+            "Дімон, де я")==null);
 
         yes(JarvisWatchLocalCommands.parse("Натисни оплатити на годиннику")==null);
         yes(JarvisWatchLocalCommands.parse("Увімкни керування екраном на годиннику")==null);
