@@ -109,7 +109,7 @@ public final class JarvisWatchLocalController {
         if(!JarvisWatchScreenService.available(context)) {
             done.finished(false,"На годиннику ввімкни Налаштування → "+
                 "Спеціальні можливості → Установлені програми → "+
-                "Джарвіс — екран годинника.");
+                "Дімон — екран годинника.");
             return;
         }
         String pkg=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
