@@ -46,6 +46,13 @@ on:
       - 'android/app/src/main/java/com/andriy/jarvis/SystemToggleActions.java'
       - 'android/app/src/test/java/com/andriy/jarvis/DeviceCommandsTest.java'
       - 'android/app/src/main/java/com/andriy/jarvis/ScreenControlCommands.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisWatchLocalCommands.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisWatchLocalController.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisWatchScreenService.java'
+      - 'android/app/src/test/java/com/andriy/jarvis/JarvisWatchLocalCommandsTest.java'
+      - 'android/app/src/main/res/xml/jarvis_watch_accessibility.xml'
+      - 'android/app/src/main/res/values-watch/**'
+      - 'android/app/src/main/res/values/watch_screen_flags.xml'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisPhoneMode.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisPhoneModeManager.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisPixelPhone.java'
@@ -210,6 +217,8 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/JarvisTranscriptCorrection.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisOrbPlacement.java \
             android/app/src/main/java/com/andriy/jarvis/ScreenControlCommands.java \
+            android/app/src/main/java/com/andriy/jarvis/JarvisWatchLocalCommands.java \
+            android/app/src/test/java/com/andriy/jarvis/JarvisWatchLocalCommandsTest.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisControlFeedback.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisPhoneMode.java \
             android/app/src/main/java/com/andriy/jarvis/JarvisWearProtocol.java \
@@ -261,6 +270,7 @@ jobs:
             android/app/src/test/java/com/andriy/jarvis/NeuralSpeechPolicyTest.java \
             android/app/src/test/java/com/andriy/jarvis/OfflineVoicePackRulesTest.java \
             android/app/src/test/java/com/andriy/jarvis/UkrainianVoiceTextTest.java
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisWatchLocalCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.AssistantIntentsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisTaxiCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.BoltUiLabelsTest
