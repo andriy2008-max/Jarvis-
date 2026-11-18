@@ -70,7 +70,7 @@ public final class JarvisWearAlarmScheduler {
         return "Будильники із Watch7: точні будильники "+
             (exact?"дозволено":"НЕ ДОЗВОЛЕНО")+
             "; сповіщення "+(notifications?"дозволено":"НЕ ДОЗВОЛЕНО")+
-            (exact && notifications?".":". На Pixel відкрий у Джарвісі "+
+            (exact && notifications?".":". На Pixel відкрий у Дімоні "+
                 "«Дозволи будильників Watch7».");
     }
 
@@ -92,7 +92,7 @@ public final class JarvisWearAlarmScheduler {
 
     public static String setAlarm(Context c,AssistantIntents.ClockTime when) {
         if(when==null)return "Скажи час будильника, наприклад 07:30.";
-        return put(c,nextOccurrence(when),"Будильник","Будильник Джарвіса");
+        return put(c,nextOccurrence(when),"Будильник","Будильник Дімона");
     }
 
     public static String setReminder(Context c,AssistantIntents.Reminder reminder) {
@@ -108,11 +108,11 @@ public final class JarvisWearAlarmScheduler {
         if(!TimerScheduler.canScheduleExact(c))
             return "Не встановлено будильник з Watch7: на Pixel відкрий Налаштування → "+
                 "Програми → Спеціальний доступ → Будильники й нагадування → "+
-                "Джарвіс → Дозволити. Звичайна команда на Pixel використовує "+
+                "Дімон → Дозволити. Звичайна команда на Pixel використовує "+
                 "Google Годинник і не перевіряє цей дозвіл.";
         if(!notificationsAllowed(c))
             return "Не встановлено будильник з Watch7: на Pixel відкрий "+
-                "Налаштування → Сповіщення → Джарвіс і дозволь сповіщення.";
+                "Налаштування → Сповіщення → Дімон і дозволь сповіщення.";
         if(when<=System.currentTimeMillis())
             return "Вказаний час уже минув.";
         SharedPreferences p=prefs(c);
@@ -130,7 +130,7 @@ public final class JarvisWearAlarmScheduler {
                     if(old!=null && type.equals(old.optString("type")) &&
                        Math.abs(old.optLong("when")-when)<1000L) {
                         return "Будильник уже встановлено на Pixel: "+fmt(when)+
-                            ". Це будильник Джарвіса, а не запис у Google Годиннику.";
+                            ". Це будильник Дімона, а не запис у Google Годиннику.";
                     }
                 }
             }
@@ -153,12 +153,12 @@ public final class JarvisWearAlarmScheduler {
             return type+" встановлено на Pixel: "+fmt(when)+
                 (type.equals("Нагадування")?". "+message:"")+
                 (type.equals("Будильник")
-                    ? ". Це будильник Джарвіса, він не відображається у Google Годиннику."
+                    ? ". Це будильник Дімона, він не відображається у Google Годиннику."
                     : "")+
                 " Сповіщення на Watch7 залежить від налаштувань Galaxy Wearable.";
         }catch(Exception failure){
             return "Не вдалося створити будильник/нагадування на Pixel. "+
-                "Перевір дозволи Джарвіса й повтори команду.";
+                "Перевір дозволи Дімона й повтори команду.";
         }
     }
 
@@ -213,7 +213,7 @@ public final class JarvisWearAlarmScheduler {
             Context.NOTIFICATION_SERVICE);
         if(manager==null || !notificationsAllowed(c))return;
         NotificationChannel channel=new NotificationChannel(CHANNEL,
-            "Джарвіс — будильники й нагадування",NotificationManager.IMPORTANCE_HIGH);
+            "Дімон — будильники й нагадування",NotificationManager.IMPORTANCE_HIGH);
         channel.enableVibration(true);
         channel.setVibrationPattern(new long[]{0,800,200,800,200,1200});
         AudioAttributes audio=new AudioAttributes.Builder()
@@ -225,7 +225,7 @@ public final class JarvisWearAlarmScheduler {
         String message=item.optString("message",type);
         Notification n=new Notification.Builder(c,CHANNEL)
             .setSmallIcon(R.drawable.ic_launcher)
-            .setContentTitle(type+" — Джарвіс")
+            .setContentTitle(type+" — Дімон")
             .setContentText(message)
             .setStyle(new Notification.BigTextStyle().bigText(message))
             .setCategory(type.equals("Будильник")
