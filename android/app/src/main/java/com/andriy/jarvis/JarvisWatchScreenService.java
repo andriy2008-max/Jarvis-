@@ -152,11 +152,21 @@ public final class JarvisWatchScreenService extends AccessibilityService {
     }
 
     private static String spotifyLabel(AccessibilityNodeInfo n) {
-        CharSequence content=n.getContentDescription();
-        if(content!=null && content.length()>0)
-            return AppNameMatcher.normalize(content.toString());
         CharSequence text=n.getText();
-        return AppNameMatcher.normalize(text==null?"":text.toString());
+        if(text!=null && text.length()>0)
+            return AppNameMatcher.normalize(text.toString());
+        CharSequence content=n.getContentDescription();
+        return AppNameMatcher.normalize(content==null?"":content.toString());
+    }
+
+    private static String spotifyDescription(AccessibilityNodeInfo n) {
+        CharSequence content=n.getContentDescription();
+        return AppNameMatcher.normalize(content==null?"":content.toString());
+    }
+
+    private static boolean spotifyNodeMatches(AccessibilityNodeInfo n,String... names) {
+        return spotifyNodeMatches(n,names) ||
+               spotifyMatches(spotifyDescription(n),names);
     }
 
     private static boolean spotifyMatches(String label,String... names) {
@@ -188,7 +198,7 @@ public final class JarvisWatchScreenService extends AccessibilityService {
 
     private boolean spotifyHasLabel(AccessibilityNodeInfo root,String... labels) {
         for(AccessibilityNodeInfo n:spotifyNodes(root)) {
-            if(!n.isEditable() && spotifyMatches(spotifyLabel(n),labels))
+            if(!n.isEditable() && spotifyNodeMatches(n,labels))
                 return true;
         }
         return false;
@@ -199,8 +209,9 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         if(wanted.isEmpty())return false;
         for(AccessibilityNodeInfo n:spotifyNodes(root)) {
             String label=spotifyLabel(n);
-            if(!n.isEditable() && (label.equals(wanted) ||
-                label.startsWith(wanted+" song") || label.startsWith(wanted+" playlist")))
+            String description=spotifyDescription(n);
+            if(!n.isEditable() && (spotifyTitleMatches(label,wanted) ||
+                                  spotifyTitleMatches(description,wanted)))
                 return true;
         }
         return false;
@@ -210,7 +221,7 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         AccessibilityNodeInfo selected=null;
         Rect bestBounds=null;
         for(AccessibilityNodeInfo n:spotifyNodes(root)) {
-            if(n.isEditable() || !spotifyMatches(spotifyLabel(n),names))continue;
+            if(n.isEditable() || !spotifyNodeMatches(n,names))continue;
             Rect b=new Rect();n.getBoundsInScreen(b);
             if(b.width()<6 || b.height()<6)continue;
             if(bestBounds==null || b.top<bestBounds.top) {
@@ -276,6 +287,15 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         return Result.WAIT;
     }
 
+    private static boolean spotifyTitleMatches(String label,String wanted) {
+        return label.equals(wanted) ||
+               label.startsWith(wanted+" song") ||
+               label.startsWith(wanted+" пісня") ||
+               label.startsWith(wanted+" playlist") ||
+               label.startsWith(wanted+" плейлист") ||
+               label.startsWith(wanted+" плейліст");
+    }
+
     private Result spotifySelectResult(AccessibilityNodeInfo root,String title,Completion cb) {
         if(title==null || title.trim().isEmpty())return Result.BLOCKED;
         String wanted=AppNameMatcher.normalize(title);
@@ -283,14 +303,8 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         Rect bestBounds=null;
         for(AccessibilityNodeInfo n:spotifyNodes(root)) {
             if(n.isEditable())continue; // Never tap the search input as a result.
-            String label=spotifyLabel(n);
-            boolean exact=label.equals(wanted);
-            boolean typed=label.startsWith(wanted+" song") ||
-                label.startsWith(wanted+" пісня") ||
-                label.startsWith(wanted+" playlist") ||
-                label.startsWith(wanted+" плейлист") ||
-                label.startsWith(wanted+" плейліст");
-            if(!exact && !typed)continue;
+            if(!spotifyTitleMatches(spotifyLabel(n),wanted) &&
+               !spotifyTitleMatches(spotifyDescription(n),wanted))continue;
             Rect b=new Rect();n.getBoundsInScreen(b);
             if(b.width()<6 || b.height()<6)continue;
             if(bestBounds==null || b.top<bestBounds.top) {
