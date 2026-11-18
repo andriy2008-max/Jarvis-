@@ -11,7 +11,7 @@ The Android app contains **no OpenAI API key**. The user's device holds only a s
 3. Generate a **different**, random personal client code (for example, `openssl rand -hex 32`) and set it with `npx wrangler secret put JARVIS_CLIENT_TOKEN`.
 4. `npm test` and then `npx wrangler deploy`. Read the printed public HTTPS URL. The chat endpoint is `https://<worker>.<account>.workers.dev/chat`.
 5. In JARVIS Android tap **ШІ — підключення**, enter the HTTPS `/chat` endpoint and the client code (NOT the OpenAI API key).
-6. Test: say `Привіт, Джарвіс`, then `Як пройшов мій день?` or ask follow-up questions. Use `Очистити контекст ШІ` to start over.
+6. Test: say `Привіт, Дімон`, then `Як пройшов мій день?` or ask follow-up questions. Use `Очистити контекст ШІ` to start over.
 
 `GET /health` returns a status marker; it does not check billing or whether secrets are set. No secret goes in the health response.
 
@@ -46,7 +46,7 @@ Cloudflare Workers підтримує імпорт GitHub-репозиторію
 Після розгортання поточної версії Worker застосунок підтримує:
 
 - **Звичайний діалог:** програмування, переклад, пояснення, написання текстів, планування, математика. У налаштуваннях ШІ обирається глибина міркування: none/low/medium/high.
-- **ШІ-пошук:** окремий режим `web` з офіційним інструментом `web_search`. Worker повертає відповідь і HTTPS-посилання на джерела з анотацій моделі. Пошукові запити без звертання «Джарвіс» і далі відкривають браузер без озвучення.
+- **ШІ-пошук:** окремий режим `web` з офіційним інструментом `web_search`. Worker повертає відповідь і HTTPS-посилання на джерела з анотацій моделі. Пошукові запити без звертання «Дімон» і далі відкривають браузер без озвучення.
 - **Аналіз фото:** користувач вручну обирає JPEG/PNG/WEBP через системний вибір Android; лише цей файл надсилається через Worker до OpenAI.
 - **Читання документів:** PDF, TXT, MD, код, CSV/JSON, Word, Excel, PowerPoint. Для файлів ліміт 2,7 МБ; великі фото зменшуються. Сервер не зберігає файли.
 - **Створення й редагування зображень:** окремий режим `image` використовує `image_generation`, за замовчуванням `gpt-image-2.5-flare`. Результат відкривається в основному застосунку; лише після натискання «Зберегти зображення» потрапляє у галерею.
