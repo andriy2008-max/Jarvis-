@@ -228,7 +228,7 @@ public final class JarvisWearPhoneSession {
                 out.reply(false,JarvisPhoneScreenGuard.MESSAGE,"",true); return;
             }
             if (!ScreenControlAccessibilityService.isConnected()) {
-                out.reply(false,"На телефоні потрібно вручну увімкнути «Джарвіс — керування екраном» у Спеціальних можливостях.","",true);
+                out.reply(false,"На телефоні потрібно вручну увімкнути «Дімон — керування екраном» у Спеціальних можливостях.","",true);
                 return;
             }
             if (!session.isEmpty() && SystemClock.elapsedRealtime() < deadline &&
@@ -398,7 +398,7 @@ public final class JarvisWearPhoneSession {
             completion.finished(false,JarvisPhoneScreenGuard.MESSAGE); return;
         }
         if (!ScreenControlAccessibilityService.isConnected()) {
-            completion.finished(false,"Увімкни «Джарвіс — керування екраном» на телефоні, щоб перевірити відкриття програми.");
+            completion.finished(false,"Увімкни «Дімон — керування екраном» на телефоні, щоб перевірити відкриття програми.");
             return;
         }
         PackageManager pm = context.getPackageManager();
@@ -440,7 +440,7 @@ public final class JarvisWearPhoneSession {
             completion.finished(true,"Відкрито «"+label+"» на телефоні.");
         } else if (SystemClock.elapsedRealtime() >= until) {
             completion.finished(false,"Не підтвердив відкриття «"+label+
-                "». Android міг обмежити запуск із фону. Відкрий Джарвіса на телефоні та повтори.");
+                "». Android міг обмежити запуск із фону. Відкрий Дімона на телефоні та повтори.");
         } else main.postDelayed(() -> awaitVisible(context,pkg,label,until,completion),250L);
     }
 
