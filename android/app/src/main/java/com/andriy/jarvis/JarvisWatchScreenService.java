@@ -89,6 +89,183 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         }
     }
 
+
+    // Spotify on Wear OS has its own navigation and search. Each operation is
+    // restricted to Spotify's visible accessibility tree on THIS watch.
+    // Screen locations are never copied from the paired phone.
+    public enum SpotifyStep {
+        OPEN_SEARCH, REVEAL_NAV, FOCUS_SEARCH, SET_QUERY,
+        SELECT_RESULT, PLAY_PLAYLIST, VERIFY_PLAYLIST
+    }
+    private static final String SPOTIFY_PKG="com.spotify.music";
+
+    public static Result spotifyStep(SpotifyStep step,String title,Completion completion) {
+        JarvisWatchScreenService service=connected.get();
+        if(service==null || step==null || completion==null)return Result.BLOCKED;
+        AccessibilityNodeInfo root=service.appRoot(SPOTIFY_PKG);
+        if(root==null)return Result.WAIT;
+        switch(step) {
+            case OPEN_SEARCH:
+                return service.spotifyTapExact(root,completion,
+                    "search","пошук","поиск");
+            case REVEAL_NAV:
+                return service.swipe(SPOTIFY_PKG,true,true,completion);
+            case FOCUS_SEARCH:
+                return service.spotifyFocusSearch(root,completion);
+            case SET_QUERY:
+                return service.spotifySetQuery(root,title);
+            case SELECT_RESULT:
+                return service.spotifySelectResult(root,title,completion);
+            case PLAY_PLAYLIST:
+                if(service.spotifyHasLabel(root,"pause","призупинити","пауза"))
+                    return Result.DONE;
+                return service.spotifyTapPlay(root,completion);
+            case VERIFY_PLAYLIST:
+                // A play button click is not proof of playback. Only report
+                // verified when the target is present with an active Pause UI.
+                return service.spotifyHasTitle(root,title) &&
+                       service.spotifyHasLabel(root,"pause","призупинити","пауза")
+                        ?Result.DONE:Result.WAIT;
+            default:return Result.BLOCKED;
+        }
+    }
+
+    private static String spotifyLabel(AccessibilityNodeInfo n) {
+        CharSequence content=n.getContentDescription();
+        if(content!=null && content.length()>0)
+            return AppNameMatcher.normalize(content.toString());
+        CharSequence text=n.getText();
+        return AppNameMatcher.normalize(text==null?"":text.toString());
+    }
+
+    private static boolean spotifyMatches(String label,String... names) {
+        for(String name:names) {
+            String wanted=AppNameMatcher.normalize(name);
+            if(label.equals(wanted) || label.startsWith(wanted+" "))return true;
+        }
+        return false;
+    }
+
+    private ArrayDeque<AccessibilityNodeInfo> spotifyNodes(AccessibilityNodeInfo root) {
+        ArrayDeque<AccessibilityNodeInfo> result=new ArrayDeque<>();
+        ArrayDeque<AccessibilityNodeInfo> queue=new ArrayDeque<>();
+        queue.add(root);
+        int seen=0;
+        while(!queue.isEmpty() && ++seen<=MAX_NODES) {
+            AccessibilityNodeInfo n=queue.removeFirst();
+            if(n==null || !n.isVisibleToUser() || !n.isEnabled() || n.isPassword())
+                continue;
+            result.addLast(n);
+            for(int i=0;i<n.getChildCount();i++) {
+                AccessibilityNodeInfo child=n.getChild(i);
+                if(child!=null)queue.addLast(child);
+            }
+        }
+        if(seen>MAX_NODES)result.clear();
+        return result;
+    }
+
+    private boolean spotifyHasLabel(AccessibilityNodeInfo root,String... labels) {
+        for(AccessibilityNodeInfo n:spotifyNodes(root)) {
+            if(!n.isEditable() && spotifyMatches(spotifyLabel(n),labels))
+                return true;
+        }
+        return false;
+    }
+
+    private boolean spotifyHasTitle(AccessibilityNodeInfo root,String title) {
+        String wanted=AppNameMatcher.normalize(title);
+        if(wanted.isEmpty())return false;
+        for(AccessibilityNodeInfo n:spotifyNodes(root)) {
+            String label=spotifyLabel(n);
+            if(!n.isEditable() && (label.equals(wanted) ||
+                label.startsWith(wanted+" song") || label.startsWith(wanted+" playlist")))
+                return true;
+        }
+        return false;
+    }
+
+    private Result spotifyTapExact(AccessibilityNodeInfo root,Completion cb,String... names) {
+        AccessibilityNodeInfo selected=null;
+        Rect bestBounds=null;
+        for(AccessibilityNodeInfo n:spotifyNodes(root)) {
+            if(n.isEditable() || !spotifyMatches(spotifyLabel(n),names))continue;
+            Rect b=new Rect();n.getBoundsInScreen(b);
+            if(b.width()<6 || b.height()<6)continue;
+            if(bestBounds==null || b.top<bestBounds.top) {
+                selected=n;bestBounds=b;
+            }
+        }
+        return selected==null?Result.WAIT:spotifyTapNode(selected,cb);
+    }
+
+    private Result spotifyTapNode(AccessibilityNodeInfo found,Completion cb) {
+        if(appRoot(SPOTIFY_PKG)==null)return Result.WAIT;
+        AccessibilityNodeInfo parent=found;
+        for(int i=0;i<4 && parent!=null;i++,parent=parent.getParent()) {
+            if(parent.isEnabled() && parent.isClickable() &&
+               parent.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                return Result.DONE;
+        }
+        Rect rect=new Rect();found.getBoundsInScreen(rect);
+        if(rect.width()<6 || rect.height()<6)return Result.WAIT;
+        Path point=new Path();point.moveTo(rect.exactCenterX(),rect.exactCenterY());
+        return gesture(SPOTIFY_PKG,point,90L,cb);
+    }
+
+    private Result spotifyFocusSearch(AccessibilityNodeInfo root,Completion cb) {
+        for(AccessibilityNodeInfo n:spotifyNodes(root)) {
+            if(n.isEditable() && !n.isPassword()) {
+                if(n.isFocused())return Result.DONE;
+                return spotifyTapNode(n,cb);
+            }
+        }
+        return spotifyTapExact(root,cb,
+            "search songs","search spotify","пошук пісень",
+            "що хочете послухати","що ви хочете послухати","пошук");
+    }
+
+    private Result spotifySetQuery(AccessibilityNodeInfo root,String title) {
+        if(title==null || title.isEmpty() || title.length()>75)return Result.BLOCKED;
+        for(AccessibilityNodeInfo n:spotifyNodes(root)) {
+            if(!n.isEditable() || n.isPassword())continue;
+            Bundle args=new Bundle();
+            args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,title);
+            return n.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)
+                ?Result.DONE:Result.WAIT;
+        }
+        return Result.WAIT;
+    }
+
+    private Result spotifySelectResult(AccessibilityNodeInfo root,String title,Completion cb) {
+        if(title==null || title.trim().isEmpty())return Result.BLOCKED;
+        String wanted=AppNameMatcher.normalize(title);
+        AccessibilityNodeInfo selected=null;
+        Rect bestBounds=null;
+        for(AccessibilityNodeInfo n:spotifyNodes(root)) {
+            if(n.isEditable())continue; // Never tap the search input as a result.
+            String label=spotifyLabel(n);
+            boolean exact=label.equals(wanted);
+            boolean typed=label.startsWith(wanted+" song") ||
+                label.startsWith(wanted+" пісня") ||
+                label.startsWith(wanted+" playlist") ||
+                label.startsWith(wanted+" плейлист") ||
+                label.startsWith(wanted+" плейліст");
+            if(!exact && !typed)continue;
+            Rect b=new Rect();n.getBoundsInScreen(b);
+            if(b.width()<6 || b.height()<6)continue;
+            if(bestBounds==null || b.top<bestBounds.top) {
+                selected=n;bestBounds=b;
+            }
+        }
+        return selected==null?Result.WAIT:spotifyTapNode(selected,cb);
+    }
+
+    private Result spotifyTapPlay(AccessibilityNodeInfo root,Completion cb) {
+        return spotifyTapExact(root,cb,"play","play playlist",
+            "відтворити","відтворення","слухати","воспроизвести");
+    }
+
     private Result typeText(AccessibilityNodeInfo root,String text) {
         if(text==null || text.trim().isEmpty() || text.length()>200)return Result.BLOCKED;
         AccessibilityNodeInfo input=root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
