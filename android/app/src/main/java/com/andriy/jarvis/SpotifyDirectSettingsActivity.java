@@ -37,7 +37,7 @@ public final class SpotifyDirectSettingsActivity extends Activity {
         page.addView(body);
 
         addText(body,"🎵 Spotify — прямий запуск",23,WHITE);
-        addText(body,"Джарвіс запускатиме плейлист через офіційний Spotify App Remote SDK без натискання Play. Spotify має бути встановлений, а ти — увійти в акаунт.",15,MUTED);
+        addText(body,"Дімон запускатиме плейлист через офіційний Spotify App Remote SDK без натискання Play. Spotify має бути встановлений, а ти — увійти в акаунт.",15,MUTED);
         addText(body,"1. Створи застосунок у Spotify Developer Dashboard та вибери Android. Укажи цей пакет і SHA-1:",16,WHITE);
         addText(body,"Пакет: "+getPackageName()+"\nSHA-1: "+certificateSha1(),14,WHITE);
         addText(body,"Redirect URI, який треба додати в Spotify Dashboard:",15,WHITE);
@@ -79,7 +79,7 @@ public final class SpotifyDirectSettingsActivity extends Activity {
             connection.connect();
         });
         body.addView(connect);
-        addText(body,"Якщо Client ID, авторизації або посилання немає, Джарвіс залишить старий спосіб: знайти плейлист та натиснути Play через Accessibility. Для окремого треку на вимогу Spotify може вимагати Premium.",14,MUTED);
+        addText(body,"Якщо Client ID, авторизації або посилання немає, Дімон залишить старий спосіб: знайти плейлист та натиснути Play через Accessibility. Для окремого треку на вимогу Spotify може вимагати Premium.",14,MUTED);
         setContentView(page);
     }
 
