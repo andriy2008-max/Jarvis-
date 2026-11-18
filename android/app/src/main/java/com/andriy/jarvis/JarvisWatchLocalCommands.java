@@ -11,10 +11,14 @@ public final class JarvisWatchLocalCommands {
     public static final class Request {
         public final String app;
         public final ScreenControlCommands.Action screen;
-        private Request(String app,ScreenControlCommands.Action screen) {
-            this.app=app;this.screen=screen;
+        public final SpotifyMusicCommands.Kind music;
+        public final String musicTitle;
+        private Request(String app,ScreenControlCommands.Action screen,
+                        SpotifyMusicCommands.Kind music,String musicTitle) {
+            this.app=app;this.screen=screen;this.music=music;this.musicTitle=musicTitle;
         }
         public boolean opensApp() { return app!=null; }
+        public boolean playsSpotify() { return music!=null; }
     }
 
     private static final Pattern WAKE=Pattern.compile(
@@ -39,10 +43,22 @@ public final class JarvisWatchLocalCommands {
         String local=WAKE.matcher(source.substring(0,suffix.start()).trim())
             .replaceFirst("").trim();
         if(local.isEmpty())return null;
+        // Watch-specific Spotify playback is handled locally, before the
+        // generic app/phone router. Only explicitly named tracks/playlists.
+        SpotifyMusicCommands.Kind music=SpotifyMusicCommands.parse(local);
+        if(music==SpotifyMusicCommands.Kind.TRACK) {
+            String title=SpotifyMusicCommands.namedTrack(local);
+            return title==null?null:new Request(null,null,music,title);
+        }
+        if(music==SpotifyMusicCommands.Kind.PLAYLIST) {
+            SpotifyMusicCommands.NamedPlaylist playlist=
+                SpotifyMusicCommands.namedPlaylist(local);
+            return playlist==null?null:new Request(null,null,music,playlist.name);
+        }
         String name=AssistantIntents.requestedApp(
             CommandPatterns.normalizeControlVerb(local));
         if(name!=null && !name.trim().isEmpty() && name.length()<=80)
-            return new Request(name.trim(),null);
+            return new Request(name.trim(),null,null,null);
         ScreenControlCommands.Action step=ScreenControlCommands.parse(local);
         if(step==null)return null;
         switch(step.kind) {
@@ -52,10 +68,10 @@ public final class JarvisWatchLocalCommands {
                     (step.kind!=ScreenControlCommands.Kind.TYPE_TEXT &&
                      ScreenControlCommands.isSensitiveLabel(step.label)))
                     return null;
-                return new Request(null,step);
+                return new Request(null,step,null,null);
             case BACK:case SCROLL_UP:case SCROLL_DOWN:
             case SWIPE_UP:case SWIPE_DOWN:case SWIPE_LEFT:case SWIPE_RIGHT:
-                return new Request(null,step);
+                return new Request(null,step,null,null);
             default:return null;
         }
     }
