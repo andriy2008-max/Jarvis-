@@ -42,7 +42,7 @@ public final class JarvisPhoneModeManager {
 
     public static synchronized String enter(Context context, boolean useFloatingMic) {
         if (!supported(context))
-            return "Ця конфігурація Джарвіса не підтримує керування екраном.";
+            return "Ця конфігурація Дімона не підтримує керування екраном.";
         if (!ScreenControlAccessibilityService.isConnected())
             return consentNeeded();
         if (!JarvisPhoneScreenGuard.available(context)) return JarvisPhoneScreenGuard.MESSAGE;
@@ -51,12 +51,12 @@ public final class JarvisPhoneModeManager {
         showPhoneIcon(context);
         if (JarvisPhoneMode.isActive() &&
             ScreenControlAccessibilityService.isSessionActive())
-            return "Режим «Телефон» уже активний. Скажи «Джарвіс» для виходу.";
+            return "Режим «Телефон» уже активний. Скажи «Дімон» для виходу.";
         String status = ScreenControlAccessibilityService.startFromBubble();
         if (!ScreenControlAccessibilityService.isSessionActive()) return status;
         JarvisPhoneMode.setActive(true);
         return "Режим «Телефон» активний. Скажи «Натисни», «Зажми» або «Свайпни». " +
-            "Натисни телефон, щоб слухати безперервно. Команда — після 2 с тиші. Для виходу скажи «Джарвіс».";
+            "Натисни телефон, щоб слухати безперервно. Команда — після 2 с тиші. Для виходу скажи «Дімон».";
     }
 
     /** Run a single, user-requested action such as "увімкни реп". Consent
@@ -113,10 +113,10 @@ public final class JarvisPhoneModeManager {
     public static synchronized String exit() {
         JarvisControlFeedback.clear();
         automaticOwner = null;
-        if (!JarvisPhoneMode.isActive()) return "Звичайний режим Джарвіса вже активний.";
+        if (!JarvisPhoneMode.isActive()) return "Звичайний режим Дімона вже активний.";
         ScreenControlAccessibilityService.stop();
         JarvisPhoneMode.setActive(false);
-        return "Вийшов із режиму «Телефон». Звичайний Джарвіс активний.";
+        return "Вийшов із режиму «Телефон». Звичайний Дімон активний.";
     }
 
     private static boolean supported(Context context) {
@@ -126,7 +126,7 @@ public final class JarvisPhoneModeManager {
     }
 
     private static String consentNeeded() {
-        return "На телефоні потрібно вручну ввімкнути «Джарвіс — керування екраном» " +
+        return "На телефоні потрібно вручну ввімкнути «Дімон — керування екраном» " +
             "в налаштуваннях Android → Спеціальні можливості. Без цього дозвіл не надається.";
     }
 }
