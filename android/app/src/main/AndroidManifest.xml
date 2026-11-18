@@ -161,6 +161,22 @@
             </intent-filter>
         </receiver>
         <!-- Explicitly opt-in UI navigation, enabled only by the user in Android settings. -->
+        <!-- Optional watch-only local UI service; Android enables it
+             only for the watch resource configuration. User must turn it on
+             under Watch Settings > Accessibility > Installed apps. -->
+        <service
+            android:name=".JarvisWatchScreenService"
+            android:enabled="@bool/watch_local_screen_available"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:label="Джарвіс — екран годинника">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/jarvis_watch_accessibility" />
+        </service>
         <service
             android:name=".ScreenControlAccessibilityService"
             android:enabled="true"
