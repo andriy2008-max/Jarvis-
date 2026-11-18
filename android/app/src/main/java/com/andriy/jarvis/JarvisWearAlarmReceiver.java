@@ -16,7 +16,7 @@ public final class JarvisWearAlarmReceiver extends BroadcastReceiver {
         if("Будильник".equals(item.optString("type"))) {
             Intent alert=new Intent(context,JarvisWearAlertService.class);
             alert.setAction(JarvisWearAlertService.START);
-            alert.putExtra("message",item.optString("message","Будильник Джарвіса"));
+            alert.putExtra("message",item.optString("message","Будильник Дімона"));
             try {
                 if(android.os.Build.VERSION.SDK_INT>=26)
                     context.startForegroundService(alert);
