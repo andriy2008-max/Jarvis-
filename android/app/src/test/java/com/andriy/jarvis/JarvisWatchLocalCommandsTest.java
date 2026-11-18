@@ -35,6 +35,18 @@ public final class JarvisWatchLocalCommandsTest {
         yes(!JarvisWatchLocalCommands.targetsWatch(
             "Увімкни плейлист Мій реп"));
         yes(JarvisWatchLocalCommands.parse("Увімкни пісню на годиннику")==null);
+        JarvisWatchLocalCommands.Request naturalSong=
+            JarvisWatchLocalCommands.spotifyOnWatch(
+                "Джарвіс, увімкни пісню Пачка сигарет");
+        yes(naturalSong!=null && naturalSong.playsSpotify());
+        yes(naturalSong.music==SpotifyMusicCommands.Kind.TRACK);
+        yes(JarvisWatchLocalCommands.spotifyOnWatch(
+            "Включи плейлист Вечірній")==null ? false : true);
+        yes(JarvisWatchLocalCommands.spotifyOnWatch(
+            "Натисни оплатити")==null);
+        yes(JarvisWatchLocalCommands.spotifyOnWatch(
+            "Увімкни реп")==null);
+
         yes(JarvisWatchLocalCommands.parse("Натисни оплатити на годиннику")==null);
         yes(JarvisWatchLocalCommands.parse("Увімкни керування екраном на годиннику")==null);
         System.out.println("PASS JarvisWatchLocalCommandsTest");
