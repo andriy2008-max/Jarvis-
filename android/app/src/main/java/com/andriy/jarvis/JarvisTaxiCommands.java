@@ -6,7 +6,7 @@ import java.util.regex.Pattern;
 /** Local parser; null=not taxi, empty=open Bolt only, text=destination. */
 public final class JarvisTaxiCommands {
     private static final Pattern COMMAND=Pattern.compile(
-        "(?iu)^(?:(?:джарвіс|джарвис|jarvis)[\\s,:—-]*)?(?:таксі|такси|taxi|виклич\\s+таксі|замов\\s+таксі)(?:[\\s,:—-]+(.*))?$");
+        "(?iu)^(?:(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[\\s,:—-]*)?(?:таксі|такси|taxi|виклич\\s+таксі|замов\\s+таксі)(?:[\\s,:—-]+(.*))?$");
     private static final Pattern PREPOSITION=Pattern.compile(
         "(?iu)^(?:до|на|в|у|за\\s+адресою|адреса|адресу)\\s+");
     private JarvisTaxiCommands() {}
