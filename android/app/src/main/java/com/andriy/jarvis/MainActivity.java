@@ -4750,7 +4750,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     if(isFinishing() || isDestroyed())return;
                     appendDialogue("Джарвіс",message);
                     setStatus(message);
-                    if(!local.opensApp() && voiceEnabled)speakReply(message);
+                    // A successful music click should not be interrupted by
+                    // Jarvis TTS over the playback. Spotify shows a toast.
+                    if(!local.opensApp() && voiceEnabled &&
+                       (!local.playsSpotify() || !ok))speakReply(message);
                     else if(face!=null)face.setState("idle");
                 });
                 return;
