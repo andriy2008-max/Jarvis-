@@ -118,7 +118,7 @@ public final class JarvisWearImageBridge {
         final String channel="jarvis_images_from_watch_v1";
         if(Build.VERSION.SDK_INT>=26) {
             NotificationChannel setup=new NotificationChannel(channel,
-                "Джарвіс — зображення з годинника",
+                "Дімон — зображення з годинника",
                 NotificationManager.IMPORTANCE_DEFAULT);
             manager.createNotificationChannel(setup);
         }
@@ -130,7 +130,7 @@ public final class JarvisWearImageBridge {
             PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         Notification notification=new Notification.Builder(context,channel)
             .setSmallIcon(R.drawable.ic_launcher)
-            .setContentTitle("Джарвіс створив зображення")
+            .setContentTitle("Дімон створив зображення")
             .setContentText("Торкнись, щоб переглянути його на Pixel")
             .setVisibility(Notification.VISIBILITY_PRIVATE)
             .setAutoCancel(true)
@@ -161,7 +161,7 @@ public final class JarvisWearImageBridge {
         Context app=context.getApplicationContext();
         if(generator==null)generator=new AiChatClient(app);
         if(!generator.isConfigured()) {
-            callback.finished(false,"Налаштуй ШІ у Джарвісі на Pixel.","");
+            callback.finished(false,"Налаштуй ШІ у Дімоні на Pixel.","");
             return;
         }
         generating=true;
