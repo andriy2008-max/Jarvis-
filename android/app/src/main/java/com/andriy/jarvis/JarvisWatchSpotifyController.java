@@ -31,7 +31,7 @@ public final class JarvisWatchSpotifyController {
         }
         if(!JarvisWatchScreenService.available(context)) {
             completion.finished(false,"Увімкни на годиннику службу "+
-                "«Джарвіс — екран годинника» у спеціальних можливостях.");
+                "«Дімон — екран годинника» у спеціальних можливостях.");
             return;
         }
         Intent intent=context.getPackageManager().getLaunchIntentForPackage(PACKAGE);
