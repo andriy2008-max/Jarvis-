@@ -15,7 +15,7 @@ public final class JarvisWatchMapsCommands {
     }
 
     private static final Pattern WAKE=Pattern.compile(
-        "(?iu)^(?:джарвіс|джарвис|jarvis)[\\s,:—-]+");
+        "(?iu)^(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[\\s,:—-]+");
     private static final Pattern HERE=Pattern.compile(
         "(?iu)^(?:де\\s+я(?:\\s+зараз)?|покажи\\s+де\\s+я(?:\\s+зараз)?|"+
         "покажи\\s+моє\\s+(?:місцезнаходження|розташування)|"+
