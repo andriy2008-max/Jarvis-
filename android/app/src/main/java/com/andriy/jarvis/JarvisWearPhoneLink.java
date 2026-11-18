@@ -311,13 +311,13 @@ public final class JarvisWearPhoneLink {
         // connection drops; the phone expires its own idle control session.
         if (!active()) {
             JarvisPhoneMode.setActive(false);
-            cb.finished(true, "Звичайний Джарвіс.");
+            cb.finished(true, "Звичайний Дімон.");
             return;
         }
         send(JarvisWearProtocol.EXIT, "", (ok, detail) -> {
             activeSession = "";
             JarvisPhoneMode.setActive(false);
-            cb.finished(ok, ok ? "Звичайний Джарвіс." :
+            cb.finished(ok, ok ? "Звичайний Дімон." :
                 "Годинник вийшов із режиму «Телефон». Телефон недоступний; " +
                 "керування на ньому автоматично завершиться після паузи.");
         });
@@ -361,7 +361,7 @@ public final class JarvisWearPhoneLink {
                     requesting = false;
                     requestingType = null;
                     cb.finished(false, "Не знайшов підключений Android-телефон. " +
-                        "На годиннику й телефоні має бути Джарвіс з однаковим підписом.");
+                        "На годиннику й телефоні має бути Дімон з однаковим підписом.");
                     return;
                 }
                 try {
