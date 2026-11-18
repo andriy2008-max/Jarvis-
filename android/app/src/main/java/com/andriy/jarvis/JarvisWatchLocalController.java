@@ -44,7 +44,7 @@ public final class JarvisWatchLocalController {
             callback.finished(ok,detail);
         };
         try {
-        if(request.opensApp())launch(watch,request.app,done);
+        if(request.opensApp())launch(context,request.app,done);
         else if(request.usesMaps()) {
             JarvisWatchMapsController.execute(watch,request.maps,
                 (ok,detail)->{
@@ -55,8 +55,9 @@ public final class JarvisWatchLocalController {
                 });
         }
         else if(request.playsSpotify()) {
-            // Launch from the visible Watch Activity rather than from the
-            // application context to avoid Wear OS background-start limits.
+            // Every Spotify intent spoken in the Watch Activity stays local.
+            // Genres use on-watch Spotify playlist search (not Pixel library).
+            // Launch from the Activity to avoid Wear OS background-start limits.
             JarvisWatchSpotifyController.play(context,request.music,request.musicTitle,
                 (ok,detail)->{
                     if(ok)watch.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
