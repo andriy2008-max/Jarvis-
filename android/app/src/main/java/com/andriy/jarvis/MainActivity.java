@@ -4758,6 +4758,24 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 });
                 return;
             }
+            // Maps requests spoken into Watch7 (even without "на годиннику")
+            // open Google Maps on the watch, not on Pixel or the phone AI.
+            JarvisWatchLocalCommands.Request mapsOnWatch=
+                JarvisWatchLocalCommands.mapsOnWatch(raw);
+            if(mapsOnWatch!=null) {
+                processing=true;
+                setStatus("Відкриваю Google Карти на Watch7…");
+                JarvisWatchLocalController.execute(this,mapsOnWatch,(ok,detail)->{
+                    processing=false;
+                    if(isFinishing() || isDestroyed())return;
+                    JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+                    appendDialogue("Джарвіс",detail);
+                    setStatus(detail);
+                    if(!ok && voiceEnabled)speakReply(detail);
+                    else if(face!=null)face.setState("idle");
+                });
+                return;
+            }
             // Say is a LOCAL spoken-output command on Watch7. It must never
             // be sent to phone AI, screen mode or a conversational request.
             // Preserve exact case and punctuation in the dictated phrase.
