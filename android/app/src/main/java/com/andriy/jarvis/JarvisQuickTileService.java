@@ -16,8 +16,8 @@ public final class JarvisQuickTileService extends TileService {
         if (tile == null) return;
         tile.setState(FloatingJarvisService.isShowing()
             ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE);
-        tile.setLabel("Джарвіс");
-        tile.setContentDescription("Відкрити плаваюче обличчя Джарвіса");
+        tile.setLabel("Дімон");
+        tile.setContentDescription("Відкрити плаваюче обличчя Дімона");
         tile.setIcon(Icon.createWithResource(this, R.drawable.ic_launcher));
         tile.updateTile();
     }
