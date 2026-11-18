@@ -21,7 +21,7 @@ public final class JarvisWatchMapsCommandsTest {
         ok(JarvisWatchMapsCommands.parse("Знайди дорогу до")==null);
         ok(JarvisWatchMapsCommands.parse("Знайди дорогу до пішки")==null);
         ok(JarvisWatchMapsCommands.parse("Знайди дорогу до https://site.com")==null);
-        ok(JarvisWatchMapsCommands.parse("Знайди дорогу до вулиця\\nдруга")==null);
+        ok(JarvisWatchMapsCommands.parse("Знайди дорогу до вулиця\nдруга")==null);
         ok(JarvisWatchMapsCommands.parse("Натисни оплатити")==null);
         ok(JarvisWatchMapsCommands.parse("Відкрий Google Карти")==null);
         System.out.println("PASS JarvisWatchMapsCommandsTest");
