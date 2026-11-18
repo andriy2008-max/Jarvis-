@@ -19,6 +19,22 @@ public final class JarvisWatchLocalCommandsTest {
             ScreenControlCommands.Kind.BACK);
         yes(JarvisWatchLocalCommands.parse("Напиши Привіт, друже на годиннику").screen.kind==
             ScreenControlCommands.Kind.TYPE_TEXT);
+
+        JarvisWatchLocalCommands.Request song=JarvisWatchLocalCommands.parse(
+            "Джарвіс, увімкни пісню Пачка сигарет на годиннику");
+        yes(song!=null && song.playsSpotify() && !song.opensApp());
+        yes(song.music==SpotifyMusicCommands.Kind.TRACK);
+        yes("пачка сигарет".equals(song.musicTitle));
+        JarvisWatchLocalCommands.Request playlist=JarvisWatchLocalCommands.parse(
+            "Увімкни плейлист Мій реп на годиннику");
+        yes(playlist!=null && playlist.playsSpotify());
+        yes(playlist.music==SpotifyMusicCommands.Kind.PLAYLIST);
+        yes("мій реп".equals(playlist.musicTitle));
+        yes(JarvisWatchLocalCommands.parse(
+            "Увімкни пісню Пачка сигарет")==null);
+        yes(!JarvisWatchLocalCommands.targetsWatch(
+            "Увімкни плейлист Мій реп"));
+        yes(JarvisWatchLocalCommands.parse("Увімкни пісню на годиннику")==null);
         yes(JarvisWatchLocalCommands.parse("Натисни оплатити на годиннику")==null);
         yes(JarvisWatchLocalCommands.parse("Увімкни керування екраном на годиннику")==null);
         System.out.println("PASS JarvisWatchLocalCommandsTest");
