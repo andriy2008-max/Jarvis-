@@ -5311,7 +5311,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         } else if (command.contains("таймер") && (command.startsWith("постав") || command.startsWith("встанови") || command.startsWith("таймер"))) {
             reply = "Скажи, наприклад: таймер на 5 хвилин або таймер на 30 секунд.";
         } else if (command.startsWith("запиши ") || command.startsWith("занотуй ") || command.startsWith("нотатка ")) {
-            String item = raw.trim().replaceFirst("(?iu)^(джарвіс|джарвис|jarvis)[,\\s:—-]*", "")
+            String item = raw.trim().replaceFirst("(?iu)^(дімон|димон|dimon|джарвіс|джарвис|jarvis)[,\\s:—-]*", "")
                 .replaceFirst("(?iu)^(запиши|занотуй|нотатка)\\s+", "").trim();
             if (item.isEmpty()) reply = "Скажи, що записати.";
             else {
