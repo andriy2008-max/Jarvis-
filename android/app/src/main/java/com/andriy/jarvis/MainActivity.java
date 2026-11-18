@@ -254,6 +254,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
     };
     private JarvisWearPhoneLink watchPhoneLink;
+    // Two-turn Watch7 Spotify dialogue: a bare “увімкни пісню” asks for
+    // a title instead of leaking an incomplete command to the Pixel/AI.
+    private SpotifyMusicCommands.Kind pendingWatchMusicKind;
+    private long pendingWatchMusicUntilMs;
     private android.graphics.Bitmap lastWatchImagePreview;
     private String lastWatchImageId="";
     private String lastWatchImagePhoneNode="";
@@ -4722,6 +4726,20 @@ public final class MainActivity extends Activity implements RecognitionListener 
         },450L);
     }
 
+    private void runWatchMusicRequest(JarvisWatchLocalCommands.Request music) {
+        processing=true;
+        setStatus("Шукаю музику у Spotify на Watch7…");
+        JarvisWatchLocalController.execute(this,music,(ok,detail)->{
+            processing=false;
+            if(isFinishing() || isDestroyed())return;
+            JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+            appendDialogue("Дімон",detail);
+            setStatus(detail);
+            if(!ok && voiceEnabled)speakReply(detail);
+            else if(face!=null)face.setState("idle");
+        });
+    }
+
     private void processCommand(String raw) {
         if (raw == null || raw.trim().isEmpty()) return;
         if (!isWatchDevice && JarvisMacros.cancelIfRequested(raw, result -> {
@@ -4730,6 +4748,43 @@ public final class MainActivity extends Activity implements RecognitionListener 
         })) return;
         JarvisPhoneMode.Transition modeTransition = JarvisPhoneMode.transition(raw);
         if (isWatchDevice) {
+            if(pendingWatchMusicKind!=null) {
+                SpotifyMusicCommands.Kind pending=pendingWatchMusicKind;
+                pendingWatchMusicKind=null;
+                if(JarvisWatchMusicFollowup.isCancel(raw)) {
+                    String message="Пошук пісні скасовано.";
+                    setStatus(message);
+                    if(voiceEnabled)speakReply(message);
+                    return;
+                }
+                if(SystemClock.elapsedRealtime()<=pendingWatchMusicUntilMs) {
+                    String title=JarvisWatchMusicFollowup.titleOnly(raw);
+                    if(title!=null) {
+                        String complete=(pending==SpotifyMusicCommands.Kind.TRACK
+                            ?"увімкни пісню ":"увімкни плейлист ")+title;
+                        JarvisWatchLocalCommands.Request music=
+                            JarvisWatchLocalCommands.spotifyOnWatch(complete);
+                        if(music!=null) {
+                            runWatchMusicRequest(music);
+                            return;
+                        }
+                    }
+                }
+            }
+            SpotifyMusicCommands.Kind incomplete=
+                JarvisWatchMusicFollowup.missingTitle(raw);
+            if(incomplete!=null) {
+                pendingWatchMusicKind=incomplete;
+                pendingWatchMusicUntilMs=SystemClock.elapsedRealtime()+45000L;
+                String prompt=incomplete==SpotifyMusicCommands.Kind.TRACK
+                    ?"Яку пісню увімкнути? Назви лише її назву."
+                    :"Який плейлист увімкнути? Назви лише його назву.";
+                setStatus(prompt);
+                if(face!=null)face.showTranscript(prompt,false,
+                    SystemClock.uptimeMillis()+8000L);
+                if(voiceEnabled)speakReply(prompt);
+                return;
+            }
             // Only an EXPLICIT "на годиннику" target runs locally.
             // A rejected local request never falls back to Pixel/phone AI.
             if (JarvisWatchLocalCommands.targetsWatch(raw)) {
@@ -4902,17 +4957,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             JarvisWatchLocalCommands.Request musicOnWatch=
                 JarvisWatchLocalCommands.spotifyOnWatch(raw);
             if(musicOnWatch!=null) {
-                processing=true;
-                setStatus("Шукаю музику у Spotify на Watch7…");
-                JarvisWatchLocalController.execute(this,musicOnWatch,(ok,detail)->{
-                    processing=false;
-                    if(isFinishing() || isDestroyed())return;
-                    JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-                    appendDialogue("Дімон",detail);
-                    setStatus(detail);
-                    if(!ok && voiceEnabled)speakReply(detail);
-                    else if(face!=null)face.setState("idle");
-                });
+                runWatchMusicRequest(musicOnWatch);
                 return;
             }
             SpotifyMusicCommands.Kind watchMusic = SpotifyMusicCommands.parse(raw);
@@ -5433,7 +5478,18 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     "Speech finished; staying on Jarvis face");
             }
             if(telegramDictationAfterReply)restartTelegramDictation();
-            else resumeAfterReply();
+            else if(isWatchDevice && pendingWatchMusicKind!=null &&
+                    SystemClock.elapsedRealtime()<=pendingWatchMusicUntilMs) {
+                // Ask for a song name and reopen the watch microphone after
+                // our own TTS ends; do not require repeating the whole command.
+                wakeHandler.postDelayed(()->{
+                    if(foreground && !manualCapture && !listening &&
+                       !processing && !speaking && !aiBusy && visibleDialogs==0 &&
+                       pendingWatchMusicKind!=null &&
+                       SystemClock.elapsedRealtime()<=pendingWatchMusicUntilMs)
+                        startManualListening();
+                },450L);
+            } else resumeAfterReply();
         });
     }
 
