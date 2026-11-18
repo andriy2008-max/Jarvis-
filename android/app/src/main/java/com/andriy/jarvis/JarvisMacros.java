@@ -568,7 +568,7 @@ public final class JarvisMacros {
                                 if (result == null || result.contains("не дозвол") ||
                                     result.contains("недоступ") || result.contains("не підтрим") ||
                                     result.contains("потрібен дозвіл") ||
-                                    result.contains("Відкрий Джарвіс"))
+                                    result.contains("Відкрий Дімон"))
                                     complete(false, result == null ? "дія не виконана" : result);
                                 else next();
                                 return;
@@ -642,7 +642,7 @@ public final class JarvisMacros {
         if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(
             Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return;
         manager.createNotificationChannel(new NotificationChannel(
-            CHANNEL, "Джарвіс — макроси", NotificationManager.IMPORTANCE_DEFAULT));
+            CHANNEL, "Дімон — макроси", NotificationManager.IMPORTANCE_DEFAULT));
         Notification notification = new Notification.Builder(context, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title).setContentText(text).setAutoCancel(true).build();
