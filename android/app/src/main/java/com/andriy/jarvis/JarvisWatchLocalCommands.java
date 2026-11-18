@@ -25,6 +25,12 @@ public final class JarvisWatchLocalCommands {
 
     private JarvisWatchLocalCommands() {}
 
+    /** Prevent a failed watch-targeted command from silently running on Pixel. */
+    public static boolean targetsWatch(String raw) {
+        return raw!=null && raw.length()<=450 &&
+            WATCH_SUFFIX.matcher(raw.trim()).find();
+    }
+
     public static Request parse(String raw) {
         if(raw==null || raw.length()>450)return null;
         String source=raw.trim();
