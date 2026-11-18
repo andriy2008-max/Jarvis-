@@ -24,7 +24,7 @@ public final class WakeConversation {
     public static final long CONVERSATION_WINDOW_MS = 35_000L;
 
     private static final Pattern NAME = Pattern.compile(
-        "^(?:(?:гей|ей)\\s+)?(?:джарвіс|джарвис|jarvis)(?:[\\s,.:;!?—-]+|$)(.*)$",
+        "^(?:(?:гей|ей)\\s+)?(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)(?:[\\s,.:;!?—-]+|$)(.*)$",
         Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Decision IGNORE = new Decision(Kind.IGNORE, "");
     private static final Decision ARMED = new Decision(Kind.ARMED, "");
@@ -65,6 +65,7 @@ public final class WakeConversation {
     private static boolean isFinish(String command) {
         return command.equals("досить") || command.equals("закінчи розмову") ||
             command.equals("заверши розмову") || command.equals("кінець розмови") ||
+            command.equals("бувай дімон") || command.equals("бувай димон") ||
             command.equals("бувай джарвіс");
     }
 
