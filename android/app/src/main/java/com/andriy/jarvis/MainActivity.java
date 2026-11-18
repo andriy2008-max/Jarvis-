@@ -500,11 +500,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
             else setStatus("Розпізнавання мовлення не встановлено. Текстові команди працюють.");
         } catch (Exception error) {
             supportsOnDeviceRecognizer = false;
-            if (SpeechRecognizer.isRecognitionAvailable(this)) {
-                recognizer = SpeechRecognizer.createSpeechRecognizer(this);
-                recognizerUsesOnDevice = false;
-                recognizer.setRecognitionListener(ownedRecognizerListener(recognizer));
-            } else setStatus("Розпізнавання мовлення недоступне.");
+            recognizer = null;
+            JarvisDiagnostics.error(JarvisDiagnostics.Event.MIC_ERROR,error);
+            setStatus("Розпізнавання мовлення недоступне. Повтори запуск мікрофона.");
         }
         if (wakeToggle != null) {
             wakeToggle.setEnabled(supportsOnDeviceRecognizer && !shakeEnabled);
@@ -516,6 +514,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        JarvisDiagnostics.event(JarvisDiagnostics.Event.NEW_INTENT);
         setIntent(intent);
         acceptImageIntent(intent);
         if (isWatchLauncherIntent(intent)) {
@@ -634,6 +633,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
     protected void onResume() {
         super.onResume();
         foreground = true;
+        if(isWatchDevice) {
+            processing=JarvisWatchLocalController.busy() || (watchPhoneLink!=null && watchPhoneLink.busy());
+            String recovered=JarvisWatchLocalController.takeResult();
+            if(recovered!=null) { appendDialogue("Дімон",recovered); setStatus(recovered); }
+            if(face!=null && !speaking)face.setState(processing?"thinking":"idle");
+        }
         if(isWatchDevice)
             android.util.Log.i("JARVIS_WATCH_LIFECYCLE",
                 "onResume; watch face remains active until user/system navigates away");
@@ -696,6 +701,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     protected void onPause() {
+        foreground = false; // Reject queued recognizer callbacks before canceling the binder.
+        if (isWatchDevice) retireDisconnectedRecognizer();
         if (isWatchDevice)
             getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         if (launcherMicrophoneStart != null) {
@@ -716,7 +723,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         JarvisLiveTranscript.setCorrectionHandler(TRANSCRIPT_OWNER, null);
         JarvisLiveTranscript.unsubscribe(transcriptListener);
         foreground = false;
-        cancelPendingWatchTtsStart();
+        if(pendingWatchTtsStart!=null) { cancelPendingWatchTtsStart(); speaking=false; }
         if(isWatchDevice)
             android.util.Log.i("JARVIS_WATCH_LIFECYCLE",
                 "onPause; finishing="+isFinishing()+
@@ -731,7 +738,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         stopWatchMicIndicator();
         recognizerSessionActive = false;
         listening = false;
-        processing = false;
+        if (!isWatchDevice) processing = false;
         autoWakeListening = false;
         manualCapture = false;
         manualStopRequested = false;
@@ -1201,6 +1208,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         LinearLayout.LayoutParams aiControlsParams = new LinearLayout.LayoutParams(-1, -2);
         aiControlsParams.topMargin = dp(10);
         chatPanel.addView(aiControls, aiControlsParams);
+        chatPanel.addView(secondaryButton("Діагностика — журнал роботи",
+            () -> startActivity(new Intent(this,JarvisDiagnosticsActivity.class))));
         Button aiSettingsButton = secondaryButton("🤖 ШІ — підключення", this::showAiSettings);
         aiSettingsButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, isCompact ? 10 : 12);
         LinearLayout.LayoutParams aiConnectParams = isWatchDevice
@@ -1578,8 +1587,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
         cancelPendingWatchTtsStart();
         prepareSpeech();
         activeTtsId = "jarvis-system-" + SystemClock.uptimeMillis();
-        int statusCode = tts.speak(text, TextToSpeech.QUEUE_FLUSH, new Bundle(), activeTtsId);
-        if (statusCode != TextToSpeech.SUCCESS) endSpeaking();
+        JarvisDiagnostics.event(JarvisDiagnostics.Event.TTS_START);
+        try {
+            int statusCode = tts.speak(text, TextToSpeech.QUEUE_FLUSH, new Bundle(), activeTtsId);
+            if (statusCode != TextToSpeech.SUCCESS) endSpeaking();
+        } catch (RuntimeException failure) {
+            JarvisDiagnostics.error(JarvisDiagnostics.Event.TTS_ERROR,failure);
+            setStatus("Голос Android недоступний. Відповідь залишилася на екрані.");
+            endSpeaking();
+        }
     }
 
     /** Prefer fully-local two-speaker ONNX, then private TTS server, then Android TTS. */
@@ -1606,6 +1622,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (headsetRoute != null) headsetRoute.end();
             if (listeningAudioFocus != null) listeningAudioFocus.end();
             prepareSpeech();
+        }
+        if (isWatchDevice) {
+            // Local ONNX models retain hundreds of MB and compete with Spotify.
+            // Watch uses Android TTS; phone voice preferences and models are untouched.
+            speakSystemVoice(text);
+            return;
         }
         if (getPreferences(MODE_PRIVATE).getBoolean("jarvisSupertonicSelected", false) &&
             supertonicSpeech != null && supertonicSpeech.isInstalled()) {
@@ -2488,12 +2510,20 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     JarvisSpeechLanguages.PREF,JarvisSpeechLanguages.AUTO)),
             "🖼 Останнє зображення",
             "⏰ Поставити будильник",
-            "🗣 Перевірити голос Watch7"
+            "🗣 Перевірити голос Watch7",
+            "Діагностика"
         };
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("Налаштування Дімона")
             .setItems(actions, (d, which) -> {
                 switch (which) {
+                    case 17:
+                        showDialogWithoutWake(new AlertDialog.Builder(this)
+                            .setTitle("Діагностика")
+                            .setItems(new String[]{"Журнал роботи"},(a,b)->
+                                startActivity(new Intent(this,JarvisDiagnosticsActivity.class)))
+                            .setNegativeButton("Закрити",null).create());
+                        break;
                     case 0: showVoiceSettings(); break;
                     case 1:
                         voiceEnabled = !voiceEnabled;
@@ -3050,7 +3080,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
      */
     private RecognitionListener ownedRecognizerListener(SpeechRecognizer instance) {
         return new RecognitionListener() {
-            private boolean owns() { return recognizer == instance; }
+            private boolean terminal;
+            private boolean owns() {
+                return !terminal && recognizer == instance && foreground && !isDestroyed();
+            }
+            private boolean complete() {
+                if (!owns()) return false;
+                terminal = true;
+                return true;
+            }
             @Override public void onReadyForSpeech(Bundle b) {
                 if (owns()) MainActivity.this.onReadyForSpeech(b);
             }
@@ -3067,10 +3105,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 if (owns()) MainActivity.this.onEndOfSpeech();
             }
             @Override public void onError(int error) {
-                if (owns()) MainActivity.this.onError(error);
+                if (complete()) MainActivity.this.onError(error);
             }
             @Override public void onResults(Bundle b) {
-                if (owns()) MainActivity.this.onResults(b);
+                if (complete()) MainActivity.this.onResults(b);
             }
             @Override public void onPartialResults(Bundle b) {
                 if (owns()) MainActivity.this.onPartialResults(b);
@@ -3458,6 +3496,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void beginListening() {
         if (processing || recognizerSessionActive) return;
+        retireDisconnectedRecognizer();
         selectRecognizerForMode(manualCapture);
         if (recognizer == null) {
             stopPhoneListening();
@@ -3538,6 +3577,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             setStatus("Android не дав призупинити інші звуки. Мікрофон все одно слухає.");
         }
         try {
+            JarvisDiagnostics.event(JarvisDiagnostics.Event.MIC_START);
             recognizer.startListening(intent);
             armWatchMicReadyWatchdog(recognizer);
         } catch (Exception error) {
@@ -3622,6 +3662,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     public void onEndOfSpeech() {
+        JarvisDiagnostics.event(JarvisDiagnostics.Event.MIC_END);
         stopWatchMicIndicator();
         listening = false;
         if (isWatchDevice && face!=null)face.setState("thinking");
@@ -3644,6 +3685,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     public void onError(int error) {
+        JarvisDiagnostics.event(JarvisDiagnostics.Event.MIC_ERROR ,error);
         stopWatchMicIndicator();
         recognizerSessionActive = false;
         listening = false;
@@ -3755,6 +3797,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     public void onResults(Bundle results) {
+        JarvisDiagnostics.event(JarvisDiagnostics.Event.MIC_RESULT);
         stopWatchMicIndicator();
         ArrayList<String> matches = results == null ? null :
             results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
@@ -4225,7 +4268,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (offlineSpeech != null) offlineSpeech.stop();
         if (supertonicSpeech != null) supertonicSpeech.stop();
         if (neuralSpeech != null) neuralSpeech.stop();
-        if (tts != null) tts.stop();
+        if (tts != null) try { tts.stop(); }
+        catch (RuntimeException failure) { JarvisDiagnostics.error(JarvisDiagnostics.Event.TTS_ERROR,failure); }
         speaking = false;
         if (face != null) face.setState(listening ? "listening" : "idle");
     }
@@ -4732,18 +4776,58 @@ public final class MainActivity extends Activity implements RecognitionListener 
         processing=true;
         setStatus(music.opensApp()?"Відкриваю Spotify на Watch7…":
             "Шукаю музику у Spotify на Watch7…");
-        JarvisWatchLocalController.execute(this,music,(ok,detail)->{
-            processing=false;
-            if(isFinishing() || isDestroyed())return;
-            JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-            appendDialogue("Дімон",detail);
-            setStatus(detail);
-            if(!ok && voiceEnabled)speakReply(detail);
-            else if(face!=null)face.setState("idle");
-        });
+        JarvisWatchLocalController.execute(this,music,watchLocalCallback(false));
     }
 
+    private JarvisWatchLocalController.Callback watchLocalCallback(boolean speakSuccess) {
+        java.lang.ref.WeakReference<MainActivity> owner=new java.lang.ref.WeakReference<>(this);
+        return (ok,detail)->{
+            MainActivity a=owner.get();
+            if(a==null || a.isFinishing() || a.isDestroyed())return;
+            a.processing=false;
+            JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
+            a.appendDialogue("Дімон",detail);
+            a.setStatus(detail);
+            if(a.foreground && a.voiceEnabled && (!ok || speakSuccess))a.speakReply(detail);
+            else if(a.face!=null)a.face.setState("idle");
+        };
+    }
+
+    private long diagnosticCommand;
+    private Runnable diagnosticCompletion;
+
     private void processCommand(String raw) {
+        if (raw == null || raw.trim().isEmpty()) return;
+        if (diagnosticCompletion != null) wakeHandler.removeCallbacks(diagnosticCompletion);
+        if (diagnosticCommand != 0)
+            JarvisDiagnostics.event(JarvisDiagnostics.Event.COMMAND_INTERRUPTED,diagnosticCommand);
+        final long id=JarvisDiagnostics.beginCommand();
+        diagnosticCommand=id;
+        try { dispatchCommand(raw); }
+        catch (RuntimeException error) {
+            JarvisDiagnostics.error(JarvisDiagnostics.Event.JAVA_EXCEPTION,error);
+            processing=false;
+            setStatus("Не вдалося виконати команду. Подробиці: Діагностика → Журнал роботи.");
+            if(face!=null)face.setState("idle");
+        }
+        final long deadline=SystemClock.elapsedRealtime()+150000L;
+        diagnosticCompletion=new Runnable() {
+            public void run() {
+                if (diagnosticCommand != id || isDestroyed()) return;
+                boolean busy=processing || aiBusy || speaking ||
+                    (isWatchDevice && JarvisWatchLocalController.busy()) ||
+                    (watchPhoneLink!=null && watchPhoneLink.busy());
+                if(!busy || SystemClock.elapsedRealtime()>=deadline) {
+                    JarvisDiagnostics.event(busy?JarvisDiagnostics.Event.COMMAND_TIMEOUT:
+                        JarvisDiagnostics.Event.COMMAND_END,id);
+                    diagnosticCommand=0; diagnosticCompletion=null;
+                } else wakeHandler.postDelayed(this,250L);
+            }
+        };
+        wakeHandler.postDelayed(diagnosticCompletion,250L);
+    }
+
+    private void dispatchCommand(String raw) {
         if (raw == null || raw.trim().isEmpty()) return;
         if (!isWatchDevice && JarvisMacros.cancelIfRequested(raw, result -> {
             appendDialogue("Дімон", result);
@@ -4835,17 +4919,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 }
                 processing=true;
                 setStatus("Виконую команду на Watch7...");
-                JarvisWatchLocalController.execute(this,local,(ok,message)->{
-                    processing=false;
-                    if(isFinishing() || isDestroyed())return;
-                    appendDialogue("Дімон",message);
-                    setStatus(message);
-                    // A successful music click should not be interrupted by
-                    // Jarvis TTS over the playback. Spotify shows a toast.
-                    if(!local.opensApp() && voiceEnabled &&
-                       (!local.playsSpotify() || !ok))speakReply(message);
-                    else if(face!=null)face.setState("idle");
-                });
+                JarvisWatchLocalController.execute(this,local,watchLocalCallback(!local.playsSpotify()));
                 return;
             }
             // Maps requests spoken into Watch7 (even without "на годиннику")
@@ -4855,15 +4929,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if(mapsOnWatch!=null) {
                 processing=true;
                 setStatus("Відкриваю Google Карти на Watch7…");
-                JarvisWatchLocalController.execute(this,mapsOnWatch,(ok,detail)->{
-                    processing=false;
-                    if(isFinishing() || isDestroyed())return;
-                    JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-                    appendDialogue("Дімон",detail);
-                    setStatus(detail);
-                    if(!ok && voiceEnabled)speakReply(detail);
-                    else if(face!=null)face.setState("idle");
-                });
+                JarvisWatchLocalController.execute(this,mapsOnWatch,watchLocalCallback(false));
                 return;
             }
             // Say is a LOCAL spoken-output command on Watch7. It must never
@@ -5477,6 +5543,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private void endSpeaking() {
         runOnUiThread(() -> {
+            if (isDestroyed()) return;
+            JarvisDiagnostics.event(JarvisDiagnostics.Event.TTS_END);
             activeTtsId = null;
             JarvisSpeechMouth.stopSystemTts();
             speaking = false;
@@ -5507,6 +5575,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     @Override
     protected void onDestroy() {
+        foreground=false;
+        if(diagnosticCommand!=0) JarvisDiagnostics.event(
+            JarvisDiagnostics.Event.COMMAND_INTERRUPTED,diagnosticCommand);
+        diagnosticCommand=0;
+        wakeHandler.removeCallbacksAndMessages(null);
+        retireDisconnectedRecognizer();
         if(isWatchDevice) {
             android.util.Log.i("JARVIS_WATCH_LIFECYCLE",
                 "onDestroy; finishing="+isFinishing()+
@@ -5544,8 +5618,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (offlinePacks != null) offlinePacks.close();
         if (neuralSpeech != null) neuralSpeech.close();
         if (tts != null) {
-            tts.stop();
-            tts.shutdown();
+            try { tts.stop(); tts.shutdown(); }
+            catch(RuntimeException failure) { JarvisDiagnostics.error(JarvisDiagnostics.Event.TTS_ERROR,failure); }
+            tts=null; ttsReady=false;
         }
         super.onDestroy();
     }

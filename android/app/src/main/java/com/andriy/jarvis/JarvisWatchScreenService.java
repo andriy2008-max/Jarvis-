@@ -52,6 +52,13 @@ public final class JarvisWatchScreenService extends AccessibilityService {
     }
 
     private AccessibilityNodeInfo appRoot(String expectedPackage) {
+        try { return appRootUnsafe(expectedPackage); }
+        catch(RuntimeException failure) {
+            JarvisDiagnostics.error(JarvisDiagnostics.Event.ACCESSIBILITY_ERROR,failure);
+            return null;
+        }
+    }
+    private AccessibilityNodeInfo appRootUnsafe(String expectedPackage) {
         if(expectedPackage==null || expectedPackage.isEmpty())return null;
         AccessibilityNodeInfo root=getRootInActiveWindow();
         if(root!=null && root.isVisibleToUser() && root.getPackageName()!=null &&
@@ -84,6 +91,7 @@ public final class JarvisWatchScreenService extends AccessibilityService {
     public static Result perform(String expectedPackage,
                                   ScreenControlCommands.Action action,
                                   Completion cb) {
+        try {
         JarvisWatchScreenService s=connected.get();
         if(s==null || action==null || cb==null)return Result.BLOCKED;
         AccessibilityNodeInfo root=s.appRoot(expectedPackage);
@@ -106,6 +114,11 @@ public final class JarvisWatchScreenService extends AccessibilityService {
                 return s.swipe(expectedPackage,false,false,cb);
             default:return Result.BLOCKED;
         }
+
+        } catch(RuntimeException failure) {
+            JarvisDiagnostics.error(JarvisDiagnostics.Event.ACCESSIBILITY_ERROR,failure);
+            return Result.BLOCKED;
+        }
     }
 
 
@@ -120,6 +133,7 @@ public final class JarvisWatchScreenService extends AccessibilityService {
 
     public static Result mapsStep(MapsStep step,String destination,
                                    Completion completion) {
+        try {
         JarvisWatchScreenService service=connected.get();
         if(service==null || step==null || completion==null)return Result.BLOCKED;
         AccessibilityNodeInfo root=service.appRoot(MAPS_PKG);
@@ -153,6 +167,11 @@ public final class JarvisWatchScreenService extends AccessibilityService {
                     "walking","walk","walking directions",
                     "пішки","пішохідний","пешком","пеший");
             default:return Result.BLOCKED;
+        }
+
+        } catch(RuntimeException failure) {
+            JarvisDiagnostics.error(JarvisDiagnostics.Event.ACCESSIBILITY_ERROR,failure);
+            return Result.BLOCKED;
         }
     }
 
@@ -289,7 +308,13 @@ public final class JarvisWatchScreenService extends AccessibilityService {
 
     public static Result spotifyStep(SpotifyStep step,String title,
                                      boolean playlist,Completion completion) {
+        try {
         return spotifyStep(step,title,playlist,false,completion);
+
+        } catch(RuntimeException failure) {
+            JarvisDiagnostics.error(JarvisDiagnostics.Event.ACCESSIBILITY_ERROR,failure);
+            return Result.BLOCKED;
+        }
     }
 
     /** Genre searches allow a prefix match in results only. Named requests
