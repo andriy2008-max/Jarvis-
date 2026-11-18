@@ -114,6 +114,8 @@ public final class JarvisWatchSpotifyController {
                 case FOCUS_SEARCH:
                     return JarvisWatchScreenService.SpotifyStep.SET_QUERY;
                 case SET_QUERY:
+                    return JarvisWatchScreenService.SpotifyStep.SUBMIT_QUERY;
+                case SUBMIT_QUERY:
                     return JarvisWatchScreenService.SpotifyStep.SELECT_RESULT;
                 case SELECT_RESULT:
                     return kind==SpotifyMusicCommands.Kind.PLAYLIST
@@ -187,7 +189,7 @@ public final class JarvisWatchSpotifyController {
             if(step==JarvisWatchScreenService.SpotifyStep.SELECT_RESULT)
                 status("Плейлист знайдено. Запускаю відтворення…");
             stageStart=SystemClock.elapsedRealtime();
-            long delay=step==JarvisWatchScreenService.SpotifyStep.SET_QUERY?
+            long delay=step==JarvisWatchScreenService.SpotifyStep.SUBMIT_QUERY?
                 1600L:step==JarvisWatchScreenService.SpotifyStep.SELECT_RESULT?
                 1200L:650L;
             MAIN.postDelayed(()->run(next),delay);
