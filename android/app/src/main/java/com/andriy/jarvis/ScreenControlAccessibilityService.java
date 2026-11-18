@@ -127,7 +127,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     public static String startFromBubble() {
         ScreenControlAccessibilityService service = connected.get();
         if (service == null)
-            return "Увімкни Джарвіс — керування екраном у Спеціальних можливостях Android.";
+            return "Увімкни Дімон — керування екраном у Спеціальних можливостях Android.";
         // Remove a stale microphone overlay left by an older invocation.
         if (service.buttonOverlay != null && service.windows != null) {
             try { service.windows.removeView(service.buttonOverlay); }
@@ -136,7 +136,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         }
         service.sessionActive = true;
         JarvisPhoneMode.setActive(true);
-        return "Керування екраном активне в обличчі Джарвіса.";
+        return "Керування екраном активне в обличчі Дімона.";
     }
 
     public static String stop() {
@@ -176,7 +176,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
      * All tap gestures require an exact app package and known screen geometry. */
     public static void macroTap(String packageName, String rawPoint, MacroActionCallback cb) {
         ScreenControlAccessibilityService service = connected.get();
-        if (service == null) { cb.onComplete(false, "Увімкни службу спеціальних можливостей Джарвіса."); return; }
+        if (service == null) { cb.onComplete(false, "Увімкни службу спеціальних можливостей Дімона."); return; }
         service.main.post(() -> service.tapMacroPoint(packageName, rawPoint, cb));
     }
 
@@ -239,7 +239,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         }catch(RuntimeException overlayFailure) {
             android.util.Log.w("JARVIS_MACRO_TAP",
                 "Cannot hide overlay for macro tap",overlayFailure);
-            cb.onComplete(false,"Не вдалося приховати обличчя Джарвіса.");
+            cb.onComplete(false,"Не вдалося приховати обличчя Дімона.");
             return;
         }
         final java.util.concurrent.atomic.AtomicBoolean completed=
@@ -408,7 +408,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
      * touches while the user navigates; accessibility grant is required. */
     public static String startMacroPointPicker(String packageName,JarvisMacroPointPicker.Callback callback) {
         ScreenControlAccessibilityService service=connected.get();
-        if(service==null)return "Увімкни «Джарвіс — керування екраном» у Спеціальних можливостях.";
+        if(service==null)return "Увімкни «Дімон — керування екраном» у Спеціальних можливостях.";
         if(!JarvisForegroundApp.validPackage(packageName))
             return "Спочатку вибери програму для точки.";
         if(service.macroPointPicker!=null)return "Вибір точки вже активний.";
@@ -981,7 +981,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         }catch(RuntimeException overlayFailure) {
             android.util.Log.w("JARVIS_COORDINATES",
                 "Cannot hide overlay for calibrated gesture",overlayFailure);
-            cb.finished(false,"Не вдалося приховати плаваюче обличчя Джарвіса (OVERLAY).");
+            cb.finished(false,"Не вдалося приховати плаваюче обличчя Дімона (OVERLAY).");
             return;
         }
         final java.util.concurrent.atomic.AtomicBoolean once=
@@ -1022,7 +1022,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                         "Calibrated gesture preparation failed",gestureFailure);
                     finishTap.finished(false,
                         "Не вдалося підготувати жест (GESTURE). Перевір "+
-                        "службу керування екраном Джарвіса.");
+                        "службу керування екраном Дімона.");
                 }
             },80L);
         }catch(RuntimeException scheduleFailure){
@@ -2045,9 +2045,9 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         windows = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         Button bubble = new Button(this);
         bubble.setAllCaps(false);
-        bubble.setText("🎙 Джарвіс");
+        bubble.setText("🎙 Дімон");
         bubble.setTextSize(13f);
-        bubble.setContentDescription("Джарвіс — натисни для голосової команди, утримуй для вимкнення");
+        bubble.setContentDescription("Дімон — натисни для голосової команди, утримуй для вимкнення");
         bubble.setOnClickListener(v -> recordOneCommand());
         bubble.setOnLongClickListener(v -> {
             stopSession();
@@ -2088,7 +2088,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             return;
         }
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            toast("Надай Джарвісу доступ до мікрофона в налаштуваннях застосунку.");
+            toast("Надай Дімону доступ до мікрофона в налаштуваннях застосунку.");
             return;
         }
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
@@ -2338,7 +2338,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         }
         AccessibilityNodeInfo root = currentExternalRoot();
         if (root == null)
-            return "Відкрий потрібну програму й подай команду через іконку Джарвіса. Системними дозволами я не керую.";
+            return "Відкрий потрібну програму й подай команду через іконку Дімона. Системними дозволами я не керую.";
 
         if ("com.spotify.music".equals(asString(root.getPackageName())) &&
             SpotifyUiLabels.shuffleRequest(label)) {
@@ -3607,7 +3607,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             return "Текстове поле зараз недоступне.";
         if (focused.isPassword() || isSensitiveInputType(focused.getInputType()) ||
             isSensitiveFieldLabel(focused))
-            return "У паролі, PIN-коди та інші захищені поля Джарвіс текст не вводить.";
+            return "У паролі, PIN-коди та інші захищені поля Дімон текст не вводить.";
 
         String rootPackage = asString(root.getPackageName());
         if (rootPackage.isEmpty() || !rootPackage.equals(asString(focused.getPackageName())))
