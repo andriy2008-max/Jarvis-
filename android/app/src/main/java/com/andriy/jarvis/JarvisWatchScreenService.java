@@ -289,6 +289,19 @@ public final class JarvisWatchScreenService extends AccessibilityService {
 
     public static Result spotifyStep(SpotifyStep step,String title,
                                      boolean playlist,Completion completion) {
+        return spotifyStep(step,title,playlist,false,completion);
+    }
+
+    /** Genre searches allow a prefix match in results only. Named requests
+     * still require exact song/playlist names. */
+    public static Result spotifyStep(SpotifyStep step,String title,boolean playlist,
+                                     boolean genreDiscovery,Completion completion) {
+        // Original 4-argument implementation follows this wrapper.
+        return spotifyStepInternal(step,title,playlist,genreDiscovery,completion);
+    }
+
+    private static Result spotifyStepInternal(SpotifyStep step,String title,
+                                     boolean playlist,boolean genreDiscovery,Completion completion) {
         JarvisWatchScreenService service=connected.get();
         if(service==null || step==null || completion==null)return Result.BLOCKED;
         AccessibilityNodeInfo root=service.appRoot(SPOTIFY_PKG);
@@ -307,7 +320,7 @@ public final class JarvisWatchScreenService extends AccessibilityService {
             case SUBMIT_QUERY:
                 return service.spotifySubmitQuery(root);
             case SELECT_RESULT:
-                return service.spotifySelectResult(root,title,playlist,completion);
+                return service.spotifySelectResult(root,title,playlist,genreDiscovery,completion);
             case PLAY_PLAYLIST:
                 // The mini-player can say Pause for an unrelated song.
                 // Prefer the playlist's actual Play action if it is visible.
@@ -478,7 +491,7 @@ public final class JarvisWatchScreenService extends AccessibilityService {
     }
 
     private Result spotifySelectResult(AccessibilityNodeInfo root,String title,
-                                       boolean playlist,Completion cb) {
+                                        boolean playlist,boolean genreDiscovery,Completion cb) {
         if(title==null || title.trim().isEmpty())return Result.BLOCKED;
         String wanted=AppNameMatcher.normalize(title);
         AccessibilityNodeInfo selected=null;
@@ -486,8 +499,12 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         int bestRank=Integer.MAX_VALUE;
         for(AccessibilityNodeInfo n:spotifyNodes(root)) {
             if(n.isEditable())continue; // Never tap the search input as a result.
-            if(!spotifyTitleMatches(spotifyLabel(n),wanted) &&
-               !spotifyTitleMatches(spotifyDescription(n),wanted))continue;
+            boolean exact=spotifyTitleMatches(spotifyLabel(n),wanted) ||
+                spotifyTitleMatches(spotifyDescription(n),wanted);
+            boolean genre=genreDiscovery &&
+                (spotifyLabel(n).startsWith(wanted+" ") ||
+                 spotifyDescription(n).startsWith(wanted+" "));
+            if(!exact && !genre)continue;
             Rect b=new Rect();n.getBoundsInScreen(b);
             if(b.width()<6 || b.height()<6)continue;
             // Spotify sometimes returns both songs and similarly named
