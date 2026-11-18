@@ -386,7 +386,7 @@ public final class JarvisWearPhoneAssistant {
                 // Preserve the user's original text, including case and
                 // punctuation, rather than storing a normalized command.
                 String content = raw.trim()
-                    .replaceFirst("(?iu)^(?:джарвіс|джарвис|jarvis)[,\\s:—-]*","")
+                    .replaceFirst("(?iu)^(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[,\\s:—-]*","")
                     .replaceFirst("(?iu)^(?:запиши|занотуй|нотатка)\\s+","")
                     .trim();
                 if (content.isEmpty()) return "Назви, що записати.";
