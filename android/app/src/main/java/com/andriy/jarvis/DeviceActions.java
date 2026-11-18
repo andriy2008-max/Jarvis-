@@ -145,7 +145,7 @@ public final class DeviceActions {
         }
         if (activity.checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             if (!(activity instanceof Activity))
-                return "Відкрий Джарвіс на телефоні та дозволь камеру для ліхтарика.";
+                return "Відкрий Дімон на телефоні та дозволь камеру для ліхтарика.";
             pendingTorchOn = enabled;
             cameraPermissionPending = true;
             ((Activity) activity).requestPermissions(new String[]{Manifest.permission.CAMERA}, REQUEST_CAMERA_FOR_TORCH);
