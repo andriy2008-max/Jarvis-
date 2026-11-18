@@ -314,7 +314,7 @@ public final class FloatingJarvisService extends Service {
         android.util.Log.i("JARVIS_FLOATING_QA", "service_onstart=true");
         if (!Settings.canDrawOverlays(this) ||
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(this, "Надай дозволи плаваючого вікна та мікрофона Джарвісу.",
+            Toast.makeText(this, "Надай дозволи плаваючого вікна та мікрофона Дімону.",
                 Toast.LENGTH_LONG).show();
             stopSelf();
             return START_NOT_STICKY;
@@ -325,14 +325,14 @@ public final class FloatingJarvisService extends Service {
                 (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (manager != null && Build.VERSION.SDK_INT >= 26)
                 manager.createNotificationChannel(new NotificationChannel(
-                    CHANNEL, "Плаваючий Джарвіс", NotificationManager.IMPORTANCE_LOW));
+                    CHANNEL, "Плаваючий Дімон", NotificationManager.IMPORTANCE_LOW));
             Intent close = new Intent(this, FloatingJarvisService.class);
             close.setAction(ACTION_CLOSE);
             PendingIntent closeAction = PendingIntent.getService(this, 8160, close,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
             Notification notification = new Notification.Builder(this, CHANNEL)
                 .setSmallIcon(R.drawable.ic_launcher)
-                .setContentTitle("Плаваючий Джарвіс")
+                .setContentTitle("Плаваючий Дімон")
                 .setContentText("Натисни обличчя для команди. Утримуй його, щоб закрити.")
                 .setOngoing(true)
                 .addAction(new Notification.Action.Builder(null, "Закрити", closeAction).build())
@@ -356,7 +356,7 @@ public final class FloatingJarvisService extends Service {
             }
         } catch (Exception error) {
             android.util.Log.e("JARVIS_FLOATING_QA", "orb_start_failed", error);
-            Toast.makeText(this, "Не вдалося відкрити плаваючий Джарвіс. Перевір дозволи Android.",
+            Toast.makeText(this, "Не вдалося відкрити плаваючий Дімон. Перевір дозволи Android.",
                 Toast.LENGTH_LONG).show();
             stopSelf();
             started = false;
@@ -386,7 +386,7 @@ public final class FloatingJarvisService extends Service {
                 abortPhoneSpeech();
                 message(JarvisPhoneModeManager.exit());
             } else {
-                Toast.makeText(this, "Плаваючий Джарвіс закрито.", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Плаваючий Дімон закрито.", Toast.LENGTH_SHORT).show();
                 stopSelf();
             }
             return true;
@@ -570,7 +570,7 @@ public final class FloatingJarvisService extends Service {
         if (windows == null || closing || face == null) return;
         face.setContentDescription(JarvisPhoneMode.isActive()
             ? "8-бітний телефон: натисни, щоб слухати; утримуй для виходу."
-            : "8-бітне обличчя Джарвіса: натисни, щоб говорити.");
+            : "8-бітне обличчя Дімона: натисни, щоб говорити.");
         face.invalidate();
     }
 
@@ -875,7 +875,7 @@ public final class FloatingJarvisService extends Service {
             return;
         }
         if (aiBusy) {
-            message("Джарвіс ще опрацьовує попередню команду.");
+            message("Дімон ще опрацьовує попередню команду.");
             return;
         }
         if (pendingSend != null) {
@@ -921,7 +921,7 @@ public final class FloatingJarvisService extends Service {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED) {
             phoneListening = false;
-            message("Дозволь Джарвісу користуватися мікрофоном.");
+            message("Дозволь Дімону користуватися мікрофоном.");
             return;
         }
         if (headsetRoute != null && !headsetRoute.begin()) {
@@ -1248,7 +1248,7 @@ public final class FloatingJarvisService extends Service {
             JarvisPhoneMode.isActive()) {
             JarvisPhoneModeManager.exit();
             screenModeStartedHere = false;
-            message("Звичайний режим Джарвіса увімкнено.");
+            message("Звичайний режим Дімона увімкнено.");
             return;
         }
         if (spotifyPlayback != null && spotifyPlayback.isRunning()) {
@@ -1334,9 +1334,9 @@ public final class FloatingJarvisService extends Service {
                 show.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                 show.putExtra(MainActivity.EXTRA_AI_IMAGE_PROMPT, prompt);
                 startActivity(show);
-                message("Відкриваю створення зображення у головному Джарвісі.");
+                message("Відкриваю створення зображення у головному Дімоні.");
             } catch (Exception error) {
-                reply("Для генерації зображень відкрий основний Джарвіс.");
+                reply("Для генерації зображень відкрий основний Дімон.");
             }
             return;
         }
@@ -1352,7 +1352,7 @@ public final class FloatingJarvisService extends Service {
         ScreenControlCommands.Action action = ScreenControlCommands.parse(raw);
         if (action != null) {
             if (!getResources().getBoolean(R.bool.screen_control_available)) {
-                reply("У Джарвіс Lite керування чужими екранами вимкнено.");
+                reply("У Дімон Lite керування чужими екранами вимкнено.");
                 return;
             }
             switch (action.kind) {
@@ -1366,7 +1366,7 @@ public final class FloatingJarvisService extends Service {
                     reply("Керування екраном вимкнено.");
                     return;
                 case SETTINGS:
-                    reply("Дозвіл керування екраном вмикається вручну в основному Джарвісі.");
+                    reply("Дозвіл керування екраном вмикається вручну в основному Дімоні.");
                     return;
                 case STATUS:
                     reply(ScreenControlAccessibilityService.isSessionActive()
@@ -1404,7 +1404,7 @@ public final class FloatingJarvisService extends Service {
             if (timer <= 0) reply("Назви тривалість таймера до 24 годин.");
             else reply(TimerScheduler.start(this, timer)
                 ? "Таймер встановлено на " + timer + " секунд."
-                : "Дозволь точні будильники Джарвісу в налаштуваннях Android.");
+                : "Дозволь точні будильники Дімону в налаштуваннях Android.");
             return;
         }
         if (normalized.contains("котра година") || normalized.contains("яка година")) {
@@ -1434,7 +1434,7 @@ public final class FloatingJarvisService extends Service {
             Intent i = new Intent(AlarmClock.ACTION_SET_ALARM);
             i.putExtra(AlarmClock.EXTRA_HOUR, alarm.hour);
             i.putExtra(AlarmClock.EXTRA_MINUTES, alarm.minute);
-            i.putExtra(AlarmClock.EXTRA_MESSAGE, "Будильник Джарвіса");
+            i.putExtra(AlarmClock.EXTRA_MESSAGE, "Будильник Дімона");
             i.putExtra(AlarmClock.EXTRA_SKIP_UI, true);
             reply(openRequestedActivity(i,
                 "Передав системному Годиннику запит встановити будильник на "+
@@ -1472,13 +1472,13 @@ public final class FloatingJarvisService extends Service {
         } else {
             reply("Цю команду я поки не виконую в плаваючому вікні. " +
                 "Можеш ставити таймер, керувати музикою, говорити «Скажи», " +
-                "або підключити ШІ у налаштуваннях основного Джарвіса.");
+                "або підключити ШІ у налаштуваннях основного Дімона.");
         }
     }
 
     private void speakWithAi(String query, String mode) {
         if (ai == null || !ai.isConfigured()) {
-            reply("Налаштуй ШІ-сервер у головному Джарвісі.");
+            reply("Налаштуй ШІ-сервер у головному Дімоні.");
             return;
         }
         if (aiBusy) {
@@ -1668,7 +1668,7 @@ public final class FloatingJarvisService extends Service {
                     AudioManager.FLAG_SHOW_UI);
                 return "Медіазвук увімкнено.";
             default:
-                return "Для цієї команди відкрий основний Джарвіс.";
+                return "Для цієї команди відкрий основний Дімон.";
         }
         try {
             audio.dispatchMediaKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, key));
@@ -1682,7 +1682,7 @@ public final class FloatingJarvisService extends Service {
     private String switchFlash(boolean enabled) {
         if (checkSelfPermission(Manifest.permission.CAMERA) !=
             PackageManager.PERMISSION_GRANTED)
-            return "Для ліхтарика спочатку дозволь камеру в основному Джарвісі.";
+            return "Для ліхтарика спочатку дозволь камеру в основному Дімоні.";
         try {
             CameraManager camera = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
             if (camera == null) return "На телефоні немає ліхтарика.";
