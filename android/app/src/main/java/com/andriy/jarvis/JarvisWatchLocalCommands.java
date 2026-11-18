@@ -30,7 +30,7 @@ public final class JarvisWatchLocalCommands {
     }
 
     private static final Pattern WAKE=Pattern.compile(
-        "(?iu)^(?:джарвіс|джарвис|jarvis)[\\s,:—-]+");
+        "(?iu)^(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[\\s,:—-]+");
     private static final Pattern WATCH_SUFFIX=Pattern.compile(
         "(?iu)\\s+(?:на|у|в)\\s+(?:(?:моєму|своєму)\\s+)?"+
         "(?:годиннику|watch7|watch)\\s*[.!?]*$");
