@@ -46,7 +46,7 @@ public final class FinanceInsightsController {
             case BUDGET_REMAINING:
                 String budget=budget(context,null);
                 return budget==null
-                    ? "На цей місяць бюджет Джарвіса ще не встановлено. " +
+                    ? "На цей місяць бюджет Дімона ще не встановлено. " +
                       "Скажи: «Встанови бюджет 15000 гривень на місяць»."
                     : "Бюджет на " + monthLabel() + ": "+money(budget)+" гривень. "+
                       "Точний залишок поки недоступний: історія витрат "+
@@ -70,7 +70,7 @@ public final class FinanceInsightsController {
 
     private static String missingHistory(String period) {
         return "Суму витрат "+period+" поки не можу підтвердити. "+
-            "Джарвіс ще не має доступу до повної історії «Менеджера фінансів». "+
+            "Дімон ще не має доступу до повної історії «Менеджера фінансів». "+
             "Не називатиму неперевірені цифри.";
     }
 
