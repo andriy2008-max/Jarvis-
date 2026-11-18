@@ -5,8 +5,8 @@ import java.util.regex.Pattern;
 
 /**
  * Two-stage voice gate: motion opens a short wake-only window;
- * after hearing "Джарвіс", local commands are allowed, but AI demands a
- * second explicit "Джарвіс" (in the request or as a standalone utterance).
+ * after hearing "Дімон", local commands are allowed, but AI demands a
+ * second explicit "Дімон" (in the request or as a standalone utterance).
  */
 public final class JarvisShakeGate {
     private static final Pattern WAKE_WORD = Pattern.compile(
