@@ -25,11 +25,25 @@ public final class JarvisWatchSpotifyTrace {
                 .getSharedPreferences(PREFS,Context.MODE_PRIVATE);
             // Commit, not apply, so a sudden process exit does not lose
             // the last stage reached immediately before it.
-            p.edit().putString("stage",stage)
-                .putLong("at",System.currentTimeMillis()).commit();
+            SharedPreferences.Editor edit=p.edit().putString("stage",stage)
+                .putLong("at",System.currentTimeMillis());
+            if("PLAY_ENTERED".equals(stage))edit.putString("result","RUNNING");
+            edit.commit();
             Log.i(TAG,"stage="+stage);
         } catch(RuntimeException e) {
             Log.w(TAG,"Unable to save diagnostic stage",e);
+        }
+    }
+
+    public static void finish(Context context,boolean ok) {
+        if(context==null)return;
+        try {
+            context.getApplicationContext()
+                .getSharedPreferences(PREFS,Context.MODE_PRIVATE)
+                .edit().putString("result",ok?"SUCCESS":"FAILED").commit();
+            Log.i(TAG,ok?"result=SUCCESS":"result=FAILED");
+        } catch(RuntimeException e) {
+            Log.w(TAG,"Unable to save result",e);
         }
     }
 
@@ -39,12 +53,14 @@ public final class JarvisWatchSpotifyTrace {
             SharedPreferences p=context.getApplicationContext()
                 .getSharedPreferences(PREFS,Context.MODE_PRIVATE);
             String stage=p.getString("stage","");
+            String outcome=p.getString("result","");
             if(stage==null || stage.isEmpty())
                 return "Spotify ще не запускався з Дімона після встановлення цієї версії.";
             long at=p.getLong("at",0L);
             long seconds=at>0?Math.max(0L,
                 (System.currentTimeMillis()-at)/1000L):-1L;
             return "Останній етап Spotify: "+stage+
+                (outcome==null || outcome.isEmpty()?"":", результат "+outcome)+
                 (seconds>=0?", "+seconds+" с тому.":".");
         } catch(RuntimeException e) {
             return "Не вдалося прочитати діагностику Spotify.";
