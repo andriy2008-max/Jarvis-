@@ -129,7 +129,8 @@ public final class JarvisWatchSpotifyController {
         private void perform(JarvisWatchScreenService.SpotifyStep step,
                              JarvisWatchScreenService.SpotifyStep next) {
             JarvisWatchScreenService.Result result=
-                JarvisWatchScreenService.spotifyStep(step,title,(ok,detail)->{
+                JarvisWatchScreenService.spotifyStep(step,title,
+                    kind==SpotifyMusicCommands.Kind.PLAYLIST,(ok,detail)->{
                     if(finished)return;
                     if(!ok) {
                         done(false,"Wear OS скасувала натискання у Spotify.");
