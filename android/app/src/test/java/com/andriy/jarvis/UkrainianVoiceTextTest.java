@@ -6,6 +6,7 @@ public final class UkrainianVoiceTextTest {
     }
 
     public static void main(String[] args) {
+        eq(UkrainianVoiceText.normalize("Привіт, Дімон!"), "прив+іт, дім+он!");
         eq(UkrainianVoiceText.normalize("Привіт, Джарвіс!"), "прив+іт, дж+арвіс!");
         eq(UkrainianVoiceText.normalize("Ча\u0301с"), "ч+ас");
         eq(UkrainianVoiceText.normalize("Ча+с"), "ч+ас");
