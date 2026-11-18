@@ -2,7 +2,7 @@ name: Android APK (Dimon 0.1.37 one-time release)
 
 # Manual only. Building or publishing must be explicitly requested.
 on:
-  # One-time push trigger on the dedicated build branch; main stays manual only.
+  # One-time retry after fixing manifest lint; main stays manual only.
   push:
     branches:
       - build/dimon-0.1.37
