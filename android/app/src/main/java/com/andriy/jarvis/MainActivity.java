@@ -263,7 +263,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private ScrollView watchReadingScroll;
     private TextView watchReadingText;
     private JarvisWearPhoneLink.Document watchReadingPage;
-    private String watchReadingTitle = "Відповідь Джарвіса";
+    private String watchReadingTitle = "Відповідь Дімона";
     /** Some Wear recognition services emit onEndOfSpeech but never deliver
      * onResults/onError. Recover the partial transcript and restart rather
      * than remain forever in manualCapture with no live microphone. */
@@ -390,12 +390,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (face != null) {
             face.setContentDescription(JarvisPhoneMode.isActive()
                 ? "8-бітний телефон. Натисни, щоб слухати. Утримуй для виходу."
-                : "8-бітне обличчя Джарвіса");
+                : "8-бітне обличчя Дімона");
             face.invalidate();
         }
         setStatus(JarvisPhoneMode.isActive()
             ? "Режим «Телефон»: Натисни, Зажми, Свайпни…"
-            : "Звичайний режим Джарвіса");
+            : "Звичайний режим Дімона");
     });
     private boolean telegramDictationAfterReply;
     private boolean voiceEnabled = true;
@@ -448,7 +448,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (result == TextToSpeech.SUCCESS && tts != null) {
                 int supported = tts.setLanguage(Locale.forLanguageTag("uk-UA"));
                 if (supported == TextToSpeech.LANG_MISSING_DATA || supported == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    appendDialogue("Джарвіс", "Для озвучення встанови український голос TTS у налаштуваннях Android.");
+                    appendDialogue("Дімон", "Для озвучення встанови український голос TTS у налаштуваннях Android.");
                 }
                 ttsReady = true;
                 applyPreferredVoice();
@@ -587,10 +587,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     Intent bubble = new Intent(this,FloatingJarvisService.class);
                     bubble.setAction(FloatingJarvisService.ACTION_LISTEN);
                     startService(bubble);
-                    setStatus("Плаваючий Джарвіс слухає команду...");
+                    setStatus("Плаваючий Дімон слухає команду...");
                     return;
                 } catch (RuntimeException ignored) {
-                    setStatus("Не вдалося запустити мікрофон плаваючого Джарвіса.");
+                    setStatus("Не вдалося запустити мікрофон плаваючого Дімона.");
                     return;
                 }
             }
@@ -668,7 +668,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         scheduleAutoWake(650L);
         registerShakeSensor();
         if (TimerScheduler.consumeCompletion(this)) {
-            appendDialogue("Джарвіс", "Час вийшов! Фоновий таймер завершився.");
+            appendDialogue("Дімон", "Час вийшов! Фоновий таймер завершився.");
             setStatus("Час вийшов! Таймер завершено.");
         }
         resumePendingTimerIfAllowed();
@@ -737,7 +737,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         manualHypothesis = "";
         wakeHypothesis = "";
         if (microphone != null)
-            microphone.setText(isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Джарвісом");
+            microphone.setText(isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Дімоном");
         super.onPause();
     }
 
@@ -887,7 +887,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         LinearLayout.LayoutParams tabParams = new LinearLayout.LayoutParams(-1, -2);
         tabParams.topMargin = dp(12);
         content.addView(macroTabs, tabParams);
-        TextView assistantTab = makeText("● Джарвіс", 15, CYAN, Gravity.CENTER, true);
+        TextView assistantTab = makeText("● Дімон", 15, CYAN, Gravity.CENTER, true);
         macroTabs.addView(assistantTab, new LinearLayout.LayoutParams(0, dp(48), 1f));
         Button macroTab = secondaryButton("⚙ Макроси",
             () -> startActivity(new Intent(this, JarvisMacroActivity.class)));
@@ -936,8 +936,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
         LinearLayout.LayoutParams faceParams = new LinearLayout.LayoutParams(faceSize, faceSize);
         hero.addView(face, faceParams);
 
-        TextView hello = makeText("Вітаю, я Джарвіс", isWatchDevice ? 19 : isCompact ? 28 : 32, WHITE, Gravity.CENTER, true);
-        SpannableString greeting = new SpannableString("Вітаю, я Джарвіс");
+        TextView hello = makeText("Вітаю, я Дімон", isWatchDevice ? 19 : isCompact ? 28 : 32, WHITE, Gravity.CENTER, true);
+        SpannableString greeting = new SpannableString("Вітаю, я Дімон");
         greeting.setSpan(new ForegroundColorSpan(CYAN), 7, greeting.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         hello.setText(greeting);
         LinearLayout.LayoutParams helloParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -970,7 +970,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         st.leftMargin = dp(8);
         statusWrap.addView(status, st);
 
-        microphone = primaryButton("🎙️ Говорити з Джарвісом", this::toggleListening);
+        microphone = primaryButton("🎙️ Говорити з Дімоном", this::toggleListening);
         LinearLayout.LayoutParams micParams = new LinearLayout.LayoutParams(Math.min(dp(260), LinearLayout.LayoutParams.MATCH_PARENT), dp(54));
         micParams.topMargin = dp(18);
         micParams.width = LinearLayout.LayoutParams.MATCH_PARENT;
@@ -978,7 +978,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
         if (!isWatchDevice) {
             CheckBox launchMicToggle = new CheckBox(this);
-            launchMicToggle.setText("🎙 Автоматично слухати при відкритті Джарвіса (подвійний дотик Pixel)");
+            launchMicToggle.setText("🎙 Автоматично слухати при відкритті Дімона (подвійний дотик Pixel)");
             launchMicToggle.setTextColor(MUTED);
             launchMicToggle.setTextSize(TypedValue.COMPLEX_UNIT_SP, isCompact ? 11 : 12);
             launchMicToggle.setButtonTintList(ColorStateList.valueOf(CYAN));
@@ -992,7 +992,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             hero.addView(launchMicToggle,micOptionParams);
 
             CheckBox backgroundToggle = new CheckBox(this);
-            backgroundToggle.setText("📱 Джарвіс завжди активний для команд із годинника (у фоні)");
+            backgroundToggle.setText("📱 Дімон завжди активний для команд із годинника (у фоні)");
             backgroundToggle.setTextColor(MUTED);
             backgroundToggle.setTextSize(TypedValue.COMPLEX_UNIT_SP,isCompact ? 11 : 12);
             backgroundToggle.setButtonTintList(ColorStateList.valueOf(CYAN));
@@ -1000,7 +1000,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             backgroundToggle.setOnCheckedChangeListener((control,enabled) -> {
                 boolean accepted = JarvisCompanionService.setEnabled(this,enabled);
                 setStatus(enabled
-                    ? accepted ? "Фоновий Джарвіс увімкнено. Залишається після закриття екрана."
+                    ? accepted ? "Фоновий Дімон увімкнено. Залишається після закриття екрана."
                         : "Android не дозволив запустити фон. Перевір обмеження батареї."
                     : "Фонову службу вимкнено. Запити Wear OS ще може приймати системний слухач.");
             });
@@ -1019,7 +1019,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                             Uri.parse("package:" + getPackageName())));
                     } catch (RuntimeException error) {
-                        setStatus("Відкрий Android → Програми → Джарвіс → Батарея.");
+                        setStatus("Відкрий Android → Програми → Дімон → Батарея.");
                     }
                 });
             LinearLayout.LayoutParams batteryParams =
@@ -1040,12 +1040,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 }
                 AlertDialog confirm = new AlertDialog.Builder(this)
                     .setTitle("Root-розблокування з годинника")
-                    .setMessage("Вимагає root-дозвіл для Джарвіса на Pixel, " +
+                    .setMessage("Вимагає root-дозвіл для Дімона на Pixel, " +
                         "захищений PIN годинника й числовий PIN телефона. " +
                         "PIN передається тільки на Pixel через Wear OS, " +
                         "не зберігається. Це експериментальний режим: Android " +
                         "може заборонити автоматичне розблокування. " +
-                        "Переконайся, що Джарвіс має root-дозвіл до блокування.")
+                        "Переконайся, що Дімон має root-дозвіл до блокування.")
                     .setPositiveButton("Увімкнути",(d,w) -> {
                         JarvisRemoteUnlock.setEnabled(this,true);
                         setStatus("Root-розблокування увімкнено. Перевір спершу з тестовою командою.");
@@ -1070,7 +1070,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
         TextView hint = makeText(isWatchDevice
             ? "Бокова кнопка: натисни, щоб почати запис, ще раз — щоб надіслати."
-            : "Скажи: «Джарвіс, котра година?» або «Джарвіс, запиши купити хліб».",
+            : "Скажи: «Дімон, котра година?» або «Дімон, запиши купити хліб».",
             isCompact ? 11 : 12, MUTED, Gravity.CENTER, false);
         hint.setLineSpacing(0f, 1.22f);
         LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -1105,7 +1105,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             }
         });
         chatHeader.addView(voiceToggle);
-        Button voiceSettings = secondaryButton("🔊 Вибрати голос Джарвіса", this::showVoiceSettings);
+        Button voiceSettings = secondaryButton("🔊 Вибрати голос Дімона", this::showVoiceSettings);
         LinearLayout.LayoutParams voiceSettingsParams = new LinearLayout.LayoutParams(-1, LinearLayout.LayoutParams.WRAP_CONTENT);
         voiceSettingsParams.topMargin = dp(7);
         chatPanel.addView(voiceSettings, voiceSettingsParams);
@@ -1172,7 +1172,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         commandParams.topMargin = dp(14);
         chatPanel.addView(commandRow, commandParams);
         input = new EditText(this);
-        input.setHint("Напиши команду Джарвісу...");
+        input.setHint("Напиши команду Дімону...");
         input.setSingleLine(true);
         input.setTextColor(WHITE);
         input.setHintTextColor(MUTED);
@@ -1250,14 +1250,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
         // and the microphone starts only after tapping it.
         if (!isWatchDevice) {
             Button quickTileButton = secondaryButton(
-                "◉ Додати Джарвіса в швидкі налаштування",
+                "◉ Додати Дімона в швидкі налаштування",
                 this::requestJarvisQuickTile);
             LinearLayout.LayoutParams tileParams = new LinearLayout.LayoutParams(-1, -2);
             tileParams.topMargin = dp(8);
             chatPanel.addView(quickTileButton, tileParams);
 
             Button assistantButton = secondaryButton(
-                "🗣 Зробити Джарвіса цифровим помічником",
+                "🗣 Зробити Дімона цифровим помічником",
                 this::requestAssistantRole);
             LinearLayout.LayoutParams assistantParams =
                 new LinearLayout.LayoutParams(-1,-2);
@@ -1315,8 +1315,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "Відкрий Телеграм", "Покажи будильники",
             "Увімкни ліхтарик", "Постав музику на паузу",
             "Постав гучність на 50%", "Відкрий налаштування екрана",
-            "Привіт, Джарвіс", "Поясни простими словами, як працює штучний інтелект",
-            "Скажи Привіт, як справи?", "Джарвіс, скажи Дякую",
+            "Привіт, Дімон", "Поясни простими словами, як працює штучний інтелект",
+            "Скажи Привіт, як справи?", "Дімон, скажи Дякую",
             "Увімкни керування екраном", "Зупини керування екраном",
             "Відкрий пошук", "Знайди чати", "Напиши Привіт, як справи?"
         };
@@ -1358,7 +1358,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         noteHintParams.topMargin = dp(12);
         notesPanel.addView(noteHint, noteHintParams);
 
-        TextView footer = makeText("JARVIS 0.1.11 • Вільна розмова із ШІ після підключення сервера. Активація «Джарвіс» доступна лише у відкритій програмі за підтримки локального розпізнавання Android.",
+        TextView footer = makeText("ДІМОН 0.1.11 • Вільна розмова із ШІ після підключення сервера. Активація «Дімон» доступна лише у відкритій програмі за підтримки локального розпізнавання Android.",
             isCompact ? 11 : 12, Color.rgb(127, 154, 184), Gravity.CENTER, false);
         footer.setLineSpacing(0f, 1.25f);
         LinearLayout.LayoutParams footerParams = new LinearLayout.LayoutParams(-1, -2);
@@ -1367,7 +1367,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
         setContentView(scroll);
         renderNotes();
-        appendDialogue("Джарвіс", "Система запущена. Я готовий до перших команд. Спробуй запитати, що я вмію.");
+        appendDialogue("Дімон", "Система запущена. Я готовий до перших команд. Спробуй запитати, що я вмію.");
     }
 
     /**
@@ -1392,7 +1392,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         attachFaceSwipe();
         face.setBackgroundColor(BG);
         face.setContentDescription(
-            "Джарвіс. Натисни обличчя для голосової команди; свайп вліво скасовує слово.");
+            "Дімон. Натисни обличчя для голосової команди; свайп вліво скасовує слово.");
         FrameLayout watchScreen = new FrameLayout(this);
         watchScreen.setBackgroundColor(BG);
         watchScreen.addView(face, new FrameLayout.LayoutParams(
@@ -1402,7 +1402,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         // Keep the face as the main control. The overflow button is a separate
         // 44dp accessible touch target, inset so it stays inside a round watch.
         TextView settingsMenu = makeText("⋮", 27, WHITE, Gravity.CENTER, true);
-        settingsMenu.setContentDescription("Відкрити налаштування Джарвіса");
+        settingsMenu.setContentDescription("Відкрити налаштування Дімона");
         settingsMenu.setBackground(roundedFill(Color.rgb(16, 37, 63), CYAN, 99));
         settingsMenu.setClickable(true);
         settingsMenu.setFocusable(true);
@@ -1423,7 +1423,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         feedMessages.setOrientation(LinearLayout.VERTICAL);
         feedScroll = new ScrollView(this);
         feedScroll.addView(feedMessages);
-        appendDialogue("Джарвіс",
+        appendDialogue("Дімон",
             "Натисни обличчя або бокову кнопку. Після кожного слова таймер тиші оновиться.");
     }
 
@@ -1653,7 +1653,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             setStatus("Спочатку ввімкни голосові відповіді.");
             return;
         }
-        speakReply("Привіт! Я Джарвіс. Відкриваю Spotify, YouTube та Telegram.");
+        speakReply("Привіт! Я Дімон. Відкриваю Spotify, YouTube та Telegram.");
     }
 
     private void openSystemVoiceSettings() {
@@ -1721,7 +1721,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             .setMessage("Авто пробує розпізнавати змішані фрази, наприклад " +
                 "«Увімкни пісню Shape of You» або «Увімкни пісню Метель». " +
                 "Якщо служба Android не підтримує перемикання мов, обери одну мову. " +
-                "Це налаштування не змінює голос Джарвіса.")
+                "Це налаштування не змінює голос Дімона.")
             .setSingleChoiceItems(labels,selected,(d,which)->{
                 String chosen=codes[which];
                 getPreferences(MODE_PRIVATE).edit()
@@ -1803,7 +1803,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 autoWakePausedForErrors=false;
                 autoWakeErrors=0;
                 setStatus("Мікрофон: "+JarvisMicrophoneChoice.label(chosen)+
-                    ". Налаштування діє для головного та плаваючого Джарвіса.");
+                    ". Налаштування діє для головного та плаваючого Дімона.");
                 d.dismiss();
             })
             .setNegativeButton("Скасувати",null).create();
@@ -1855,7 +1855,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             ? ("F1".equals(getPreferences(MODE_PRIVATE).getString("jarvisSupertonicVoice", "M1")) ? 3 : 2)
             : (VoiceRanking.LADA.equals(selectedVoiceProfile()) ? 1 : 0);
         AlertDialog dialog = new AlertDialog.Builder(this)
-            .setTitle("Українські голоси Джарвіса")
+            .setTitle("Українські голоси Дімона")
             .setSingleChoiceItems(labels, checked, (d, which) -> {
                 if (which <= 1) {
                     selectVoiceProfile(which == 1 ? VoiceRanking.LADA : VoiceRanking.DMYTRO);
@@ -1889,7 +1889,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             ? "ONNX-пакет збережено. Офлайн-синтез увімкнеться під час наступної відповіді; потрібна перевірка реального звучання на пристрої."
             : "Пакет ще не встановлено. Потрібен конвертований ONNX ZIP, не оригінальний model.pth.";
         TextView description = makeText(
-            state + "\nНатисни «Завантажити». Джарвіс сам перевірить офіційний пакет та SHA-256. " +
+            state + "\nНатисни «Завантажити». Дімон сам перевірить офіційний пакет та SHA-256. " +
             "Поля нижче потрібні лише для ручного встановлення експериментального пакета.",
             13, MUTED, Gravity.START, false);
         form.addView(description, new LinearLayout.LayoutParams(-1, -2));
@@ -1930,7 +1930,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     return;
                 }
                 install.setEnabled(false);
-                progress.setText("Перевіряю офіційний випуск. Не закривай Джарвіса до завершення.");
+                progress.setText("Перевіряю офіційний випуск. Не закривай Дімона до завершення.");
                 OfflineVoicePackManager.Callback callback = new OfflineVoicePackManager.Callback() {
                     @Override public void onProgress(int percentage) {
                         if (!isFinishing() && !isDestroyed())
@@ -2060,7 +2060,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private void showScreenControlConsent() {
         if (!getResources().getBoolean(R.bool.screen_control_available)) {
             AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle("Джарвіс Lite — без доступу до екрана")
+                .setTitle("Дімон Lite — без доступу до екрана")
                 .setMessage("Цей тестовий APK не містить служби спеціальних можливостей. " +
                     "Голосові команди, таймер та офлайн-голоси залишаються доступними. " +
                     "Натискання кнопок в інших застосунках не підтримується. " +
@@ -2071,17 +2071,17 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
         boolean connected = ScreenControlAccessibilityService.isConnected();
         String disclosure =
-            "Джарвіс зможе читати назви видимих кнопок і виконувати окремі " +
+            "Дімон зможе читати назви видимих кнопок і виконувати окремі " +
             "команди натискання, прокручування та повернення назад.\n\n" +
             "Служба спеціальних можливостей має широкий доступ до вмісту " +
-            "екрана, тому вмикай її лише якщо довіряєш Джарвісу. " +
+            "екрана, тому вмикай її лише якщо довіряєш Дімону. " +
             "Ми не надсилаємо вміст екрана на сервер ШІ та не зберігаємо його.\n\n" +
             "Дії виконуються лише після твоєї команди. Платежі, видалення, " +
             "надсилання та підтвердження заблоковані в цій версії. " +
             "Для зупинки скажи «Зупини керування екраном» або " +
-            "утримуй плаваючу кнопку Джарвіса.\n\n" +
+            "утримуй плаваючу кнопку Дімона.\n\n" +
             (connected ? "Дозвіл Android уже ввімкнений. Запустити режим?"
-                       : "Наступний крок: вручну ввімкнути службу Джарвіса " +
+                       : "Наступний крок: вручну ввімкнути службу Дімона " +
                          "в розділі «Спеціальні можливості» Android.");
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("Керування екраном — доступ і приватність")
@@ -2091,7 +2091,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 (d, which) -> {
                     if (connected) {
                         String result = ScreenControlAccessibilityService.start();
-                        appendDialogue("Джарвіс", result);
+                        appendDialogue("Дімон", result);
                         setStatus(result);
                     } else {
                         try {
@@ -2114,7 +2114,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "Колір — фіолетовий"
         };
         AlertDialog dialog = new AlertDialog.Builder(this)
-            .setTitle("Налаштування плаваючого Джарвіса")
+            .setTitle("Налаштування плаваючого Дімона")
             .setMessage("Перетягуй обличчя пальцем на будь-яке місце екрана. " +
                 "Коротке натискання — слухати, довге — закрити. " +
                 "Під час розпізнавання на обличчі показуватимуться почуті слова.")
@@ -2136,7 +2136,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         // Preference is saved and used the next time the orb opens.
                     }
                 }
-                setStatus("Зовнішній вигляд плаваючого Джарвіса оновлено.");
+                setStatus("Зовнішній вигляд плаваючого Дімона оновлено.");
             })
             .setNegativeButton("Скасувати", null)
             .create();
@@ -2152,7 +2152,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (roles != null &&
                 roles.isRoleAvailable(android.app.role.RoleManager.ROLE_ASSISTANT)) {
                 if (roles.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT)) {
-                    setStatus("Джарвіс уже вибраний цифровим помічником Android.");
+                    setStatus("Дімон уже вибраний цифровим помічником Android.");
                     return;
                 }
                 try {
@@ -2165,7 +2165,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
         try {
             startActivity(new Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS));
-            setStatus("У системних налаштуваннях вибери «Цифровий помічник» → «Джарвіс».");
+            setStatus("У системних налаштуваннях вибери «Цифровий помічник» → «Дімон».");
         } catch (RuntimeException error) {
             setStatus("Відкрий Налаштування → Програми → Програми за замовчуванням → Цифровий помічник.");
         }
@@ -2178,14 +2178,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 try {
                     statusBar.requestAddTileService(
                         new ComponentName(this, JarvisQuickTileService.class),
-                        "Джарвіс",
+                        "Дімон",
                         Icon.createWithResource(this, R.drawable.ic_launcher),
                         getMainExecutor(),
                         result -> {
                             if (result == StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED)
-                                setStatus("Кнопку Джарвіса додано до швидких налаштувань.");
+                                setStatus("Кнопку Дімона додано до швидких налаштувань.");
                             else
-                                setStatus("Якщо кнопки немає, відкрий шторку → Редагувати → додай «Джарвіс».");
+                                setStatus("Якщо кнопки немає, відкрий шторку → Редагувати → додай «Дімон».");
                         });
                     return;
                 } catch (Exception ignored) {
@@ -2194,9 +2194,9 @@ public final class MainActivity extends Activity implements RecognitionListener 
             }
         }
         AlertDialog dialog = new AlertDialog.Builder(this)
-            .setTitle("Додати Джарвіса у швидкі налаштування")
+            .setTitle("Додати Дімона у швидкі налаштування")
             .setMessage("Потягни шторку зверху двічі, натисни «Редагувати» (олівець) " +
-                "і перетягни плитку «Джарвіс» у швидкі кнопки. " +
+                "і перетягни плитку «Дімон» у швидкі кнопки. " +
                 "Після натискання відкриється лише маленьке плаваюче обличчя.")
             .setPositiveButton("Зрозуміло", null).create();
         showDialogWithoutWake(dialog);
@@ -2210,7 +2210,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if(watchReadingDialog!=null && watchReadingDialog.isShowing())
             watchReadingDialog.dismiss();
         watchReadingTitle=title==null || title.trim().isEmpty() ?
-            "Відповідь Джарвіса" : title;
+            "Відповідь Дімона" : title;
         watchReadingPage=page;
         watchReadingScroll=new ScrollView(this);
         watchReadingScroll.setFillViewport(true);
@@ -2357,7 +2357,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         picture.setAdjustViewBounds(true);
         picture.setPadding(dp(8),dp(10),dp(8),dp(10));
         AlertDialog larger=new AlertDialog.Builder(this)
-            .setTitle("Зображення Джарвіса")
+            .setTitle("Зображення Дімона")
             .setView(picture)
             .setPositiveButton("Назад",null).create();
         showDialogWithoutWake(larger);
@@ -2405,7 +2405,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         editor.setMinLines(2);
         editor.setHint("Команда або запитання");
         AlertDialog dialog = new AlertDialog.Builder(this)
-            .setTitle("Написати Джарвісу")
+            .setTitle("Написати Дімону")
             .setView(editor)
             .setNegativeButton("Скасувати", null)
             .setPositiveButton("Надіслати", (d, which) -> processCommand(editor.getText().toString()))
@@ -2434,7 +2434,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             .setTitle(retry ? "Невірний PIN або Pixel не розблокувався"
                 : "Pixel заблоковано")
             .setMessage("Для виконання екранної команди введи числовий PIN " +
-                "Pixel на годиннику. Джарвіс не зберігає його. " +
+                "Pixel на годиннику. Дімон не зберігає його. " +
                 "Після команди Pixel знову заблокується.")
             .setView(pinField)
             .setNegativeButton("Скасувати",(d,w) -> pinField.setText(""))
@@ -2445,7 +2445,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 watchPhoneLink.unlockPin(challenge,entered,(ok,response) -> {
                     if (isFinishing() || isDestroyed()) return;
                     if (promptForPhonePin(response)) return;
-                    appendDialogue("Джарвіс",response);
+                    appendDialogue("Дімон",response);
                     setStatus(response);
                     if (voiceEnabled) speakReply(response);
                     else if (face != null) face.setState("idle");
@@ -2487,7 +2487,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             "🗣 Перевірити голос Watch7"
         };
         AlertDialog dialog = new AlertDialog.Builder(this)
-            .setTitle("Налаштування Джарвіса")
+            .setTitle("Налаштування Дімона")
             .setItems(actions, (d, which) -> {
                 switch (which) {
                     case 0: showVoiceSettings(); break;
@@ -2508,7 +2508,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     case 3: {
                         AlertDialog info = new AlertDialog.Builder(this)
                             .setTitle("ШІ та API працюють на телефоні")
-                            .setMessage("Налаштуй «ШІ — підключення» один раз у Джарвісі " +
+                            .setMessage("Налаштуй «ШІ — підключення» один раз у Дімоні " +
                                 "на телефоні. На годиннику не потрібні ні OpenAI API-ключ, " +
                                 "ні код доступу Cloudflare. Голосові запити, Telegram, " +
                                 "Spotify та інші підтримувані команди передаються " +
@@ -2550,7 +2550,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         getPreferences(MODE_PRIVATE).edit()
                             .putBoolean(WATCH_LAUNCH_GESTURE_PREF,enabled).apply();
                         setStatus(enabled
-                            ? "На годиннику признач «Knock knock» → «Відкрити програму» → «Джарвіс». При запуску почну слухати."
+                            ? "На годиннику признач «Knock knock» → «Відкрити програму» → «Дімон». При запуску почну слухати."
                             : "Автоматичний мікрофон при запуску вимкнено.");
                         break;
                     }
@@ -2560,7 +2560,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     case 16:
                         // On-device end-to-end speech test, independent of
                         // the phone, AI and microphone recognition.
-                        processCommand("Скажи Перевірка голосу. Джарвіс працює на годиннику.");
+                        processCommand("Скажи Перевірка голосу. Дімон працює на годиннику.");
                         break;
                     case 12:
                         shakeEnabled = !shakeEnabled;
@@ -2569,7 +2569,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         if (shakeEnabled && accelerometer != null) registerShakeSensor();
                         else unregisterShakeSensor();
                         setStatus(shakeEnabled
-                            ? "Струс зап'ястя в Джарвісі: перший — слухати, другий — надіслати. Можливі випадкові спрацювання."
+                            ? "Струс зап'ястя в Дімоні: перший — слухати, другий — надіслати. Можливі випадкові спрацювання."
                             : "Керування струсом зап'ястя вимкнено.");
                         break;
                     case 10:
@@ -2627,7 +2627,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (user) params.leftMargin = dp(28);
         else params.rightMargin = dp(20);
         feedMessages.addView(bubble, params);
-        TextView name = makeText(user ? "ТИ" : "ДЖАРВІС", 11,
+        TextView name = makeText(user ? "ТИ" : "ДІМОН", 11,
             user ? Color.rgb(164, 232, 210) : CYAN, Gravity.START, true);
         name.setLetterSpacing(0.09f);
         bubble.addView(name);
@@ -2685,7 +2685,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (face == null) return;
         face.setClickable(true);
         face.setContentDescription(
-            "Обличчя Джарвіса. Свайп вліво по словах — прибрати останнє й вимовити заново.");
+            "Обличчя Дімона. Свайп вліво по словах — прибрати останнє й вимовити заново.");
         face.setOnClickListener(v -> {
             if (isWatchDevice) toggleListening();
             else if (JarvisPhoneMode.isActive()) startPhoneListening();
@@ -2761,7 +2761,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             cancelPendingWakeCommand();
             JarvisLiveTranscript.update(TRANSCRIPT_OWNER, ready, true,
                 SystemClock.uptimeMillis());
-            microphone.setText(isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Джарвісом");
+            microphone.setText(isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Дімоном");
             processCommand(ready);
             scheduleAutoWake(550L);
         };
@@ -2819,7 +2819,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
     private CheckBox makeShakeToggle() {
         CheckBox toggle = new CheckBox(this);
-        toggle.setText("Струсни телефон → 3 с для «Джарвіс»");
+        toggle.setText("Струсни телефон → 3 с для «Дімон»");
         toggle.setTextColor(MUTED);
         toggle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         toggle.setButtonTintList(ColorStateList.valueOf(CYAN));
@@ -2831,8 +2831,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
             if (wakeToggle != null) {
                 wakeToggle.setEnabled(supportsOnDeviceRecognizer && !enabled);
                 wakeToggle.setText(enabled ?
-                    "Постійне очікування «Джарвіс» (призупинене через струшування)" :
-                    "Активація «Джарвіс»");
+                    "Постійне очікування «Дімон» (призупинене через струшування)" :
+                    "Активація «Дімон»");
             }
             if (enabled) {
                 cancelAutoWakeSchedule();
@@ -2844,7 +2844,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     processing = false;
                 }
                 registerShakeSensor();
-                setStatus("Струси телефон двічі. Після «Джарвіс» слухатиму команду.");
+                setStatus("Струси телефон двічі. Після «Дімон» слухатиму команду.");
             } else {
                 unregisterShakeSensor();
                 if (shakeProbe != null) shakeProbe.close();
@@ -2894,7 +2894,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             FloatingJarvisService.isShowing()) return;
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED) {
-            setStatus("Для активації струшуванням дозволь мікрофон Джарвісу.");
+            setStatus("Для активації струшуванням дозволь мікрофон Дімону.");
             return;
         }
         // Recognition runs only in foreground after a deliberate gesture.
@@ -2910,7 +2910,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         stopSpeaking();
         face.setState("listening");
         JarvisLiveTranscript.begin(TRANSCRIPT_OWNER);
-        setStatus("Струшування: 3 секунди чекаю «Джарвіс»...");
+        setStatus("Струшування: 3 секунди чекаю «Дімон»...");
         if (headsetRoute != null && !headsetRoute.begin()) {
             setStatus(headsetRoute.problem());
             face.setState("idle");
@@ -2938,7 +2938,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 shakeCommandCapture = true;
                 shakeAiPromptNext = false;
                 face.setState("listening");
-                setStatus("Прокинувся. Слухаю команду. Для ШІ знову скажи «Джарвіс».");
+                setStatus("Прокинувся. Слухаю команду. Для ШІ знову скажи «Дімон».");
                 // Let the recognizer release its audio session first.
                 wakeHandler.postDelayed(() -> {
                     if (foreground && shakeCommandCapture && !manualCapture)
@@ -3007,8 +3007,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private CheckBox makeWakeToggle() {
         CheckBox toggle = new CheckBox(this);
         toggle.setText(shakeEnabled ?
-            "Постійне очікування «Джарвіс» (призупинене через струшування)" :
-            "Активація «Джарвіс»");
+            "Постійне очікування «Дімон» (призупинене через струшування)" :
+            "Активація «Дімон»");
         toggle.setTextColor(MUTED);
         toggle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         toggle.setButtonTintList(ColorStateList.valueOf(CYAN));
@@ -3031,7 +3031,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             } else {
                 autoWakePausedForErrors = false;
                 autoWakeErrors = 0;
-                setStatus("Очікую «Джарвіс» у відкритому застосунку");
+                setStatus("Очікую «Дімон» у відкритому застосунку");
                 scheduleAutoWake(350L);
             }
         });
@@ -3278,7 +3278,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             cancelPendingWakeCommand();
             JarvisLiveTranscript.update(TRANSCRIPT_OWNER, ready, true,
                 SystemClock.uptimeMillis());
-            microphone.setText(isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Джарвісом");
+            microphone.setText(isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Дімоном");
             processCommand(ready);
             return;
         }
@@ -3382,7 +3382,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         listening = false;
         recognizerSessionActive = false;
         processing = false;
-        microphone.setText(isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Джарвісом");
+        microphone.setText(isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Дімоном");
         if (transcript.isEmpty()) {
             if (shakeCommandCapture) {
                 shakeCommandCapture = false;
@@ -3398,7 +3398,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             wakeConversation.end();
             if (shakeAiPromptNext) {
                 shakeAiPromptNext = false;
-                // The second standalone "Джарвіс" explicitly opened AI mode.
+                // The second standalone "Дімон" explicitly opened AI mode.
                 // This next dictated phrase is now an AI request.
                 face.setState("thinking");
                 askAi(transcript);
@@ -3416,7 +3416,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 }, 350L);
                 return;
             }
-            // Only explicit SECOND "Джарвіс" routes a post-shake
+            // Only explicit SECOND "Дімон" routes a post-shake
             // request into AI. Normal commands run locally or in browser.
             shakeLocalOnly = !JarvisShakeGate.aiRequested(transcript);
             try {
@@ -3510,7 +3510,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         listening = true;
         stopWatchMicIndicator();
         microphone.setText(manualCapture ? "■ Завершити та надіслати" :
-            isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Джарвісом");
+            isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Дімоном");
         face.setState(isWatchDevice ? "thinking" : "listening");
         setStatus(isWatchDevice && manualCapture
             ? "Підключаю мікрофон Watch7..."
@@ -3518,7 +3518,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 ? "Слухаю. Пауза після слова: " + speechPauseSeconds() + " с."
                 : "Чекаю першого розпізнаного слова...")
             : wakeConversation.isActive(SystemClock.elapsedRealtime())
-                ? "Продовжуй розмову..." : "Очікую «Джарвіс»");
+                ? "Продовжуй розмову..." : "Очікую «Дімон»");
         if (headsetRoute != null && !headsetRoute.begin()) {
             recognizerSessionActive=false;
             listening=false;
@@ -3558,7 +3558,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         stopWatchMicIndicator();
         listening = false;
         processing = false;
-        microphone.setText(isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Джарвісом");
+        microphone.setText(isWatchDevice ? "🎙 Говорити" : "🎙️ Говорити з Дімоном");
         face.setState(speaking ? "speaking" : "idle");
         setStatus(message);
     }
@@ -3571,7 +3571,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 results[0] == PackageManager.PERMISSION_GRANTED) {
                 JarvisWatchOngoing.show(this);
             } else if (isWatchDevice) {
-                setStatus("Дозволь сповіщення Джарвіса в налаштуваннях Watch7, "+
+                setStatus("Дозволь сповіщення Дімона в налаштуваннях Watch7, "+
                     "щоб активний сеанс не повертався автоматично до циферблата.");
             }
         } else if (code == REQUEST_TIMER_NOTIFICATIONS) {
@@ -3591,7 +3591,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             String feedback = deviceActions.onCameraPermissionResult(
                 results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED);
             if (feedback != null) {
-                appendDialogue("Джарвіс", feedback);
+                appendDialogue("Дімон", feedback);
                 setStatus(feedback);
                 if (voiceEnabled) speakReply(feedback);
             }
@@ -3602,7 +3602,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         confirmWatchMicReady();
         if (manualCapture) setStatus("Слухаю — говори...");
         else setStatus(wakeConversation.isActive(SystemClock.elapsedRealtime())
-            ? "Продовжуй розмову..." : "Очікую «Джарвіс»");
+            ? "Продовжуй розмову..." : "Очікую «Дімон»");
     }
     @Override public void onBeginningOfSpeech() {
         confirmWatchMicReady();
@@ -3734,7 +3734,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (JarvisSpeechErrorPolicy.rebuildRecognizer(error))
             retireDisconnectedRecognizer();
         JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-        resetListening("Очікую «Джарвіс»");
+        resetListening("Очікую «Дімон»");
         if (error == SpeechRecognizer.ERROR_NO_MATCH ||
             error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
             autoWakeErrors = 0;
@@ -3825,16 +3825,16 @@ public final class MainActivity extends Activity implements RecognitionListener 
         WakeConversation.Decision decision = wakeConversation.accept(
             matches.get(0), SystemClock.elapsedRealtime(), false);
         if (decision.kind == WakeConversation.Kind.ARMED) {
-            setStatus("Активовано — говори, Джарвіс слухає мовчки.");
+            setStatus("Активовано — говори, Дімон слухає мовчки.");
             face.setState("listening");
         } else if (decision.kind == WakeConversation.Kind.FINISHED) {
-            setStatus("Розмову завершено. Очікую «Джарвіс».");
+            setStatus("Розмову завершено. Очікую «Дімон».");
             face.setState("idle");
         } else if (decision.kind == WakeConversation.Kind.COMMAND) {
-            scheduleWakeCommand("Джарвіс, " + decision.command);
+            scheduleWakeCommand("Дімон, " + decision.command);
             return;
         } else {
-            setStatus("Очікую «Джарвіс».");
+            setStatus("Очікую «Дімон».");
         }
         scheduleAutoWake(450L);
     }
@@ -3894,7 +3894,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)==
                 PackageManager.PERMISSION_GRANTED &&
              (nm==null || nm.areNotificationsEnabled()));
-        String info="Для будильників із Galaxy Watch7 Джарвіс використовує "+
+        String info="Для будильників із Galaxy Watch7 Дімон використовує "+
             "власний планувальник на Pixel. Це не Google Годинник.\n\n"+
             "Точні будильники: "+(exact?"✅ дозволено":"❌ немає дозволу")+
             "\nСповіщення: "+(notifications?"✅ дозволено":"❌ немає дозволу")+
@@ -3940,7 +3940,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         watchPhoneLink.setAlarm(time,(ok,detail)->{
             processing=false;
             if(isFinishing()||isDestroyed())return;
-            appendDialogue("Джарвіс",detail);
+            appendDialogue("Дімон",detail);
             setStatus(detail);
             if(voiceEnabled)speakReply(detail);
             else if(face!=null)face.setState("idle");
@@ -3961,8 +3961,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     return;
                 }
                 String feedback = openAlarmClock(
-                    new AssistantIntents.ClockTime(hour,minute),"Будильник Джарвіса");
-                appendDialogue("Джарвіс",feedback);
+                    new AssistantIntents.ClockTime(hour,minute),"Будильник Дімона");
+                appendDialogue("Дімон",feedback);
                 setStatus(feedback);
                 if (voiceEnabled) speakReply(feedback);
             },now.get(Calendar.HOUR_OF_DAY),now.get(Calendar.MINUTE),true);
@@ -4057,7 +4057,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     .setTitle("Яку програму відкрити?")
                     .setItems(labels, (dialog, which) -> {
                         String launched = startMatchedApp(result.alternatives.get(which));
-                        appendDialogue("Джарвіс", launched);
+                        appendDialogue("Дімон", launched);
                         setStatus(launched);
                     })
                     .setNegativeButton("Скасувати", null)
@@ -4168,7 +4168,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         int seconds = pendingTimerSeconds;
         pendingTimerSeconds = 0;
         String message = startTimer(seconds);
-        appendDialogue("Джарвіс", message);
+        appendDialogue("Дімон", message);
         setStatus(message);
     }
 
@@ -4209,7 +4209,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 notes.clear();
                 saveNotes();
                 renderNotes();
-                appendDialogue("Джарвіс", "Усі нотатки видалено.");
+                appendDialogue("Дімон", "Усі нотатки видалено.");
             })
             .show();
     }
@@ -4234,7 +4234,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             return;
         }
         if (newsBusy) {
-            appendDialogue("Джарвіс", "Я вже шукаю новини.");
+            appendDialogue("Дімон", "Я вже шукаю новини.");
             return;
         }
         newsBusy = true;
@@ -4248,7 +4248,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             String report = error == null ? digest : error;
             if (report == null || report.trim().isEmpty())
                 report = "Не вдалося прочитати свіжі новини.";
-            appendDialogue("Джарвіс", report);
+            appendDialogue("Дімон", report);
             setStatus(error == null ? "Світові новини знайдено" : "Новини недоступні");
             if (voiceEnabled) speakReply(report);
             else {
@@ -4266,7 +4266,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             return;
         }
         if (webSearchBusy || aiBusy) {
-            appendDialogue("Джарвіс", "Я ще шукаю відповідь на попереднє запитання.");
+            appendDialogue("Дімон", "Я ще шукаю відповідь на попереднє запитання.");
             return;
         }
         webSearchBusy = true;
@@ -4279,7 +4279,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 webSearchBusy = false;
                 processing = false;
                 String problem = error == null ? "Пошук не повернув результатів." : error;
-                appendDialogue("Джарвіс", problem);
+                appendDialogue("Дімон", problem);
                 setStatus("Інтернет-пошук недоступний");
                 if (voiceEnabled) speakReply(problem);
                 else if (face != null) face.setState("idle");
@@ -4303,7 +4303,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     if (isDestroyed() || isFinishing()) return;
                     String response = aiError == null && answer != null &&
                         !answer.trim().isEmpty() ? answer : found.speech;
-                    appendDialogue("Джарвіс", response);
+                    appendDialogue("Дімон", response);
                     setStatus("Результати пошуку готові");
                     if (voiceEnabled) speakReply(response);
                     else if (face != null) face.setState("idle");
@@ -4311,7 +4311,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             } else {
                 webSearchBusy = false;
                 processing = false;
-                appendDialogue("Джарвіс", found.speech);
+                appendDialogue("Дімон", found.speech);
                 setStatus("Знайшов інтернет-джерела. Для узагальнення підключи ШІ.");
                 if (voiceEnabled) speakReply(found.speech);
                 else if (face != null) face.setState("idle");
@@ -4365,8 +4365,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 selected = roles != null &&
                     roles.isRoleHeld(android.app.role.RoleManager.ROLE_ASSISTANT);
             }
-            setStatus(selected ? "Джарвіс — цифровий помічник за замовчуванням. Утримуй кнопку живлення." :
-                "Джарвіса не вибрано. Це можна зробити в налаштуваннях Android.");
+            setStatus(selected ? "Дімон — цифровий помічник за замовчуванням. Утримуй кнопку живлення." :
+                "Дімона не вибрано. Це можна зробити в налаштуваннях Android.");
             return;
         }
         if (request != REQUEST_AI_ATTACHMENT || result != RESULT_OK ||
@@ -4411,7 +4411,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
      * notification. The existing phone Save control persists the full PNG. */
     void showGeneratedImageFromWatch(byte[] data) {
         if(isWatchDevice || data==null)return;
-        appendDialogue("Джарвіс","🎨 Зображення створено за командою з Watch7.");
+        appendDialogue("Дімон","🎨 Зображення створено за командою з Watch7.");
         showGeneratedImage(data);
         setStatus("Можеш зберегти зображення в галерею телефона.");
     }
@@ -4421,7 +4421,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         android.graphics.Bitmap image = android.graphics.BitmapFactory.decodeByteArray(
             data, 0, data.length);
         if (image == null) {
-            appendDialogue("Джарвіс", "Зображення повернулося, але Android не може його показати.");
+            appendDialogue("Дімон", "Зображення повернулося, але Android не може його показати.");
             return;
         }
         LinearLayout preview = new LinearLayout(this);
@@ -4435,7 +4435,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         photo.setImageBitmap(image);
         photo.setAdjustViewBounds(true);
         photo.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
-        photo.setContentDescription("Зображення, створене ШІ Джарвіса");
+        photo.setContentDescription("Зображення, створене ШІ Дімона");
         preview.addView(photo, new LinearLayout.LayoutParams(-1, dp(isWatchDevice ? 160 : 260)));
         Button save = secondaryButton("💾 Зберегти зображення", () -> {
             setStatus("Зберігаю зображення...");
@@ -4478,7 +4478,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 if (isFinishing() || isDestroyed()) return;
                 String detail=page==null?"Телефон не повернув відповіді.":page.text;
                 if (promptForPhonePin(detail)) return;
-                appendDialogue("Джарвіс",detail);
+                appendDialogue("Дімон",detail);
                 setStatus(detail);
                 if(ok) showWatchReading("Відповідь ШІ",page);
                 if(voiceEnabled) speakReply(ok
@@ -4488,12 +4488,12 @@ public final class MainActivity extends Activity implements RecognitionListener 
             return;
         }
         if (aiChatClient == null || !aiChatClient.isConfigured()) {
-            appendDialogue("Джарвіс", "Спочатку підключи особистий ШІ-сервер.");
+            appendDialogue("Дімон", "Спочатку підключи особистий ШІ-сервер.");
             showAiSettings();
             return;
         }
         if (aiBusy || question == null || question.trim().isEmpty()) {
-            setStatus(aiBusy ? "Джарвіс ще опрацьовує попередній запит."
+            setStatus(aiBusy ? "Дімон ще опрацьовує попередній запит."
                 : "Спочатку напиши запит.");
             return;
         }
@@ -4509,7 +4509,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             String text = error == null && response != null ? response.reply : error;
             if (text == null || text.trim().isEmpty())
                 text = "ШІ не повернув відповіді.";
-            appendDialogue("Джарвіс", text);
+            appendDialogue("Дімон", text);
             if (response != null && response.sources != null && !response.sources.isEmpty())
                 appendDialogue("Джерела", response.sources);
             if (response != null && response.image != null)
@@ -4534,7 +4534,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         processing = false;
         if (face != null) face.setState("idle");
         setStatus("Новий діалог ШІ");
-        appendDialogue("Джарвіс", "Контекст ШІ очищено. Можемо почати нову розмову.");
+        appendDialogue("Дімон", "Контекст ШІ очищено. Можемо почати нову розмову.");
     }
 
     private void showAiSettings() {
@@ -4587,14 +4587,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
         form.addView(note, new LinearLayout.LayoutParams(-1, -2));
 
         AlertDialog dialog = new AlertDialog.Builder(this)
-            .setTitle("Підключення Джарвіса до ШІ")
+            .setTitle("Підключення Дімона до ШІ")
             .setView(form)
             .setNegativeButton("Скасувати", null)
             .setNeutralButton("Від'єднати", (d, which) -> {
                 aiChatClient.disconnect();
                 aiBusy = false;
                 processing = false;
-                appendDialogue("Джарвіс", "Підключення ШІ видалено з телефону.");
+                appendDialogue("Дімон", "Підключення ШІ видалено з телефону.");
                 setStatus("ШІ від'єднаний");
             })
             .setPositiveButton("Зберегти", null)
@@ -4606,7 +4606,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 aiBusy = false;
                 processing = false;
                 setStatus("Налаштування ШІ збережено");
-                appendDialogue("Джарвіс", "Адресу та код доступу збережено. Тепер можемо спілкуватися!");
+                appendDialogue("Дімон", "Адресу та код доступу збережено. Тепер можемо спілкуватися!");
                 dialog.dismiss();
             } catch (Exception error) {
                 urlInput.setError(error.getMessage() == null ? "Перевір адресу й код." : error.getMessage());
@@ -4642,7 +4642,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             @Override public void onProgress(String detail) { setStatus(detail); }
             @Override public void onFinished(boolean success, String detail) {
                 if (isFinishing() || isDestroyed()) return;
-                appendDialogue("Джарвіс", detail);
+                appendDialogue("Дімон", detail);
                 setStatus(detail);
                 if (!success && voiceEnabled) speakReply(detail);
             }
@@ -4666,14 +4666,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
         if (microphone != null)
             microphone.setText(isWatchDevice ? "🎙 Говорити" :
-                "🎙️ Говорити з Джарвісом");
+                "🎙️ Говорити з Дімоном");
         JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
         wakeConversation.end();
         if (isWatchDevice) {
             if (watchPhoneLink != null && watchPhoneLink.spotifyRunning()) {
                 watchPhoneLink.cancelSpotify((ok, detail) -> {
                     if (isFinishing() || isDestroyed()) return;
-                    appendDialogue("Джарвіс", detail);
+                    appendDialogue("Дімон", detail);
                     setStatus(detail);
                     if (voiceEnabled) speakReply(detail);
                 });
@@ -4683,7 +4683,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 watchPhoneLink.exit((ok, detail) -> {
                     if (isFinishing() || isDestroyed()) return;
                     JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-                    appendDialogue("Джарвіс", detail);
+                    appendDialogue("Дімон", detail);
                     setStatus(detail);
                     if (voiceEnabled) speakReply(detail);
                 });
@@ -4691,7 +4691,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             return;
         }
         String result = JarvisPhoneModeManager.exit();
-        appendDialogue("Джарвіс", result);
+        appendDialogue("Дімон", result);
         setStatus(result);
     }
 
@@ -4699,7 +4699,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
      * Jarvis finishes its response, never while its own TTS is playing. */
     private void telegramResponse(boolean ok,String result) {
         if(isFinishing() || isDestroyed())return;
-        appendDialogue("Джарвіс",result);
+        appendDialogue("Дімон",result);
         setStatus(result);
         telegramDictationAfterReply =
             TelegramReplyController.needsFollowupDictation(this);
@@ -4725,7 +4725,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private void processCommand(String raw) {
         if (raw == null || raw.trim().isEmpty()) return;
         if (!isWatchDevice && JarvisMacros.cancelIfRequested(raw, result -> {
-            appendDialogue("Джарвіс", result);
+            appendDialogue("Дімон", result);
             setStatus(result);
         })) return;
         JarvisPhoneMode.Transition modeTransition = JarvisPhoneMode.transition(raw);
@@ -4738,7 +4738,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 if (local==null) {
                     String message="Небезпечна або невідома дія на годиннику. "+
                         "Назви програму чи видиму кнопку.";
-                    appendDialogue("Джарвіс",message);
+                    appendDialogue("Дімон",message);
                     setStatus(message);
                     if(voiceEnabled)speakReply(message);
                     return;
@@ -4748,7 +4748,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 JarvisWatchLocalController.execute(this,local,(ok,message)->{
                     processing=false;
                     if(isFinishing() || isDestroyed())return;
-                    appendDialogue("Джарвіс",message);
+                    appendDialogue("Дімон",message);
                     setStatus(message);
                     // A successful music click should not be interrupted by
                     // Jarvis TTS over the playback. Spotify shows a toast.
@@ -4769,7 +4769,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     processing=false;
                     if(isFinishing() || isDestroyed())return;
                     JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-                    appendDialogue("Джарвіс",detail);
+                    appendDialogue("Дімон",detail);
                     setStatus(detail);
                     if(!ok && voiceEnabled)speakReply(detail);
                     else if(face!=null)face.setState("idle");
@@ -4792,14 +4792,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     // Keep the full-screen Activity in place and play directly
                     // through the WATCH speaker or the connected audio route.
                     appendDialogue("Ти",raw.trim());
-                    appendDialogue("Джарвіс",watchWords);
+                    appendDialogue("Дімон",watchWords);
                     setStatus("Озвучую фразу на Watch7...");
                     if(face!=null)face.showTranscript(watchWords,false,
                         SystemClock.uptimeMillis()+6500L);
                     speakReply(watchWords);
                     return;
                 }
-                appendDialogue("Джарвіс",feedback);
+                appendDialogue("Дімон",feedback);
                 setStatus(feedback);
                 if(face!=null)face.showTranscript(feedback,false,
                     SystemClock.uptimeMillis()+5500L);
@@ -4818,7 +4818,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     watchPhoneLink.cancelSpotify((ok, detail) -> {
                         if (!isFinishing() && !isDestroyed()) {
                             setStatus(detail);
-                            appendDialogue("Джарвіс",detail);
+                            appendDialogue("Дімон",detail);
                             if (voiceEnabled) speakReply(detail);
                         }
                     });
@@ -4836,7 +4836,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     if (isFinishing() || isDestroyed()) return;
                     if (promptForPhonePin(detail)) return;
                     if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-                    appendDialogue("Джарвіс", detail);
+                    appendDialogue("Дімон", detail);
                     setStatus(detail);
                     if (voiceEnabled) speakReply(detail);
                 });
@@ -4858,7 +4858,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                         JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
                         ensureWatchPhoneListening();
                     }
-                    appendDialogue("Джарвіс", detail);
+                    appendDialogue("Дімон", detail);
                     setStatus(detail);
                     if (voiceEnabled) speakReply(detail);
                 });
@@ -4908,7 +4908,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     processing=false;
                     if(isFinishing() || isDestroyed())return;
                     JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-                    appendDialogue("Джарвіс",detail);
+                    appendDialogue("Дімон",detail);
                     setStatus(detail);
                     if(!ok && voiceEnabled)speakReply(detail);
                     else if(face!=null)face.setState("idle");
@@ -4925,7 +4925,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     if (isFinishing() || isDestroyed()) return;
                     if (promptForPhonePin(detail)) return;
                     JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-                    appendDialogue("Джарвіс", detail);
+                    appendDialogue("Дімон", detail);
                     setStatus(detail);
                     if (voiceEnabled) speakReply(detail);
                 });
@@ -4935,7 +4935,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             // A manually opened screen-control session is used only for
             // literal screen gestures, not conversational AI or external APIs.
             if (watchPhoneLink == null) {
-                setStatus("Телефон недоступний. Перевір Galaxy Wearable та Джарвіса.");
+                setStatus("Телефон недоступний. Перевір Galaxy Wearable та Дімона.");
                 return;
             }
             final boolean screenOnly = JarvisPhoneMode.isActive() &&
@@ -4948,7 +4948,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     if (promptForPhonePin(detail)) return;
                     ensureWatchPhoneListening();
                     if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-                    appendDialogue("Джарвіс",detail);
+                    appendDialogue("Дімон",detail);
                     setStatus(detail);
                     if (voiceEnabled) speakReply(detail);
                 });
@@ -4957,7 +4957,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 // executed the request or reported a real transport/API error.
                 processing = true;
                 face.setState("thinking");
-                setStatus("Передаю команду Джарвісу на телефоні...");
+                setStatus("Передаю команду Дімону на телефоні...");
                 watchPhoneLink.assistantDocument(raw,(ok,page) -> {
                     processing = false;
                     if (isFinishing() || isDestroyed()) return;
@@ -4965,13 +4965,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     if (promptForPhonePin(detail)) return;
                     ensureWatchPhoneListening();
                     if (ok) JarvisLiveTranscript.clear(TRANSCRIPT_OWNER);
-                    appendDialogue("Джарвіс",detail);
+                    appendDialogue("Дімон",detail);
                     setStatus(detail);
                     boolean showReader=ok && (watchReadableCommand(raw) ||
                         (page!=null && page.pageCount>1));
                     if(showReader) showWatchReading(
                         CommandPatterns.normalize(raw).contains("нотатки")
-                            ? "Мої нотатки" : "Інтернет / Джарвіс",page);
+                            ? "Мої нотатки" : "Інтернет / Дімон",page);
                     if (voiceEnabled) speakReply(showReader
                         ? "Відповідь відкрита на екрані годинника." : detail);
                     else face.setState("idle");
@@ -4982,7 +4982,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (modeTransition == JarvisPhoneMode.Transition.ENTER) {
             String result = JarvisPhoneModeManager.enter(this,
                 FloatingJarvisService.isShowing());
-            appendDialogue("Джарвіс", result);
+            appendDialogue("Дімон", result);
             setStatus(result);
             if (!ScreenControlAccessibilityService.isConnected() &&
                 getResources().getBoolean(R.bool.screen_control_available))
@@ -5021,7 +5021,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             this,raw,this::telegramResponse))return;
         if (!isWatchDevice && JarvisMacros.handleVoice(this, raw, result -> {
             if (isFinishing() || isDestroyed()) return;
-            appendDialogue("Джарвіс", result);
+            appendDialogue("Дімон", result);
             setStatus(result);
             if (voiceEnabled) speakReply(result);
         })) return;
@@ -5039,7 +5039,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
              command.equals("аналіз фото") ||
              command.equals("проаналізуй документ") ||
              command.equals("прочитай документ"))) {
-            setStatus("Для ШІ після струшування двічі скажи «Джарвіс».");
+            setStatus("Для ШІ після струшування двічі скажи «Дімон».");
             return;
         }
         TelegramReplyCommands.Request telegram=TelegramReplyCommands.parse(raw);
@@ -5052,7 +5052,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (!isWatchDevice) {
             String insight=FinanceInsightsController.handle(this,raw);
             if(insight!=null) {
-                appendDialogue("Джарвіс",insight);
+                appendDialogue("Дімон",insight);
                 setStatus(insight);
                 if(voiceEnabled)speakReply(insight);
                 return;
@@ -5068,7 +5068,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 @Override public void onProgress(String detail){setStatus(detail);}
                 @Override public void onFinished(boolean ok,String detail){
                     if(isFinishing()||isDestroyed())return;
-                    appendDialogue("Джарвіс",detail);
+                    appendDialogue("Дімон",detail);
                     setStatus(detail);
                     if(!ok && voiceEnabled)speakReply(detail);
                 }
@@ -5083,7 +5083,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                   "«Витратив 150 готівка транспорт таксі». "+
                   "Рахунок: готівка, моно або заначка гривні; "+
                   "наступне одне слово — категорія, решта — примітка.";
-            appendDialogue("Джарвіс",detail);
+            appendDialogue("Дімон",detail);
             setStatus(detail);
             if(voiceEnabled)speakReply(detail);
             return;
@@ -5093,7 +5093,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 @Override public void onProgress(String detail) {setStatus(detail);}
                 @Override public void onFinished(boolean ok,String detail) {
                     if(isFinishing()||isDestroyed())return;
-                    appendDialogue("Джарвіс",detail);
+                    appendDialogue("Дімон",detail);
                     setStatus(detail);
                 }
             });
@@ -5118,10 +5118,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
             }
             String result = SongRecognitionLauncher.launch(this, (success, detail) -> {
                 if (isFinishing() || isDestroyed()) return;
-                appendDialogue("Джарвіс", detail);
+                appendDialogue("Дімон", detail);
                 setStatus(detail);
             });
-            appendDialogue("Джарвіс", result);
+            appendDialogue("Дімон", result);
             setStatus(result); // Remain silent while Google listens to the song.
             return;
         }
@@ -5136,7 +5136,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         JarvisCommandSequence.Plan plan = JarvisCommandSequence.parse(raw);
         if (plan != null && (!plan.valid() || plan.multiple())) {
             if (!plan.valid()) {
-                appendDialogue("Джарвіс", plan.error);
+                appendDialogue("Дімон", plan.error);
                 setStatus(plan.error);
                 speakReply(plan.error);
                 return;
@@ -5148,7 +5148,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     setStatus("Крок " + step + "/" + total + ": " + description);
                 }
                 @Override public void onFinished(boolean success, String summary) {
-                    appendDialogue("Джарвіс", summary);
+                    appendDialogue("Дімон", summary);
                     setStatus(summary);
                     speakReply(summary);
                 }
@@ -5203,14 +5203,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
             } else {
                 // Speak exactly the requested phrase, without asking conversational AI
                 // and without reading back a separate acknowledgment first.
-                appendDialogue("Джарвіс", directSpeech);
+                appendDialogue("Дімон", directSpeech);
                 setStatus("Озвучую задану фразу");
                 speakReply(directSpeech);
                 return;
             }
         } else if (screenCommand != null) {
             if (!getResources().getBoolean(R.bool.screen_control_available)) {
-                reply = "У Джарвіс Lite керування іншими програмами вимкнено. Голосові команди, таймер і озвучення доступні.";
+                reply = "У Дімон Lite керування іншими програмами вимкнено. Голосові команди, таймер і озвучення доступні.";
             } else {
             switch (screenCommand.kind) {
                 case ENABLE:
@@ -5228,7 +5228,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 default:
                     JarvisPhoneModeManager.perform(this, screenCommand, (ok, detail) -> {
                         if (isFinishing() || isDestroyed()) return;
-                        appendDialogue("Джарвіс",detail);
+                        appendDialogue("Дімон",detail);
                         setStatus(detail);
                         if (!phoneListening && voiceEnabled) speakReply(detail);
                     });
@@ -5248,7 +5248,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         } else if (command.equals("досить") || command.equals("закінчи розмову") ||
             command.equals("заверши розмову") || command.equals("кінець розмови")) {
             wakeConversation.end();
-            setStatus("Розмову завершено. Очікую «Джарвіс».");
+            setStatus("Розмову завершено. Очікую «Дімон».");
             face.setState("idle");
             scheduleAutoWake(400L);
             return;
@@ -5264,7 +5264,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         } else if (command.equals("покажи будильники") || command.equals("відкрий будильники")) {
             reply = launchIntent(new Intent(AlarmClock.ACTION_SHOW_ALARMS), "список будильників");
         } else if (alarmTime != null) {
-            reply = openAlarmClock(alarmTime, "Будильник Джарвіса");
+            reply = openAlarmClock(alarmTime, "Будильник Дімона");
         } else if (AssistantIntents.isAlarmCommand(command)) {
             reply = "Вкажи час у 24-годинному форматі, наприклад: постав будильник на 07:30.";
         } else if (reminder != null) {
@@ -5374,7 +5374,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
                     + "» у меню встановлених застосунків. Назви її так, як під іконкою на телефоні.";
             }
         } else if (command.startsWith("привіт")) {
-            if (shakeLocalOnly) reply = "Привіт! Для розмови з ШІ скажи «Джарвіс» ще раз після струшування.";
+            if (shakeLocalOnly) reply = "Привіт! Для розмови з ШІ скажи «Дімон» ще раз після струшування.";
             else {
                 askAi(raw);
                 return;
@@ -5385,14 +5385,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
             reply = "Завжди радий допомогти.";
         } else {
             if (shakeLocalOnly) {
-                reply = "Не розпізнав локальну команду. Для запитань до ШІ повторно скажи «Джарвіс».";
+                reply = "Не розпізнав локальну команду. Для запитань до ШІ повторно скажи «Дімон».";
             } else {
                 askAi(raw);
                 return;
             }
         }
 
-        appendDialogue("Джарвіс", reply);
+        appendDialogue("Дімон", reply);
         setStatus("Відповідь готова");
         if (!silentReply && voiceEnabled) {
             speakReply(reply);
@@ -5488,7 +5488,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
 
         PixelFace() {
             super(MainActivity.this);
-            setContentDescription("8-бітне обличчя Джарвіса");
+            setContentDescription("8-бітне обличчя Дімона");
         }
 
         void setState(String state) {
