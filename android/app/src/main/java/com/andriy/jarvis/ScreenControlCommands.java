@@ -17,7 +17,7 @@ public final class ScreenControlCommands {
     private static final Pattern WRITE = Pattern.compile(
         "(?iu)^напиши(?:[\\s,:—-]+([\\s\\S]*))?$");
     private static final Pattern WAKE = Pattern.compile(
-        "(?iu)^(?:джарвіс|джарвис|jarvis)[\\s,:—-]*");
+        "(?iu)^(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[\\s,:—-]*");
 
     private static final Pattern HOLD = Pattern.compile(
         "^(?:зажми|затисни|утримуй|натисни\\s+(?:і|та)\\s+(?:тримай|утримуй))" +
@@ -66,6 +66,8 @@ public final class ScreenControlCommands {
                 return new Action(Kind.ENABLE, null);
             case "вимкни керування екраном":
             case "зупини керування екраном":
+            case "дімон зупинись":
+            case "димон зупинись":
             case "джарвіс зупинись":
             case "зупинись":
                 return new Action(Kind.DISABLE, null);
