@@ -55,7 +55,9 @@ public final class JarvisWatchLocalController {
                 });
         }
         else if(request.playsSpotify()) {
-            JarvisWatchSpotifyController.play(watch,request.music,request.musicTitle,
+            // Launch from the visible Watch Activity rather than from the
+            // application context to avoid Wear OS background-start limits.
+            JarvisWatchSpotifyController.play(context,request.music,request.musicTitle,
                 (ok,detail)->{
                     if(ok)watch.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
                         .edit().putString(LAST_PACKAGE,"com.spotify.music").apply();
