@@ -48,6 +48,7 @@ on:
       - 'android/app/src/main/java/com/andriy/jarvis/ScreenControlCommands.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisWatchLocalCommands.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisWatchLocalController.java'
+      - 'android/app/src/main/java/com/andriy/jarvis/JarvisWatchSpotifyController.java'
       - 'android/app/src/main/java/com/andriy/jarvis/JarvisWatchScreenService.java'
       - 'android/app/src/test/java/com/andriy/jarvis/JarvisWatchLocalCommandsTest.java'
       - 'android/app/src/main/res/xml/jarvis_watch_accessibility.xml'
