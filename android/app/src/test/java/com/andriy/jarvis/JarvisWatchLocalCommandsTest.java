@@ -49,6 +49,27 @@ public final class JarvisWatchLocalCommandsTest {
 
         yes(JarvisWatchLocalCommands.parse("Натисни оплатити на годиннику")==null);
         yes(JarvisWatchLocalCommands.parse("Увімкни керування екраном на годиннику")==null);
+        JarvisWatchLocalCommands.Request location=
+            JarvisWatchLocalCommands.mapsOnWatch("Де я");
+        yes(location!=null && location.usesMaps() && location.maps.whereAmI);
+        JarvisWatchLocalCommands.Request route=
+            JarvisWatchLocalCommands.mapsOnWatch(
+                "Джарвіс, знайди дорогу до Apartel Skhidnytsya");
+        yes(route!=null && route.usesMaps());
+        yes("Apartel Skhidnytsya".equals(route.maps.destination));
+        JarvisWatchLocalCommands.Request explicitRoute=
+            JarvisWatchLocalCommands.parse(
+                "Знайди дорогу до Стебник, вулиця Грушевського 14а на годиннику");
+        yes(explicitRoute!=null && explicitRoute.usesMaps());
+        yes("Стебник, вулиця Грушевського 14а".equals(
+            explicitRoute.maps.destination));
+        yes(JarvisWatchLocalCommands.parse("Де я на годиннику").usesMaps());
+        yes(JarvisWatchLocalCommands.parse(
+            "Знайди дорогу до на годиннику")==null);
+        yes(JarvisWatchLocalCommands.mapsOnWatch(
+            "Знайди дорогу до Львів на годиннику")==null);
+        yes(JarvisWatchLocalCommands.mapsOnWatch(
+            "Відкрий Bolt")==null);
         System.out.println("PASS JarvisWatchLocalCommandsTest");
     }
 }
