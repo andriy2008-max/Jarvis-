@@ -125,6 +125,7 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         if(root==null)return Result.WAIT;
         switch(step) {
             case OPEN_SEARCH:
+                if(service.spotifyHasEditable(root))return Result.DONE;
                 return service.spotifyTapExact(root,completion,
                     "search","пошук","поиск");
             case REVEAL_NAV:
@@ -138,9 +139,13 @@ public final class JarvisWatchScreenService extends AccessibilityService {
             case SELECT_RESULT:
                 return service.spotifySelectResult(root,title,completion);
             case PLAY_PLAYLIST:
-                if(service.spotifyHasLabel(root,"pause","призупинити","пауза"))
-                    return Result.DONE;
-                return service.spotifyTapPlay(root,completion);
+                // The mini-player can say Pause for an unrelated song.
+                // Prefer the playlist's actual Play action if it is visible.
+                Result play=service.spotifyTapPlay(root,completion);
+                if(play!=Result.WAIT)return play;
+                return service.spotifyHasTitle(root,title) &&
+                       service.spotifyHasLabel(root,"pause","призупинити","пауза")
+                    ?Result.DONE:Result.WAIT;
             case VERIFY_PLAYLIST:
                 // A play button click is not proof of playback. Only report
                 // verified when the target is present with an active Pause UI.
@@ -194,6 +199,12 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         }
         if(seen>MAX_NODES)result.clear();
         return result;
+    }
+
+    private boolean spotifyHasEditable(AccessibilityNodeInfo root) {
+        for(AccessibilityNodeInfo n:spotifyNodes(root))
+            if(n.isEditable() && !n.isPassword())return true;
+        return false;
     }
 
     private boolean spotifyHasLabel(AccessibilityNodeInfo root,String... labels) {
