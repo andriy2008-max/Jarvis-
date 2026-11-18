@@ -109,6 +109,175 @@ public final class JarvisWatchScreenService extends AccessibilityService {
     }
 
 
+    // Google Maps UI automation on this watch, never on the phone.
+    // The target application package is checked at every step and before
+    // gesture injection. No fixed screen positions are used.
+    public enum MapsStep {
+        CENTER_LOCATION,OPEN_SEARCH,SET_DESTINATION,SUBMIT_SEARCH,
+        FIRST_RESULT,DIRECTIONS,WALKING
+    }
+    private static final String MAPS_PKG="com.google.android.apps.maps";
+
+    public static Result mapsStep(MapsStep step,String destination,
+                                   Completion completion) {
+        JarvisWatchScreenService service=connected.get();
+        if(service==null || step==null || completion==null)return Result.BLOCKED;
+        AccessibilityNodeInfo root=service.appRoot(MAPS_PKG);
+        if(root==null)return Result.WAIT;
+        switch(step) {
+            case CENTER_LOCATION:
+                return service.mapsTapExact(root,completion,
+                    "my location","your location","current location",
+                    "show your location","center on my location",
+                    "моє місцезнаходження","моє розташування",
+                    "поточне місцезнаходження","моє місце",
+                    "моя геопозиція","моє положення");
+            case OPEN_SEARCH:
+                if(service.spotifyHasEditable(root))return Result.DONE;
+                return service.mapsTapExact(root,completion,
+                    "search","пошук","поиск","search here",
+                    "search maps","знайти місце","шукати");
+            case SET_DESTINATION:
+                return service.mapsSetDestination(root,destination);
+            case SUBMIT_SEARCH:
+                return service.mapsSubmitSearch(root);
+            case FIRST_RESULT:
+                return service.mapsPickFirstResult(root,destination,completion);
+            case DIRECTIONS:
+                return service.mapsTapExact(root,completion,
+                    "directions","get directions","маршрут",
+                    "маршрути","прокласти маршрут","напрямки","route",
+                    "маршрут до");
+            case WALKING:
+                return service.mapsTapExact(root,completion,
+                    "walking","walk","walking directions",
+                    "пішки","пішохідний","пешком","пеший");
+            default:return Result.BLOCKED;
+        }
+    }
+
+    private Result mapsTapExact(AccessibilityNodeInfo root,Completion cb,
+                                String... labels) {
+        AccessibilityNodeInfo best=null;
+        Rect bounds=null;
+        for(AccessibilityNodeInfo node:spotifyNodes(root)) {
+            if(node.isEditable() || !spotifyNodeMatches(node,labels))continue;
+            Rect b=new Rect();node.getBoundsInScreen(b);
+            if(b.width()<6 || b.height()<6)continue;
+            if(best==null || b.top<bounds.top ||
+               (b.top==bounds.top && b.width()*b.height()<
+                                       bounds.width()*bounds.height())) {
+                best=node;bounds=b;
+            }
+        }
+        return best==null?Result.WAIT:mapsTapNode(best,cb);
+    }
+
+    private Result mapsTapNode(AccessibilityNodeInfo node,Completion cb) {
+        if(appRoot(MAPS_PKG)==null)return Result.WAIT;
+        AccessibilityNodeInfo parent=node;
+        for(int i=0;i<4 && parent!=null;i++,parent=parent.getParent()) {
+            if(parent.isEnabled() && parent.isClickable() &&
+               parent.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                return Result.DONE;
+        }
+        Rect box=new Rect();node.getBoundsInScreen(box);
+        if(box.width()<6 || box.height()<6)return Result.WAIT;
+        Path point=new Path();
+        point.moveTo(box.exactCenterX(),box.exactCenterY());
+        return gesture(MAPS_PKG,point,90L,cb);
+    }
+
+    private Result mapsSetDestination(AccessibilityNodeInfo root,String destination) {
+        if(destination==null || destination.trim().isEmpty() ||
+           destination.length()>180)return Result.BLOCKED;
+        for(AccessibilityNodeInfo node:spotifyNodes(root)) {
+            if(!node.isEditable() || node.isPassword())continue;
+            // Touch/focus the search input to open the Wear OS keyboard, then
+            // enter dictated text using the accessibility text action.
+            if(!node.isFocused()) {
+                node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                node.performAction(AccessibilityNodeInfo.ACTION_FOCUS);
+            }
+            Bundle args=new Bundle();
+            args.putCharSequence(
+                AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                destination);
+            return node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)
+                ?Result.DONE:Result.WAIT;
+        }
+        return Result.WAIT;
+    }
+
+    private Result mapsSubmitSearch(AccessibilityNodeInfo root) {
+        for(AccessibilityNodeInfo node:spotifyNodes(root)) {
+            if(!node.isEditable() || node.isPassword())continue;
+            if(Build.VERSION.SDK_INT>=30) {
+                int enter=AccessibilityNodeInfo.AccessibilityAction
+                    .ACTION_IME_ENTER.getId();
+                for(AccessibilityNodeInfo.AccessibilityAction action:
+                    node.getActionList()) {
+                    if(action.getId()==enter)
+                        return node.performAction(enter)
+                            ?Result.DONE:Result.WAIT;
+                }
+            }
+            // Autocomplete may already display suggestions as text is set.
+            return Result.DONE;
+        }
+        // IME dismissed after a successful submit; proceed to find a result.
+        return Result.DONE;
+    }
+
+    private Result mapsPickFirstResult(AccessibilityNodeInfo root,String query,
+                                       Completion cb) {
+        if(query==null || query.trim().isEmpty())return Result.BLOCKED;
+        String normalized=AppNameMatcher.normalize(query);
+        if(normalized.isEmpty())return Result.BLOCKED;
+        String[] tokens=normalized.split(" ");
+        int below=0;
+        int screenHeight=getResources().getDisplayMetrics().heightPixels;
+        for(AccessibilityNodeInfo n:spotifyNodes(root)) {
+            if(n.isEditable()) {
+                Rect b=new Rect();n.getBoundsInScreen(b);
+                below=Math.max(below,b.bottom);
+            }
+        }
+        if(below==0)below=(int)(screenHeight*.18f);
+        AccessibilityNodeInfo selected=null;
+        Rect best=null;
+        for(AccessibilityNodeInfo n:spotifyNodes(root)) {
+            if(n.isEditable())continue;
+            String label=spotifyLabel(n);
+            if(label.isEmpty() || label.equals(normalized)) {
+                // Exact text still qualifies if it is below the input. Do
+                // not reject it; the coordinate check protects the input.
+                if(label.isEmpty())continue;
+            }
+            // Only a result relevant to the dictated place can be selected.
+            // Excludes toolbar buttons, map controls, unrelated locations.
+            boolean related=label.equals(normalized) ||
+                label.startsWith(normalized+" ") ||
+                normalized.startsWith(label+" ");
+            if(!related) {
+                for(String token:tokens) {
+                    if(token.length()>=4 &&
+                       (label.equals(token) || label.contains(token))) {
+                        related=true;break;
+                    }
+                }
+            }
+            if(!related || n.isPassword())continue;
+            Rect b=new Rect();n.getBoundsInScreen(b);
+            if(b.width()<6 || b.height()<6 || b.top<below+4)continue;
+            if(best==null || b.top<best.top ||
+               (b.top==best.top && b.left<best.left)) {
+                selected=n;best=b;
+            }
+        }
+        return selected==null?Result.WAIT:mapsTapNode(selected,cb);
+    }
+
     // Spotify on Wear OS has its own navigation and search. Each operation is
     // restricted to Spotify's visible accessibility tree on THIS watch.
     // Screen locations are never copied from the paired phone.
