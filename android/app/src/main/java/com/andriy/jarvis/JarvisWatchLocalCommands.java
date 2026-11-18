@@ -58,7 +58,7 @@ public final class JarvisWatchLocalCommands {
         String requested=AssistantIntents.requestedApp(
             CommandPatterns.normalizeControlVerb(local));
         if("spotify".equals(AssistantIntents.appLabel(requested)) ||
-           local.matches("(?iu)^(?:відкрити|відкрий|запусти|зайди\\\\s+в|зайди\\\\s+до)\\\\s+(?:(?:програму|додаток|застосунок)\\\\s+)?(?:spotify|спотіфай|спотифай)[.!?]*$"))
+           local.matches("(?iu)^(?:відкрити|відкрий|запусти|зайди\\s+в|зайди\\s+до)\\s+(?:(?:програму|додаток|застосунок)\\s+)?(?:spotify|спотіфай|спотифай)[.!?]*$"))
             return new Request("spotify",null,null,null);
         SpotifyMusicCommands.Kind music=SpotifyMusicCommands.parse(local);
         if(music==SpotifyMusicCommands.Kind.TRACK) {
@@ -89,9 +89,9 @@ public final class JarvisWatchLocalCommands {
         local=WAKE.matcher(local).replaceFirst("").trim();
         String normalized=CommandPatterns.normalize(local);
         return SpotifyMusicCommands.parse(local)!=null ||
-            normalized.matches("(?iu)^(?:скасуй|зупини|пауза|продовж|віднови)\\\\s+(?:spotify|спотіфай|спотифай)$") ||
-            normalized.matches("(?iu)^(?:відкрий|відкрити|запусти|закрий|зайди.*)\\\\s+(?:spotify|спотіфай|спотифай)$") ||
-            normalized.matches("(?iu)^.*\\\\b(?:spotify|спотіфай|спотифай)\\\\b.*$");
+            normalized.matches("(?iu)^(?:скасуй|зупини|пауза|продовж|віднови)\\s+(?:spotify|спотіфай|спотифай)$") ||
+            normalized.matches("(?iu)^(?:відкрий|відкрити|запусти|закрий|зайди.*)\\s+(?:spotify|спотіфай|спотифай)$") ||
+            normalized.matches("(?iu)^.*\\b(?:spotify|спотіфай|спотифай)\\b.*$");
     }
 
     /** Location and directions uttered into the Watch app use Watch7 Maps. */
