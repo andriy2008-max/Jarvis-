@@ -7,7 +7,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * "Джарвіс" at the very start selects spoken AI-assisted information search.
+ * "Дімон" at the very start selects spoken AI-assisted information search.
  * Without that prefix, information requests open the browser silently.
  * Device and app commands are routed separately by their original handlers.
  */
