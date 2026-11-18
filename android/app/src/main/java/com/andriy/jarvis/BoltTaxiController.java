@@ -98,7 +98,7 @@ public final class BoltTaxiController {
             // The exception class is safe to show (never its message/stack).
             finish(false,"Bolt: збій на кроці "+operation+
                 " ("+error.getClass().getSimpleName()+"). "+
-                "Перевір службу спеціальних можливостей Джарвіса. "+
+                "Перевір службу спеціальних можливостей Дімона. "+
                 "Поїздку не замовляв.");
         }
     }
@@ -136,7 +136,7 @@ public final class BoltTaxiController {
         operation="CHECK_ACCESSIBILITY";
         if(!JarvisPhoneScreenGuard.available(context) ||
            !ScreenControlAccessibilityService.isSessionActive()) {
-            finish(false,"Розблокуй телефон і ввімкни керування екраном Джарвіса.");
+            finish(false,"Розблокуй телефон і ввімкни керування екраном Дімона.");
             return;
         }
         switch(stage) {
