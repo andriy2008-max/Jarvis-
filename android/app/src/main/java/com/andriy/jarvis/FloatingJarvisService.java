@@ -1380,7 +1380,10 @@ public final class FloatingJarvisService extends Service {
             }
         }
 
-        if (normalized.equals("зупинись") || normalized.equals("закрий джарвіса") ||
+        if (normalized.equals("зупинись") || normalized.equals("закрий дімона") ||
+            normalized.equals("закрий димона") ||
+            normalized.equals("закрий джарвіса") ||
+            normalized.equals("закрий плаваючого дімона") ||
             normalized.equals("закрий плаваючого джарвіса")) {
             stopSelf();
             return;
