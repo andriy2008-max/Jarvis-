@@ -24,7 +24,7 @@ public final class JarvisWatchMapsCommands {
         "(?iu)^(?:знайди\\s+(?:дорогу|маршрут)\\s+до|"+
         "проклади\\s+маршрут\\s+до|побудуй\\s+маршрут\\s+до)\\s+(.+)$");
     private static final Pattern WALK=Pattern.compile(
-        "(?iu)\\s+(?:пішки|пішим\\s+маршрутом|пішохідним\\s+маршрутом)\\s*$");
+        "(?iu)(?:^|\\s+)(?:пішки|пішим\\s+маршрутом|пішохідним\\s+маршрутом)\\s*$");
 
     private JarvisWatchMapsCommands() {}
 
