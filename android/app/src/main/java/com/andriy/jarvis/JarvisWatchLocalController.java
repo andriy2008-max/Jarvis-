@@ -44,7 +44,14 @@ public final class JarvisWatchLocalController {
             callback.finished(ok,detail);
         };
         if(request.opensApp())launch(watch,request.app,done);
-        else handleScreen(watch,request.screen,done);
+        else if(request.playsSpotify()) {
+            JarvisWatchSpotifyController.play(watch,request.music,request.musicTitle,
+                (ok,detail)->{
+                    if(ok)watch.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
+                        .edit().putString(LAST_PACKAGE,"com.spotify.music").apply();
+                    done.finished(ok,detail);
+                });
+        } else handleScreen(watch,request.screen,done);
     }
 
     private static void launch(Context context,String name,Callback done) {
