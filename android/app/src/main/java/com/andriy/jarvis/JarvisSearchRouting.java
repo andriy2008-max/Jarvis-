@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
  */
 public final class JarvisSearchRouting {
     private static final Pattern WAKE = Pattern.compile(
-        "^(?:джарвіс|джарвис|jarvis)(?=$|[\\s,:—-])",
+        "^(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)(?=$|[\\s,:—-])",
         Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     private static final Pattern SEARCH = Pattern.compile(
         "^(?:знайди|пошукай|загугли|погугли|відшукай|знайти|пошук(?:ай)?)" +
