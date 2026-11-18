@@ -22,8 +22,10 @@ public final class JarvisWatchSpotifyController {
                             String title,JarvisWatchLocalController.Callback completion) {
         JarvisWatchSpotifyTrace.mark(context,"PLAY_ENTERED");
         if(kind!=SpotifyMusicCommands.Kind.TRACK &&
-           kind!=SpotifyMusicCommands.Kind.PLAYLIST) {
-            completion.finished(false,"На Watch7 підтримано пошук пісні або плейлиста.");
+           kind!=SpotifyMusicCommands.Kind.PLAYLIST &&
+           kind!=SpotifyMusicCommands.Kind.RAP &&
+           kind!=SpotifyMusicCommands.Kind.UKRAINIAN) {
+            completion.finished(false,"Команда Spotify не підтримується на Watch7.");
             return;
         }
         if(title==null || title.trim().isEmpty() || title.length()>75) {
@@ -147,8 +149,8 @@ public final class JarvisWatchSpotifyController {
                 case SUBMIT_QUERY:
                     return JarvisWatchScreenService.SpotifyStep.SELECT_RESULT;
                 case SELECT_RESULT:
-                    return kind==SpotifyMusicCommands.Kind.PLAYLIST
-                        ? JarvisWatchScreenService.SpotifyStep.PLAY_PLAYLIST:null;
+                    return kind==SpotifyMusicCommands.Kind.TRACK ? null :
+                        JarvisWatchScreenService.SpotifyStep.PLAY_PLAYLIST;
                 case PLAY_PLAYLIST:
                     return JarvisWatchScreenService.SpotifyStep.VERIFY_PLAYLIST;
                 default:return null;
@@ -160,7 +162,9 @@ public final class JarvisWatchSpotifyController {
             JarvisWatchScreenService.Result result;
             try {
                 result=JarvisWatchScreenService.spotifyStep(step,title,
-                    kind==SpotifyMusicCommands.Kind.PLAYLIST,(ok,detail)->{
+                    kind!=SpotifyMusicCommands.Kind.TRACK,
+                    kind==SpotifyMusicCommands.Kind.RAP ||
+                    kind==SpotifyMusicCommands.Kind.UKRAINIAN,(ok,detail)->{
                     if(finished)return;
                     if(!ok) {
                         done(false,"Wear OS скасувала натискання у Spotify.");
