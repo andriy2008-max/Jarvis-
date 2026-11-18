@@ -41,7 +41,7 @@ public final class JarvisBubbleLauncherActivity extends Activity {
     private void checkPermissionsAndOpen() {
         if (!Settings.canDrawOverlays(this)) {
             requestingOverlay = true;
-            Toast.makeText(this, "Дозволь Джарвісу показувати маленьке кругле вікно поверх інших програм.",
+            Toast.makeText(this, "Дозволь Дімону показувати маленьке кругле вікно поверх інших програм.",
                 Toast.LENGTH_LONG).show();
             try {
                 Intent permission = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
