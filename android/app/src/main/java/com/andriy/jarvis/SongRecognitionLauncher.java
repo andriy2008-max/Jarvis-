@@ -30,7 +30,7 @@ public final class SongRecognitionLauncher {
         if (context == null)
             return "Не можу відкрити Shazam без доступу до телефона.";
         if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_WATCH))
-            return "Shazam запускається на телефоні. Скажи «Шазам» Джарвісу на телефоні.";
+            return "Shazam запускається на телефоні. Скажи «Шазам» Дімону на телефоні.";
         if (pending != null)
             return "Shazam уже відкривається, очікую запуску розпізнавання.";
         Intent app = context.getPackageManager().getLaunchIntentForPackage(SHAZAM);
