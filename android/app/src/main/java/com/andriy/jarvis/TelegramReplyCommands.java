@@ -73,7 +73,7 @@ public final class TelegramReplyCommands {
     public static String dictatedCorrection(String raw) {
         if (raw==null)return null;
         String text=raw.trim()
-            .replaceFirst("(?iu)^(?:джарвіс|джарвис|jarvis)[,\\s:—-]*","");
+            .replaceFirst("(?iu)^(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[,\\s:—-]*","");
         if(text.isEmpty() || text.length()>1000 || text.contains("\n") ||
             text.contains("\r"))return null;
         return text.trim();
@@ -82,7 +82,7 @@ public final class TelegramReplyCommands {
     public static Request parse(String raw) {
         if(raw==null || raw.contains("\n") || raw.contains("\r"))return null;
         String input=raw.trim()
-            .replaceFirst("(?iu)^(?:джарвіс|джарвис|jarvis)[,\\s:—-]*","");
+            .replaceFirst("(?iu)^(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[,\\s:—-]*","");
         String shortForm=CommandPatterns.normalize(input);
         switch(shortForm){
             case "надішли в телеграм":case "надішли у телеграм":
