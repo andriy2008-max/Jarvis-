@@ -9,6 +9,7 @@ import android.widget.*;
 public final class JarvisDiagnosticsActivity extends Activity {
     private TextView text;
     private String report="";
+    private boolean loading;
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         LinearLayout body=new LinearLayout(this);body.setOrientation(LinearLayout.VERTICAL);
@@ -37,10 +38,12 @@ public final class JarvisDiagnosticsActivity extends Activity {
         Button b=new Button(this);b.setText(label);b.setOnClickListener(v->action.run());body.addView(b);
     }
     private void refresh() {
+        if(loading)return;
+        loading=true;
         // File and exit-history reads do not block the UI thread.
         new Thread(()->{
             String value=JarvisDiagnostics.report(getApplicationContext());
-            runOnUiThread(()->{if(!isDestroyed()){report=value;text.setText(value);}});
+            runOnUiThread(()->{loading=false;if(!isDestroyed()){report=value;text.setText(value);}});
         },"dimon-report").start();
     }
 }

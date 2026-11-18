@@ -60,6 +60,8 @@ public final class JarvisWearPhoneLink {
     // Async node lookups may finish after a higher-priority voice command.
     private long requestEpoch;
     private boolean closed;
+    private String lastReply;
+    String takeRecoveredReply() { String result=lastReply;lastReply=null;return result; }
     private String activeSession = "";
     private String pendingId;
     private String pendingNode;
@@ -481,6 +483,7 @@ public final class JarvisWearPhoneLink {
             clearPending();
             if(!JarvisWearProtocol.SYNC.equals(type))JarvisDiagnostics.event(
                 ok?JarvisDiagnostics.Event.PIXEL_DONE:JarvisDiagnostics.Event.PIXEL_ERROR);
+            if(!JarvisWearProtocol.SYNC.equals(type))lastReply=detail;
             if (cb != null) cb.finished(ok,detail);
         } catch (Exception ignored) { }
     }
@@ -500,6 +503,7 @@ public final class JarvisWearPhoneLink {
             JarvisPhoneMode.setActive(false);
         }
         if(!syncing)JarvisDiagnostics.event(JarvisDiagnostics.Event.PIXEL_ERROR);
+        if(!syncing)lastReply=reason;
         if (cb != null) cb.finished(false,reason);
     }
 

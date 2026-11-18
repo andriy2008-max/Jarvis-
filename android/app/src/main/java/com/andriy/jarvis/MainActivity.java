@@ -416,7 +416,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
         // launcher intent. There is no public Samsung double-pinch callback.
         watchLauncherVoicePending = isWatchLauncherIntent(getIntent());
         pendingLauncherMicrophone = state == null && isPhoneLauncherIntent(getIntent());
-        if (isWatchDevice) watchPhoneLink = new JarvisWearPhoneLink(this);
+        if (isWatchDevice) {
+            Object previous=getLastNonConfigurationInstance();
+            if(previous instanceof JarvisWearPhoneLink) {
+                watchPhoneLink=(JarvisWearPhoneLink)previous;
+                recoveringPhoneReply=true;
+            } else watchPhoneLink = new JarvisWearPhoneLink(this);
+        }
         isCompact = getResources().getConfiguration().smallestScreenWidthDp < 360;
         // Wrist motion control is explicitly opt-in on Wear OS. Existing
         // phone shake preference keeps its current default behavior.
@@ -449,7 +455,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         deviceActions = new DeviceActions(this);
 
         tts = new TextToSpeech(this, result -> {
-            if (result == TextToSpeech.SUCCESS && tts != null) {
+            if (!isDestroyed() && result == TextToSpeech.SUCCESS && tts != null) {
                 int supported = tts.setLanguage(Locale.forLanguageTag("uk-UA"));
                 if (supported == TextToSpeech.LANG_MISSING_DATA || supported == TextToSpeech.LANG_NOT_SUPPORTED) {
                     appendDialogue("Дімон", "Для озвучення встанови український голос TTS у налаштуваннях Android.");
@@ -629,16 +635,40 @@ public final class MainActivity extends Activity implements RecognitionListener 
         });
     }
 
+    private boolean recoveringPhoneReply;
+    private Runnable watchRecovery;
+    @Override public Object onRetainNonConfigurationInstance() {
+        return isWatchDevice?watchPhoneLink:null;
+    }
+    private void resumeWatchOperation() {
+        if(watchRecovery!=null)wakeHandler.removeCallbacks(watchRecovery);
+        watchRecovery=()->{
+            if(!foreground || isDestroyed())return;
+            boolean local=JarvisWatchLocalController.busy();
+            boolean remote=watchPhoneLink!=null && watchPhoneLink.busy();
+            if(!manualCapture && !listening)processing=local || remote;
+            String recovered=JarvisWatchLocalController.takeResult();
+            if(recoveringPhoneReply && !remote) {
+                recoveringPhoneReply=false;
+                String reply=watchPhoneLink==null?null:watchPhoneLink.takeRecoveredReply();
+                if(reply!=null)recovered=reply;
+            }
+            if(recovered!=null) {
+                appendDialogue("Дімон",recovered);setStatus(recovered);
+                if(face!=null)face.showTranscript(recovered,false,SystemClock.uptimeMillis()+8000L);
+            }
+            if(face!=null && !speaking && !manualCapture && !listening)
+                face.setState(processing?"thinking":"idle");
+            if(local || (recoveringPhoneReply && remote))wakeHandler.postDelayed(watchRecovery,300L);
+        };
+        wakeHandler.post(watchRecovery);
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
         foreground = true;
-        if(isWatchDevice) {
-            processing=JarvisWatchLocalController.busy() || (watchPhoneLink!=null && watchPhoneLink.busy());
-            String recovered=JarvisWatchLocalController.takeResult();
-            if(recovered!=null) { appendDialogue("Дімон",recovered); setStatus(recovered); }
-            if(face!=null && !speaking)face.setState(processing?"thinking":"idle");
-        }
+        if(isWatchDevice) resumeWatchOperation();
         if(isWatchDevice)
             android.util.Log.i("JARVIS_WATCH_LIFECYCLE",
                 "onResume; watch face remains active until user/system navigates away");
@@ -4802,8 +4832,13 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (diagnosticCommand != 0)
             JarvisDiagnostics.event(JarvisDiagnostics.Event.COMMAND_INTERRUPTED,diagnosticCommand);
         final long id=JarvisDiagnostics.beginCommand();
+        JarvisDiagnostics.event(isWatchDevice?JarvisDiagnostics.Event.SOURCE_WATCH:JarvisDiagnostics.Event.SOURCE_PIXEL);
+
         diagnosticCommand=id;
-        try { dispatchCommand(raw); }
+        try {
+            JarvisDiagnostics.event(JarvisDiagnostics.Event.COMMAND_TYPE,JarvisCommandMetadata.kind(raw).ordinal());
+            dispatchCommand(raw);
+        }
         catch (RuntimeException error) {
             JarvisDiagnostics.error(JarvisDiagnostics.Event.JAVA_EXCEPTION,error);
             processing=false;
@@ -5597,7 +5632,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         }
         if (headsetRoute != null) headsetRoute.end();
         JarvisPhoneMode.unsubscribe(phoneModeListener);
-        if (watchPhoneLink != null) watchPhoneLink.close();
+        if (watchPhoneLink != null && !isChangingConfigurations()) watchPhoneLink.close();
         JarvisLiveTranscript.setCorrectionHandler(TRANSCRIPT_OWNER, null);
         JarvisLiveTranscript.unsubscribe(transcriptListener);
         cancelPendingWakeCommand();

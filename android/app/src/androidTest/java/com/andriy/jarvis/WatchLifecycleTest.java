@@ -26,8 +26,8 @@ public final class WatchLifecycleTest {
         assertTrue("This test requires a Wear OS image",app.getPackageManager()
             .hasSystemFeature(PackageManager.FEATURE_WATCH));
         // Mutate test APK preferences only. Never installed production preferences.
-        app.getSharedPreferences("MainActivity",0).edit().putBoolean("voiceEnabled",false)
-            .putBoolean("watch_session_permission_asked",true).commit();
+        app.getSharedPreferences("com.andriy.jarvis.MainActivity",0).edit().putBoolean("voiceEnabled",false)
+            .putBoolean("watch_session_notification_permission_asked",true).commit();
         try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)) {
             String[] commands={"Увімкни пісню","заново","Відкрий Spotify",
                 "Дімон, увімкни пісню Пачка сигарет","Увімкни плейлист Test",
@@ -46,6 +46,32 @@ public final class WatchLifecycleTest {
             scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);
             scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED);
             scenario.onActivity(a->{assertFalse(a.isFinishing());assertFalse(a.isDestroyed());});
+        }
+    }
+    @Test public void repeatedRecognitionResultsDispatchOnlyOnce() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)) {
+            scenario.onActivity(a->{
+                try {
+                    Field voice=MainActivity.class.getDeclaredField("voiceEnabled");voice.setAccessible(true);voice.set(a,false);
+                    Field rec=MainActivity.class.getDeclaredField("recognizer");rec.setAccessible(true);
+                    android.speech.SpeechRecognizer real=(android.speech.SpeechRecognizer)rec.get(a);
+                    if(real!=null)real.destroy();rec.set(a,null);
+                    Method listener=MainActivity.class.getDeclaredMethod("ownedRecognizerListener",android.speech.SpeechRecognizer.class);
+                    listener.setAccessible(true);
+                    Field counter=JarvisDiagnostics.class.getDeclaredField("commandId");counter.setAccessible(true);
+                    long before=counter.getLong(null);
+                    for(int i=0;i<20;i++) {
+                        for(String field:new String[]{"manualCapture","manualStopRequested","foreground"}) {
+                            Field f=MainActivity.class.getDeclaredField(field);f.setAccessible(true);f.set(a,true);
+                        }
+                        android.speech.RecognitionListener owned=(android.speech.RecognitionListener)listener.invoke(a,new Object[]{null});
+                        Bundle result=new Bundle();java.util.ArrayList<String> words=new java.util.ArrayList<>();
+                        words.add("Скажи перевірка "+i);result.putStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION,words);
+                        owned.onResults(result);owned.onResults(result);owned.onError(7);
+                    }
+                    assertEquals("One command per final result, duplicate terminal callbacks ignored",20,counter.getLong(null)-before);
+                } catch(Exception e) {throw new AssertionError(e);}
+            });
         }
     }
     @Test public void reportExcludesExceptionSecrets() throws Exception {

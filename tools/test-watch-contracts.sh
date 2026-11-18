@@ -152,3 +152,5 @@ java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.UkrainianVoiceTextTest
 
 javac -encoding UTF-8 -d /tmp/jarvis-voice-tests android/app/src/main/java/com/andriy/jarvis/JarvisCallbackGate.java android/app/src/test/java/com/andriy/jarvis/JarvisCallbackGateTest.java
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisCallbackGateTest
+javac -encoding UTF-8 -cp /tmp/jarvis-voice-tests -d /tmp/jarvis-voice-tests android/app/src/main/java/com/andriy/jarvis/JarvisCommandMetadata.java android/app/src/main/java/com/andriy/jarvis/JarvisRecentRequests.java android/app/src/test/java/com/andriy/jarvis/JarvisRecentRequestsTest.java
+java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisRecentRequestsTest

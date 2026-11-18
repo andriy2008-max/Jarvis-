@@ -14,7 +14,7 @@ import java.util.concurrent.*;
 public final class JarvisDiagnostics {
     public enum Event { PROCESS_START, CREATE, START, RESUME, PAUSE, STOP, DESTROY,
         NEW_INTENT, CONFIG_CHANGE, USER_FINISH, LOW_MEMORY, TRIM_MEMORY,
-        COMMAND_BEGIN, COMMAND_END, COMMAND_TIMEOUT, COMMAND_INTERRUPTED,
+        COMMAND_TYPE, SOURCE_WATCH, SOURCE_PIXEL, COMMAND_BEGIN, COMMAND_END, COMMAND_TIMEOUT, COMMAND_INTERRUPTED,
         WATCH_ROUTE, PIXEL_ROUTE, MIC_START, MIC_READY, MIC_END, MIC_RESULT, MIC_ERROR,
         MIC_CANCEL, TTS_START, TTS_END, TTS_ERROR, EXTERNAL_LAUNCH,
         LOCAL_DONE, LOCAL_ERROR, PIXEL_DONE, PIXEL_ERROR, ACCESSIBILITY_ERROR,
@@ -115,7 +115,7 @@ public final class JarvisDiagnostics {
                 byte[] summary=e.getProcessStateSummary();
                 if(summary!=null) {
                     String s=new String(summary,StandardCharsets.UTF_8);
-                    if(s.matches("[0-9]+ [0-9]+ [A-Z_]+ [0-9]+")) b.append("last=").append(s).append("\n");
+                    if(s.matches("[0-9]+ [0-9]+ [A-Z_]+ -?[0-9]+")) b.append("last=").append(s).append("\n");
                 }
             }
             if(!any)b.append("Android не надав записів після очищення. Це не доказ відсутності збою.\n");

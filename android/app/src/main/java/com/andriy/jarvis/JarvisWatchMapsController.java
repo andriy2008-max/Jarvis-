@@ -46,6 +46,7 @@ public final class JarvisWatchMapsController {
         final long deadline=SystemClock.elapsedRealtime()+MAX_MS;
         long stageSince=SystemClock.elapsedRealtime();
         boolean finished;
+        final JarvisCallbackGate steps=new JarvisCallbackGate();
 
         Session(Context app,JarvisWatchMapsCommands.Request req,
                 JarvisWatchLocalController.Callback callback) {
@@ -59,6 +60,7 @@ public final class JarvisWatchMapsController {
         void done(boolean ok,String message) {
             if(finished || !completion.active())return;
             finished=true;
+            steps.cancel();
             progressFinal(message);
             completion.finished(ok,message);
         }
@@ -127,17 +129,19 @@ public final class JarvisWatchMapsController {
             if(now-stageSince>=12500L) {
                 openWalkingIntent();return;
             }
+            final long token=steps.begin();
             JarvisWatchScreenService.MapsStep next=next(current);
             JarvisWatchScreenService.Result r=JarvisWatchScreenService.mapsStep(
                 current,request.destination,(ok,detail)->{
-                    if(finished || !completion.active())return;
+                    if(finished || !completion.active() || !steps.finish(token))return;
                     if(!ok) {openWalkingIntent();return;}
                     advance(current,next);
                 });
             switch(r) {
-                case DONE:advance(current,next);return;
+                case DONE:if(steps.finish(token))advance(current,next);return;
                 case RUNNING:return;
                 case WAIT:
+                    steps.finish(token);
                     MAIN.postDelayed(()->step(current),2000L);
                     return;
                 case BLOCKED:
