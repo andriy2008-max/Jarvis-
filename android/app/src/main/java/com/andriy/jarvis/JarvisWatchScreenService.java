@@ -118,7 +118,8 @@ public final class JarvisWatchScreenService extends AccessibilityService {
     }
     private static final String SPOTIFY_PKG="com.spotify.music";
 
-    public static Result spotifyStep(SpotifyStep step,String title,Completion completion) {
+    public static Result spotifyStep(SpotifyStep step,String title,
+                                     boolean playlist,Completion completion) {
         JarvisWatchScreenService service=connected.get();
         if(service==null || step==null || completion==null)return Result.BLOCKED;
         AccessibilityNodeInfo root=service.appRoot(SPOTIFY_PKG);
@@ -137,7 +138,7 @@ public final class JarvisWatchScreenService extends AccessibilityService {
             case SUBMIT_QUERY:
                 return service.spotifySubmitQuery(root);
             case SELECT_RESULT:
-                return service.spotifySelectResult(root,title,completion);
+                return service.spotifySelectResult(root,title,playlist,completion);
             case PLAY_PLAYLIST:
                 // The mini-player can say Pause for an unrelated song.
                 // Prefer the playlist's actual Play action if it is visible.
@@ -307,22 +308,41 @@ public final class JarvisWatchScreenService extends AccessibilityService {
                label.startsWith(wanted+" плейліст");
     }
 
-    private Result spotifySelectResult(AccessibilityNodeInfo root,String title,Completion cb) {
+    private Result spotifySelectResult(AccessibilityNodeInfo root,String title,
+                                       boolean playlist,Completion cb) {
         if(title==null || title.trim().isEmpty())return Result.BLOCKED;
         String wanted=AppNameMatcher.normalize(title);
         AccessibilityNodeInfo selected=null;
         Rect bestBounds=null;
+        int bestRank=Integer.MAX_VALUE;
         for(AccessibilityNodeInfo n:spotifyNodes(root)) {
             if(n.isEditable())continue; // Never tap the search input as a result.
             if(!spotifyTitleMatches(spotifyLabel(n),wanted) &&
                !spotifyTitleMatches(spotifyDescription(n),wanted))continue;
             Rect b=new Rect();n.getBoundsInScreen(b);
             if(b.width()<6 || b.height()<6)continue;
-            if(bestBounds==null || b.top<bestBounds.top) {
-                selected=n;bestBounds=b;
+            // Spotify sometimes returns both songs and similarly named
+            // playlists. Prefer the requested result type if metadata is
+            // accessible; otherwise use the first visible exact title.
+            String metadata=spotifyLabel(n)+" "+spotifyDescription(n);
+            AccessibilityNodeInfo parent=n.getParent();
+            if(parent!=null)metadata+=" "+spotifyDescription(parent);
+            boolean playlistType=metadata.contains("playlist") ||
+                metadata.contains("плейлист") || metadata.contains("плейліст");
+            boolean songType=metadata.contains("song") ||
+                metadata.contains("пісня") || metadata.contains("песня") ||
+                metadata.contains("track") || metadata.contains("трек");
+            int rank=(playlist?playlistType:songType)?0:
+                (playlist?songType:playlistType)?2:1;
+            if(bestBounds==null || rank<bestRank ||
+               (rank==bestRank && b.top<bestBounds.top)) {
+                selected=n;bestBounds=b;bestRank=rank;
             }
         }
-        return selected==null?Result.WAIT:spotifyTapNode(selected,cb);
+        // A clearly wrong category should not be selected just because
+        // its title is identical. Wait for a matching category to load.
+        return selected==null || bestRank==2?
+            Result.WAIT:spotifyTapNode(selected,cb);
     }
 
     private Result spotifyTapPlay(AccessibilityNodeInfo root,Completion cb) {
