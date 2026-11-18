@@ -128,8 +128,9 @@ public final class JarvisWatchSpotifyController {
 
         private void perform(JarvisWatchScreenService.SpotifyStep step,
                              JarvisWatchScreenService.SpotifyStep next) {
-            JarvisWatchScreenService.Result result=
-                JarvisWatchScreenService.spotifyStep(step,title,
+            JarvisWatchScreenService.Result result;
+            try {
+                result=JarvisWatchScreenService.spotifyStep(step,title,
                     kind==SpotifyMusicCommands.Kind.PLAYLIST,(ok,detail)->{
                     if(finished)return;
                     if(!ok) {
@@ -138,6 +139,16 @@ public final class JarvisWatchSpotifyController {
                     }
                     advance(step,next);
                 });
+            } catch(RuntimeException failure) {
+                // Some Wear OS versions invalidate accessibility nodes during
+                // rapid Spotify/IME window transitions. Report a controlled
+                // failure instead of crashing the watch's assistant process.
+                android.util.Log.e("DIMON_WATCH_SPOTIFY",
+                    "Failed Spotify stage "+step,failure);
+                done(false,"Spotify змінив екран під час пошуку. "+
+                    "Дімон залишився активним; спробуй ще раз.");
+                return;
+            }
             switch(result) {
                 case DONE:
                     advance(step,next);
