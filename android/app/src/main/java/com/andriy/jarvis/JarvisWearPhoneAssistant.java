@@ -183,7 +183,7 @@ public final class JarvisWearPhoneAssistant {
                 completion.finished(JarvisControlFeedback.successfulReply(answer),answer);
             } catch (RuntimeException error) {
                 completion.finished(false,
-                    "Android не дозволив системну дію. Перевір дозволи Джарвіса на телефоні.");
+                    "Android не дозволив системну дію. Перевір дозволи Дімона на телефоні.");
             }
             return;
         }
@@ -248,7 +248,7 @@ public final class JarvisWearPhoneAssistant {
             completion.finished(true,
                 "Говори з ШІ телефона. Можу керувати застосунками, Spotify, " +
                 "Shazam, Bolt, Telegram, нотатками, таймером і витратами в " +
-                "«Менеджері фінансів». Для екранних дій увімкни «Джарвіс — " +
+                "«Менеджері фінансів». Для екранних дій увімкни «Дімон — " +
                 "керування екраном» на телефоні.");
             return;
         }
@@ -279,7 +279,7 @@ public final class JarvisWearPhoneAssistant {
             normalized.startsWith("намалюй ") ||
             normalized.startsWith("зроби картинку ")) {
             completion.finished(false,
-                "Зображення, фото й документи відкривай через ШІ Джарвіса " +
+                "Зображення, фото й документи відкривай через ШІ Дімона " +
                 "на телефоні. Годинник зараз отримує текстові відповіді.");
             return;
         }
@@ -332,7 +332,7 @@ public final class JarvisWearPhoneAssistant {
         if (ai == null) ai = new AiChatClient(phone);
         if (!ai.isConfigured()) {
             completion.finished(false,
-                "Налаштуй ШІ один раз на телефоні: Джарвіс → «ШІ — підключення». " +
+                "Налаштуй ШІ один раз на телефоні: Дімон → «ШІ — підключення». " +
                 "На годиннику ключі вводити не потрібно.");
             return;
         }
@@ -418,7 +418,7 @@ public final class JarvisWearPhoneAssistant {
             prefs.edit().putString("notes",left.toString()).apply();
             return "Видалив останню нотатку: " + deleted;
         } catch (JSONException problem) {
-            return "Не зміг прочитати нотатки телефона. Відкрий Джарвіса для перевірки.";
+            return "Не зміг прочитати нотатки телефона. Відкрий Дімона для перевірки.";
         }
     }
 
@@ -436,7 +436,7 @@ public final class JarvisWearPhoneAssistant {
         boolean boltInstalled = installed(phone,"ee.mtakso.client");
         boolean shazamInstalled = installed(phone,"com.shazam.android");
         boolean screenAllowed = ScreenControlAccessibilityService.isConnected();
-        return "Підключення Джарвіса на телефоні:\n" +
+        return "Підключення Дімона на телефоні:\n" +
             "ШІ: " + (aiReady ? "налаштовано" : "потрібен сервер і код") + ".\n" +
             "Telegram: " + (telegramAuthorized ? "авторизовано" :
                 telegramKeySaved ? "API збережено, вхід не підтверджено" :
