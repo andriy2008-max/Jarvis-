@@ -4730,6 +4730,31 @@ public final class MainActivity extends Activity implements RecognitionListener 
         })) return;
         JarvisPhoneMode.Transition modeTransition = JarvisPhoneMode.transition(raw);
         if (isWatchDevice) {
+            // Only an EXPLICIT "на годиннику" target runs locally.
+            // A rejected local request never falls back to Pixel/phone AI.
+            if (JarvisWatchLocalCommands.targetsWatch(raw)) {
+                JarvisWatchLocalCommands.Request local=
+                    JarvisWatchLocalCommands.parse(raw);
+                if (local==null) {
+                    String message="Небезпечна або невідома дія на годиннику. "+
+                        "Назви програму чи видиму кнопку.";
+                    appendDialogue("Джарвіс",message);
+                    setStatus(message);
+                    if(voiceEnabled)speakReply(message);
+                    return;
+                }
+                processing=true;
+                setStatus("Виконую команду на Watch7...");
+                JarvisWatchLocalController.execute(this,local,(ok,message)->{
+                    processing=false;
+                    if(isFinishing() || isDestroyed())return;
+                    appendDialogue("Джарвіс",message);
+                    setStatus(message);
+                    if(!local.opensApp() && voiceEnabled)speakReply(message);
+                    else if(face!=null)face.setState("idle");
+                });
+                return;
+            }
             // Say is a LOCAL spoken-output command on Watch7. It must never
             // be sent to phone AI, screen mode or a conversational request.
             // Preserve exact case and punctuation in the dictated phrase.
