@@ -33,7 +33,7 @@ public final class JarvisPhoneMode {
             normalized.equals("джарвис телефон") ||
             normalized.equals("jarvis phone")) return Transition.ENTER;
         // Four voice aliases for returning to the normal watch face:
-        // «Годинник», «Джарвіс», «Jarvis», «Джарвис».
+        // «Годинник», «Дімон», «Jarvis», «Джарвис».
         if (normalized.equals("годинник") ||
             normalized.equals("дімон") || normalized.equals("димон") ||
             normalized.equals("dimon") ||
