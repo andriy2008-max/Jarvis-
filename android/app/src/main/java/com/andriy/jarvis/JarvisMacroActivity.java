@@ -46,7 +46,7 @@ public final class JarvisMacroActivity extends Activity {
         "voice", "time", "charger_on", "charger_off"
     };
     private static final String[] ACTIONS = {
-        "Команда керування Джарвіса", "Пауза (мілісекунди)",
+        "Команда керування Дімона", "Пауза (мілісекунди)",
         "Пауза (секунди)",
         "Сповіщення", "Вібрація (мілісекунди)", "Root shell (su -c)",
         "Відкрити застосунок", "Чекати відкриття застосунку",
@@ -227,7 +227,7 @@ public final class JarvisMacroActivity extends Activity {
         editing = null;
         name = null;
         screen("⚙ Макроси");
-        root.addView(button("← Джарвіс", this::finish));
+        root.addView(button("← Дімон", this::finish));
         root.addView(button("＋ Створити макрос", () -> edit(null)));
         root.addView(label("Макроси зберігаються тільки на цьому пристрої.", 13, false));
         macroStatus=label(JarvisMacros.isRunning()?
@@ -603,7 +603,7 @@ public final class JarvisMacroActivity extends Activity {
             +"Відкрий програму → Дочекайся програми → Дочекайся кнопки "
             +"«Пошук» → Натисни «Пошук» → Дочекайся поля → Напиши текст → Пауза. "
             +"Натискання за назвою надійніше; X,Y (%) — запасний варіант. "
-            +"Для екранних дій увімкни спеціальні можливості Джарвіса. "
+            +"Для екранних дій увімкни спеціальні можливості Дімона. "
             +"Кнопка 🎯 дає вибрати точку на справжньому екрані.",
             13,false));
         actionList = new LinearLayout(this);
@@ -646,14 +646,14 @@ public final class JarvisMacroActivity extends Activity {
         ssid = field(root,"Підключений Wi-Fi (точний SSID)","HomeWiFi",c.optString("ssid"));
         root.addView(label("Умова «Якщо відкрита певна програма» перевіряє "+
             "саме програму на передньому плані. Потрібно увімкнути "+
-            "«Джарвіс — керування екраном» у Спеціальних можливостях. "+
+            "«Дімон — керування екраном» у Спеціальних можливостях. "+
             "Якщо стан невідомий, макрос не виконається.",13,false));
         foregroundApp = field(root,"Якщо відкрита програма (пакет Android)",
             "Обери програму зі списку або введи com.spotify.music",
             c.optString("foregroundApp"));
         root.addView(button("📱 Вибрати встановлену програму",this::selectForegroundApp));
         root.addView(label("Залиш це поле порожнім, щоб не обмежувати макрос програмою. "+
-            "Для перевірки використай плаваюче обличчя Джарвіса поверх потрібної програми.",
+            "Для перевірки використай плаваюче обличчя Дімона поверх потрібної програми.",
             12,false));
         root.addView(label("Геозона: використовує останню геопозицію до 10 хв. "
             +"Без дозволу геолокації макрос не виконається.",13,false));
