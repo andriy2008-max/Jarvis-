@@ -52,14 +52,14 @@ public final class TimerAlertService extends Service {
         NotificationManager nm = notifications(c);
         if (nm == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         NotificationChannel service = new NotificationChannel(CHANNEL,
-            "Джарвіс — сигнал таймера", NotificationManager.IMPORTANCE_HIGH);
+            "Дімон — сигнал таймера", NotificationManager.IMPORTANCE_HIGH);
         service.setDescription("Звуковий сигнал відтворюється через гучність дзвінка");
         service.setSound(null, null); // MediaPlayer supplies ring-channel sound, not a double beep.
         service.enableVibration(false);
         nm.createNotificationChannel(service);
 
         NotificationChannel backup = new NotificationChannel(FALLBACK_CHANNEL,
-            "Джарвіс — резервне сповіщення таймера", NotificationManager.IMPORTANCE_HIGH);
+            "Дімон — резервне сповіщення таймера", NotificationManager.IMPORTANCE_HIGH);
         backup.enableVibration(true);
         backup.setVibrationPattern(new long[]{0L, 1000L, 250L, 1000L, 300L, 1200L});
         Uri ring = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
@@ -81,7 +81,7 @@ public final class TimerAlertService extends Service {
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Builder(c, channel)
             .setSmallIcon(R.drawable.ic_launcher)
-            .setContentTitle("Джарвіс — час вийшов!")
+            .setContentTitle("Дімон — час вийшов!")
             .setContentText("Таймер завершено")
             .setCategory(Notification.CATEGORY_ALARM)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
