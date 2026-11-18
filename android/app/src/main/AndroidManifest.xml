@@ -164,11 +164,11 @@
         </receiver>
         <!-- Explicitly opt-in UI navigation, enabled only by the user in Android settings. -->
         <!-- Optional watch-only local UI service; Android enables it
-             only for the watch resource configuration. User must turn it on
+             on watch devices; runtime service disables itself on phones. User must turn it on
              under Watch Settings > Accessibility > Installed apps. -->
         <service
             android:name=".JarvisWatchScreenService"
-            android:enabled="@bool/watch_local_screen_available"
+            android:enabled="true"
             android:exported="true"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:label="Дімон — екран годинника">
