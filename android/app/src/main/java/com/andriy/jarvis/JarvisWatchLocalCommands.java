@@ -13,12 +13,20 @@ public final class JarvisWatchLocalCommands {
         public final ScreenControlCommands.Action screen;
         public final SpotifyMusicCommands.Kind music;
         public final String musicTitle;
+        public final JarvisWatchMapsCommands.Request maps;
         private Request(String app,ScreenControlCommands.Action screen,
                         SpotifyMusicCommands.Kind music,String musicTitle) {
+            this(app,screen,music,musicTitle,null);
+        }
+        private Request(String app,ScreenControlCommands.Action screen,
+                        SpotifyMusicCommands.Kind music,String musicTitle,
+                        JarvisWatchMapsCommands.Request mapsRequest) {
             this.app=app;this.screen=screen;this.music=music;this.musicTitle=musicTitle;
+            this.maps=mapsRequest;
         }
         public boolean opensApp() { return app!=null; }
         public boolean playsSpotify() { return music!=null; }
+        public boolean usesMaps() { return maps!=null; }
     }
 
     private static final Pattern WAKE=Pattern.compile(
@@ -53,6 +61,13 @@ public final class JarvisWatchLocalCommands {
         return null;
     }
 
+    /** Location and directions uttered into the Watch app use Watch7 Maps. */
+    public static Request mapsOnWatch(String raw) {
+        if(raw==null || raw.length()>450 || targetsWatch(raw))return null;
+        JarvisWatchMapsCommands.Request maps=JarvisWatchMapsCommands.parse(raw);
+        return maps==null?null:new Request(null,null,null,null,maps);
+    }
+
     public static Request parse(String raw) {
         if(raw==null || raw.length()>450)return null;
         String source=raw.trim();
@@ -62,6 +77,8 @@ public final class JarvisWatchLocalCommands {
             .replaceFirst("").trim();
         if(local.isEmpty())return null;
         // For a watch-targeted command the suffix was already removed.
+        Request mapsRequest=mapsOnWatch(local);
+        if(mapsRequest!=null)return mapsRequest;
         Request musicRequest=spotifyOnWatch(local);
         if(musicRequest!=null)return musicRequest;
         String name=AssistantIntents.requestedApp(
