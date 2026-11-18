@@ -33,7 +33,7 @@ public final class TelegramReplySettingsActivity extends Activity {
         add(layout,"💬 Telegram API · твій акаунт",23);
         add(layout,"Підключення через Telegram TDLib (MTProto): без бота, "+
             "без сповіщень і без керування чужим екраном. "+
-            "Джарвіс працює від твого особистого акаунта.",15);
+            "Дімон працює від твого особистого акаунта.",15);
 
         add(layout,"1. Відкрий my.telegram.org → API development tools. "+
             "Створи API-застосунок, скопіюй api_id і api_hash. "+
@@ -109,8 +109,8 @@ public final class TelegramReplySettingsActivity extends Activity {
         status=add(layout,"",16);
         layout.addView(button("Перевірити Telegram API",this::refresh));
         add(layout,"Голосом:\n"+
-            "«Джарвіс, напиши в Telegram Олена Буду через десять хвилин»\n"+
-            "Джарвіс визначить контакт за назвою особистого чату та підготує чернетку.\n"+
+            "«Дімон, напиши в Telegram Олена Буду через десять хвилин»\n"+
+            "Дімон визначить контакт за назвою особистого чату та підготує чернетку.\n"+
             "Для відправлення окремо скажи «Надішли в телеграм».\n"+
             "«Скасуй відповідь» — нічого не відправляє.",15);
         add(layout,"Це Telegram API, а не бот. Доступ до сповіщень не потрібен. "+
