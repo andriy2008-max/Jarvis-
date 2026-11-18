@@ -90,8 +90,7 @@ public final class JarvisWatchLocalCommands {
         String normalized=CommandPatterns.normalize(local);
         return SpotifyMusicCommands.parse(local)!=null ||
             normalized.matches("(?iu)^(?:скасуй|зупини|пауза|продовж|віднови)\\s+(?:spotify|спотіфай|спотифай)$") ||
-            normalized.matches("(?iu)^(?:відкрий|відкрити|запусти|закрий|зайди.*)\\s+(?:spotify|спотіфай|спотифай)$") ||
-            normalized.matches("(?iu)^.*\\b(?:spotify|спотіфай|спотифай)\\b.*$");
+            normalized.matches("(?iu)^(?:відкрий|відкрити|запусти|закрий|зайди.*)\\s+(?:spotify|спотіфай|спотифай)$");
     }
 
     /** Location and directions uttered into the Watch app use Watch7 Maps. */
