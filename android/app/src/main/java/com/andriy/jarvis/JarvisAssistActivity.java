@@ -35,7 +35,7 @@ public final class JarvisAssistActivity extends Activity {
         }
         KeyguardManager keyguard = getSystemService(KeyguardManager.class);
         if (keyguard != null && keyguard.isKeyguardLocked()) {
-            Toast.makeText(this, "Розблокуй телефон для голосової команди Джарвіса.",
+            Toast.makeText(this, "Розблокуй телефон для голосової команди Дімона.",
                 Toast.LENGTH_SHORT).show();
             finish();
             return;
@@ -48,7 +48,7 @@ public final class JarvisAssistActivity extends Activity {
             startActivity(open);
         } catch (RuntimeException error) {
             Toast.makeText(this,
-                "Не вдалося запустити Джарвіса. Перевір доступ до мікрофона.",
+                "Не вдалося запустити Дімона. Перевір доступ до мікрофона.",
                 Toast.LENGTH_LONG).show();
         }
         finish();
