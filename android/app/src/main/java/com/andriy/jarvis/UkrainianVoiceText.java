@@ -34,6 +34,8 @@ public final class UkrainianVoiceText {
     };
     static {
         COMMON_STRESS.put("привіт", "прив+іт");
+        COMMON_STRESS.put("дімон", "дім+он");
+        COMMON_STRESS.put("димон", "дим+он");
         COMMON_STRESS.put("джарвіс", "дж+арвіс");
         COMMON_STRESS.put("дмитро", "дмитр+о");
         COMMON_STRESS.put("лада", "л+ада");
