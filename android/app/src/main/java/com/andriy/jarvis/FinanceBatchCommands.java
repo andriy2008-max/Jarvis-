@@ -10,12 +10,12 @@ public final class FinanceBatchCommands {
     public static boolean looksLikeBatch(String speech){
         if(speech==null)return false;
         return speech.trim().toLowerCase(Locale.forLanguageTag("uk-UA"))
-            .matches("^(?:(?:джарвіс|джарвис|jarvis)[,\\s:-]*)?(?:запиши|додай|занеси)\\s+витрати\\s+.*");
+            .matches("^(?:(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[,\\s:-]*)?(?:запиши|додай|занеси)\\s+витрати\\s+.*");
     }
     public static List<FinanceVoiceCommands.Entry> parse(String speech){
         if(speech==null||speech.length()>350||!looksLikeBatch(speech))return null;
         String s=speech.trim().toLowerCase(Locale.forLanguageTag("uk-UA"))
-            .replaceFirst("^(?:(?:джарвіс|джарвис|jarvis)[,\\s:-]*)?(?:запиши|додай|занеси)\\s+витрати\\s+","")
+            .replaceFirst("^(?:(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[,\\s:-]*)?(?:запиши|додай|занеси)\\s+витрати\\s+","")
             .replaceAll("[.!?]+$","").trim();
         String suffix="";
         if(s.endsWith(" позавчора"))suffix=" позавчора";
