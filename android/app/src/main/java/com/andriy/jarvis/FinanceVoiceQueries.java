@@ -12,7 +12,7 @@ public final class FinanceVoiceQueries {
         String expanded=FinanceSlashCommands.expand(voice);
         if(expanded==null)return "";
         return expanded.toLowerCase(Locale.forLanguageTag("uk-UA")).trim()
-            .replaceFirst("^(?:джарвіс|джарвис|jarvis)[,\\s:–—-]*","")
+            .replaceFirst("^(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[,\\s:–—-]*","")
             .replaceAll("[?.!]+$","").trim();
     }
     public static boolean open(String voice){
