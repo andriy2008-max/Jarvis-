@@ -14,7 +14,9 @@ public final class JarvisWatchUiRules {
     /** ACTION_SET_TEXT returning true is not evidence that text was inserted. */
     public static boolean spotifyQueryVisible(String expected,String actual) {
         if(expected==null || expected.trim().isEmpty() || actual==null)return false;
-        return AppNameMatcher.normalize(expected).equals(AppNameMatcher.normalize(actual));
+        return expected.trim().toLowerCase(java.util.Locale.ROOT)
+            .replaceAll("\\s+"," ").equals(actual.trim()
+                .toLowerCase(java.util.Locale.ROOT).replaceAll("\\s+"," "));
     }
 
     /** An unlabelled map icon may only be clicked when all four tiles and
