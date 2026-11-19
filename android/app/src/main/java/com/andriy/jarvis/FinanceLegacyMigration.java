@@ -34,6 +34,20 @@ public final class FinanceLegacyMigration {
             legacy=android.database.sqlite.SQLiteDatabase.openDatabase(old.getPath(),null,
                 android.database.sqlite.SQLiteDatabase.OPEN_READONLY);
             SQLiteDatabase encrypted=target.getWritableDatabase();
+            // Never overwrite real data already present in the secure ledger.
+            // Earlier WIP versions deleted target rows before importing the
+            // old plaintext file, which could destroy finance records after
+            // an interrupted migration or an in-place upgrade.
+            for(String table:TABLES) {
+                try(Cursor rows=encrypted.rawQuery(
+                    "SELECT 1 FROM "+table+" LIMIT 1",null)) {
+                    if(rows.moveToFirst())
+                        throw new IllegalStateException(
+                            "Захищений фінансовий журнал уже містить дані. "+
+                            "Автоматичне перезаписування заборонене; "+
+                            "збережи обидві бази для безпечного відновлення.");
+                }
+            }
             encrypted.beginTransaction();
             try{
                 for(int n=TABLES.length-1;n>=0;n--){
