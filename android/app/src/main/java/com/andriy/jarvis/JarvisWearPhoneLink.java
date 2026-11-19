@@ -445,6 +445,9 @@ public final class JarvisWearPhoneLink {
             pendingId == null || pendingNode == null ||
             !pendingNode.equals(event.getSourceNodeId())) return;
         if (event.getData() == null || event.getData().length > JarvisWearProtocol.MAX_BYTES) return;
+        // Keep the in-flight ID for error handling. A malformed ACK from the
+        // paired phone must not hold the watch's command channel until timeout.
+        final String expectedId = pendingId;
         try {
             JSONObject data = new JSONObject(new String(event.getData(),StandardCharsets.UTF_8));
             if (!pendingId.equals(data.optString("id"))) return;
@@ -489,7 +492,14 @@ public final class JarvisWearPhoneLink {
                 ok?JarvisDiagnostics.Event.PIXEL_DONE:JarvisDiagnostics.Event.PIXEL_ERROR);
             if(!JarvisWearProtocol.SYNC.equals(type))lastReply=detail;
             if (cb != null) cb.finished(ok,detail);
-        } catch (Exception ignored) { }
+        } catch (Exception error) {
+            // Diagnostic journal records only local exception class / stack
+            // locations; it must never contain reply payload or exception text.
+            JarvisDiagnostics.error(JarvisDiagnostics.Event.JAVA_EXCEPTION,error);
+            // Do not accidentally fail a newer command if a callback sent one.
+            if (expectedId.equals(pendingId))
+                failPending("Телефон повернув некоректну відповідь. Повтори команду.");
+        }
     }
 
     private void failPending(String reason) {
