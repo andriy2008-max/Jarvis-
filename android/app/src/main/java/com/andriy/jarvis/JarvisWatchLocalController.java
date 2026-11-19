@@ -16,12 +16,16 @@ import java.util.List;
  * A new explicit utterance is required for every click, swipe or text insert.
  */
 public final class JarvisWatchLocalController {
-    public interface Callback { void finished(boolean ok,String detail); }
+    public interface Callback { void finished(boolean ok,String detail); default boolean active() { return true; } }
     private static final String PREFS="jarvis_watch_local";
     private static final String LAST_PACKAGE="last_app_pkg";
     private static final long UI_TIMEOUT_MS=14000L;
     private static final Handler MAIN=new Handler(Looper.getMainLooper());
     private static boolean running;
+    private static final JarvisCallbackGate GATE=new JarvisCallbackGate();
+    private static String lastResult;
+    public static boolean busy() { return running; }
+    static String takeResult() { String value=lastResult; lastResult=null; return value; }
 
     private JarvisWatchLocalController() {}
 
@@ -37,35 +41,40 @@ public final class JarvisWatchLocalController {
             return;
         }
         running=true;
+        lastResult=null;
+        final long token=GATE.begin();
         Context watch=context.getApplicationContext();
-        Callback done=(ok,detail)->{
-            if(!running)return;
-            running=false;
-            callback.finished(ok,detail);
+        JarvisDiagnostics.event(JarvisDiagnostics.Event.WATCH_ROUTE,
+            request.playsSpotify()?1:request.usesMaps()?2:request.opensApp()?3:4);
+        Callback done=new Callback() {
+            public boolean active() { return GATE.active(token); }
+            public void finished(boolean ok,String detail) {
+                if(!GATE.finish(token))return;
+                running=false;
+                lastResult=detail;
+                JarvisDiagnostics.event(ok?JarvisDiagnostics.Event.LOCAL_DONE:JarvisDiagnostics.Event.LOCAL_ERROR);
+                callback.finished(ok,detail);
+            }
         };
+        MAIN.postDelayed(()->{
+            if(done.active()) {
+                JarvisDiagnostics.event(JarvisDiagnostics.Event.COMMAND_TIMEOUT);
+                done.finished(false,"Час виконання на годиннику минув. Повтори команду після повернення до Дімона.");
+            }
+        },65000L);
+        if(request.usesMaps() || request.playsSpotify())
+            watch.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().putString(LAST_PACKAGE,
+                request.usesMaps()?JarvisWatchMapsController.MAPS_PACKAGE:"com.spotify.music").apply();
         try {
         if(request.opensApp())launch(context,request.app,done);
         else if(request.usesMaps()) {
-            JarvisWatchMapsController.execute(watch,request.maps,
-                (ok,detail)->{
-                    if(ok)watch.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
-                        .edit().putString(LAST_PACKAGE,
-                            JarvisWatchMapsController.MAPS_PACKAGE).apply();
-                    done.finished(ok,detail);
-                });
+            JarvisWatchMapsController.execute(context,request.maps,done);
         }
         else if(request.playsSpotify()) {
-            // Every Spotify intent spoken in the Watch Activity stays local.
-            // Genres use on-watch Spotify playlist search (not Pixel library).
-            // Launch from the Activity to avoid Wear OS background-start limits.
-            JarvisWatchSpotifyController.play(context,request.music,request.musicTitle,
-                (ok,detail)->{
-                    if(ok)watch.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
-                        .edit().putString(LAST_PACKAGE,"com.spotify.music").apply();
-                    done.finished(ok,detail);
-                });
+            JarvisWatchSpotifyController.play(context,request.music,request.musicTitle,done);
         } else handleScreen(watch,request.screen,done);
         } catch(RuntimeException failure) {
+            JarvisDiagnostics.error(JarvisDiagnostics.Event.JAVA_EXCEPTION,failure);
             android.util.Log.e("DIMON_WATCH_CONTROL",
                 "On-watch action failed before it could finish",failure);
             done.finished(false,"Дімон не зміг завершити дію на годиннику. "+
@@ -86,6 +95,7 @@ public final class JarvisWatchLocalController {
             spotify.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
                 Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
             try {
+                JarvisDiagnostics.event(JarvisDiagnostics.Event.EXTERNAL_LAUNCH,1);
                 context.startActivity(spotify);
                 context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit()
                     .putString(LAST_PACKAGE,"com.spotify.music").apply();
@@ -122,6 +132,7 @@ public final class JarvisWatchLocalController {
             intent.setClassName(matched.app.packageName,matched.app.activityName);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
                 Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+            JarvisDiagnostics.event(JarvisDiagnostics.Event.EXTERNAL_LAUNCH,3);
             context.startActivity(intent);
             context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit()
                 .putString(LAST_PACKAGE,matched.app.packageName).apply();
@@ -169,18 +180,18 @@ public final class JarvisWatchLocalController {
 
     private static void awaitReady(String pkg,ScreenControlCommands.Action action,
                                    long expires,Callback done) {
-        if(!running)return;
+        if(!done.active())return;
         if(SystemClock.elapsedRealtime()>expires) {
             done.finished(false,"Кнопка або поле не з'явилися. Нічого навмання не натискав.");
             return;
         }
         if(!JarvisWatchScreenService.foreground(pkg)) {
-            MAIN.postDelayed(()->awaitReady(pkg,action,expires,done),650L);
+            MAIN.postDelayed(()->awaitReady(pkg,action,expires,done),2000L);
             return;
         }
         JarvisWatchScreenService.Result result=
             JarvisWatchScreenService.perform(pkg,action,(ok,detail)->{
-                if(!running)return;
+                if(!done.active())return;
                 done.finished(ok,detail);
             });
         switch(result) {
@@ -195,7 +206,7 @@ public final class JarvisWatchLocalController {
                 return;
             case WAIT:
             default:
-                MAIN.postDelayed(()->awaitReady(pkg,action,expires,done),1200L);
+                MAIN.postDelayed(()->awaitReady(pkg,action,expires,done),2000L);
         }
     }
 }

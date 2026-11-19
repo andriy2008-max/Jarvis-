@@ -50,6 +50,7 @@ public final class JarvisWatchSpotifyController {
             Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
         try {
             JarvisWatchSpotifyTrace.mark(context,"START_ACTIVITY_REQUESTED");
+            JarvisDiagnostics.event(JarvisDiagnostics.Event.EXTERNAL_LAUNCH,1);
             context.startActivity(intent);
             JarvisWatchSpotifyTrace.mark(context,"START_ACTIVITY_RETURNED");
         } catch(RuntimeException failure) {
@@ -76,28 +77,31 @@ public final class JarvisWatchSpotifyController {
         long stageStart=SystemClock.elapsedRealtime();
         boolean revealed;
         boolean finished;
+        final JarvisCallbackGate steps=new JarvisCallbackGate();
 
         Session(Context context,SpotifyMusicCommands.Kind kind,String title,
                 JarvisWatchLocalController.Callback callback) {
             this.context=context;this.kind=kind;this.title=title;
             this.callback=callback;
+            MAIN.postDelayed(()->done(false,"Час очікування Spotify минув."),TOTAL_TIMEOUT_MS);
         }
 
         void status(String detail) {
-            if(finished)return;
+            if(finished || !callback.active())return;
             Toast.makeText(context,detail,Toast.LENGTH_SHORT).show();
         }
 
         void done(boolean ok,String detail) {
-            if(finished)return;
+            if(finished || !callback.active())return;
             finished=true;
+            steps.cancel();
             JarvisWatchSpotifyTrace.finish(context,ok);
             Toast.makeText(context,detail,Toast.LENGTH_SHORT).show();
             callback.finished(ok,detail);
         }
 
         void waitForSpotify(long expires) {
-            if(finished)return;
+            if(finished || !callback.active())return;
             if(JarvisWatchScreenService.foreground(PACKAGE)) {
                 JarvisWatchSpotifyTrace.mark(context,"SPOTIFY_FOREGROUND");
                 run(JarvisWatchScreenService.SpotifyStep.OPEN_SEARCH);
@@ -109,11 +113,11 @@ public final class JarvisWatchSpotifyController {
                     "Скажи «Відкрий Spotify на годиннику» для перевірки.");
                 return;
             }
-            MAIN.postDelayed(()->waitForSpotify(expires),1500L);
+            MAIN.postDelayed(()->waitForSpotify(expires),2000L);
         }
 
         void run(JarvisWatchScreenService.SpotifyStep step) {
-            if(finished)return;
+            if(finished || !callback.active())return;
             JarvisWatchSpotifyTrace.mark(context,"STEP_"+step.name());
             long now=SystemClock.elapsedRealtime();
             if(now>deadline) {
@@ -159,13 +163,14 @@ public final class JarvisWatchSpotifyController {
 
         private void perform(JarvisWatchScreenService.SpotifyStep step,
                              JarvisWatchScreenService.SpotifyStep next) {
+            final long stepToken=steps.begin();
             JarvisWatchScreenService.Result result;
             try {
                 result=JarvisWatchScreenService.spotifyStep(step,title,
                     kind!=SpotifyMusicCommands.Kind.TRACK,
                     kind==SpotifyMusicCommands.Kind.RAP ||
                     kind==SpotifyMusicCommands.Kind.UKRAINIAN,(ok,detail)->{
-                    if(finished)return;
+                    if(finished || !callback.active() || !steps.finish(stepToken))return;
                     if(!ok) {
                         done(false,"Wear OS скасувала натискання у Spotify.");
                         return;
@@ -184,12 +189,13 @@ public final class JarvisWatchSpotifyController {
             }
             switch(result) {
                 case DONE:
-                    advance(step,next);
+                    if(steps.finish(stepToken))advance(step,next);
                     break;
                 case RUNNING:
                     // Gesture callback advances exactly once on completion.
                     break;
                 case WAIT:
+                    steps.finish(stepToken);
                     if(step==JarvisWatchScreenService.SpotifyStep.PLAY_PLAYLIST &&
                        SystemClock.elapsedRealtime()-stageStart>12000L) {
                         done(false,"Плейлист відкрито, але кнопку відтворення "+
@@ -210,7 +216,7 @@ public final class JarvisWatchSpotifyController {
 
         private void advance(JarvisWatchScreenService.SpotifyStep step,
                              JarvisWatchScreenService.SpotifyStep next) {
-            if(finished)return;
+            if(finished || !callback.active())return;
             if(step==JarvisWatchScreenService.SpotifyStep.SELECT_RESULT &&
                kind==SpotifyMusicCommands.Kind.TRACK) {
                 // Accessibility confirms the click, not audio output. Avoid a

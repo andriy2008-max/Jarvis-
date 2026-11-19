@@ -59,6 +59,7 @@
         <intent><action android:name="android.intent.action.SHOW_ALARMS" /></intent>
     </queries>
     <application
+        android:name=".JarvisApplication"
         android:label="${appLabel}"
         android:icon="@drawable/ic_launcher"
         android:theme="@android:style/Theme.Material.NoActionBar"
@@ -197,6 +198,7 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
+        <activity android:name=".JarvisDiagnosticsActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="true"
             android:launchMode="singleTop" android:screenOrientation="unspecified">
             <intent-filter>

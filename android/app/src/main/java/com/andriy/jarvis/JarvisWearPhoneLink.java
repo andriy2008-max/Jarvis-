@@ -60,6 +60,8 @@ public final class JarvisWearPhoneLink {
     // Async node lookups may finish after a higher-priority voice command.
     private long requestEpoch;
     private boolean closed;
+    private String lastReply;
+    String takeRecoveredReply() { String result=lastReply;lastReply=null;return result; }
     private String activeSession = "";
     private String pendingId;
     private String pendingNode;
@@ -90,6 +92,10 @@ public final class JarvisWearPhoneLink {
     }
 
     public boolean busy() { return requesting || pendingId != null; }
+    public boolean userRequestBusy() {
+        return (requesting && !JarvisWearProtocol.SYNC.equals(requestingType)) ||
+            (pendingId != null && !JarvisWearProtocol.SYNC.equals(pendingType));
+    }
     public boolean active() { return !activeSession.isEmpty() && JarvisPhoneMode.isActive(); }
 
     public boolean spotifyRunning() {
@@ -352,6 +358,13 @@ public final class JarvisWearPhoneLink {
         requesting = true;
         requestingType = type;
         final long epoch = ++requestEpoch;
+        if(!JarvisWearProtocol.SYNC.equals(type))JarvisDiagnostics.event(JarvisDiagnostics.Event.PIXEL_ROUTE);
+        main.postDelayed(()->{
+            if(closed || epoch!=requestEpoch || !requesting)return;
+            requestEpoch++; requesting=false; requestingType=null;
+            JarvisDiagnostics.event(JarvisDiagnostics.Event.COMMAND_TIMEOUT);
+            cb.finished(false,"Пошук Pixel не завершився. Перевір підключення годинника.");
+        },12000L);
         Wearable.getNodeClient(context).getConnectedNodes()
             .addOnSuccessListener(nodes -> {
                 // A stale SYNC lookup must not overwrite a pending real command.
@@ -472,6 +485,9 @@ public final class JarvisWearPhoneLink {
             JarvisControlFeedback.finish(feedback,ok,SystemClock.uptimeMillis());
             feedback = 0L;
             clearPending();
+            if(!JarvisWearProtocol.SYNC.equals(type))JarvisDiagnostics.event(
+                ok?JarvisDiagnostics.Event.PIXEL_DONE:JarvisDiagnostics.Event.PIXEL_ERROR);
+            if(!JarvisWearProtocol.SYNC.equals(type))lastReply=detail;
             if (cb != null) cb.finished(ok,detail);
         } catch (Exception ignored) { }
     }
@@ -490,6 +506,8 @@ public final class JarvisWearPhoneLink {
             activeSession = "";
             JarvisPhoneMode.setActive(false);
         }
+        if(!syncing)JarvisDiagnostics.event(JarvisDiagnostics.Event.PIXEL_ERROR);
+        if(!syncing)lastReply=reason;
         if (cb != null) cb.finished(false,reason);
     }
 

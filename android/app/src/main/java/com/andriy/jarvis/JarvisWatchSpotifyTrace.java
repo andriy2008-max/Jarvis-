@@ -23,12 +23,12 @@ public final class JarvisWatchSpotifyTrace {
         try {
             SharedPreferences p=context.getApplicationContext()
                 .getSharedPreferences(PREFS,Context.MODE_PRIVATE);
-            // Commit, not apply, so a sudden process exit does not lose
-            // the last stage reached immediately before it.
+            // Detailed journal is asynchronous; Android process summary preserves the last stage.
             SharedPreferences.Editor edit=p.edit().putString("stage",stage)
                 .putLong("at",System.currentTimeMillis());
             if("PLAY_ENTERED".equals(stage))edit.putString("result","RUNNING");
-            edit.commit();
+            edit.apply();
+            JarvisDiagnostics.event(JarvisDiagnostics.Event.SPOTIFY_STAGE,stage.hashCode() & 0x7fffffff);
             Log.i(TAG,"stage="+stage);
         } catch(RuntimeException e) {
             Log.w(TAG,"Unable to save diagnostic stage",e);
@@ -40,7 +40,7 @@ public final class JarvisWatchSpotifyTrace {
         try {
             context.getApplicationContext()
                 .getSharedPreferences(PREFS,Context.MODE_PRIVATE)
-                .edit().putString("result",ok?"SUCCESS":"FAILED").commit();
+                .edit().putString("result",ok?"SUCCESS":"FAILED").apply();
             Log.i(TAG,ok?"result=SUCCESS":"result=FAILED");
         } catch(RuntimeException e) {
             Log.w(TAG,"Unable to save result",e);

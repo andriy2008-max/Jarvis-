@@ -22,6 +22,10 @@ public final class JarvisWearMessageReceiver extends WearableListenerService {
         String node=event.getSourceNodeId();
         if(node==null || node.isEmpty())return;
         String action=request.optString("action","");
+        if(!JarvisWearProtocol.validAction(action))return;
+        // Read-only SYNC need not evict real side-effect request IDs.
+        if(!JarvisWearProtocol.SYNC.equals(action) && !claim(node,id))return;
+
 
         if(JarvisWearProtocol.GENERATE_IMAGE.equals(action)) {
             String command=request.optString("text","");
@@ -74,6 +78,24 @@ public final class JarvisWearMessageReceiver extends WearableListenerService {
                     ? JarvisWearReplyPages.save(node,id,description) : null;
             sendReply(node,id,ok,description,token,ended,page);
         });
+    }
+
+    private boolean claim(String node,String id) {
+        synchronized(JarvisWearMessageReceiver.class) {
+            try {
+                byte[] digest=java.security.MessageDigest.getInstance("SHA-256")
+                    .digest((node+"\n"+id).getBytes(StandardCharsets.UTF_8));
+                StringBuilder key=new StringBuilder();
+                for(byte b:digest)key.append(String.format(java.util.Locale.ROOT,"%02x",b&255));
+                android.content.SharedPreferences prefs=getSharedPreferences("dimon_received_ids",0);
+                JarvisRecentRequests recent=new JarvisRecentRequests(prefs.getString("ids",""));
+                if(!recent.claim(key.toString()))return false;
+                // Persist before executing. A process crash must not replay an accepted request.
+                return prefs.edit().putString("ids",recent.save()).commit();
+            } catch(Exception error) {
+                JarvisDiagnostics.error(JarvisDiagnostics.Event.JAVA_EXCEPTION,error);return false;
+            }
+        }
     }
 
     private void sendImageReply(String node,String id,boolean ok,String detail,

@@ -1,0 +1,122 @@
+name: Watch7 lifecycle audit and signed candidate
+on:
+  push:
+    branches: [fix/watch7-lifecycle-audit, main]
+    paths:
+      - '.github/workflows/watch7-audit.yml'
+      - 'android/**'
+      - 'tools/test-watch-contracts.sh'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  verify:
+    if: github.ref != 'refs/heads/main' || contains(github.event.head_commit.message, '[release-watch7-0.1.40]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: All existing Java contracts and callback races
+        run: bash tools/test-watch-contracts.sh
+      - name: Android compilation
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+          gradle -p android --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Select an available modern Wear OS image
+        id: wear
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --list > /tmp/sdk-images.txt
+          image="$(awk '{print $1}' /tmp/sdk-images.txt | grep -E '^system-images;android-(3[4-9]|[4-9][0-9]);android-wear[^;]*;x86_64$' | sort -Vu | tail -1)"
+          test -n "$image"
+          IFS=';' read -r family platform target arch <<< "$image"
+          echo "api=${platform#android-}" >> "$GITHUB_OUTPUT"
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+          echo "arch=$arch" >> "$GITHUB_OUTPUT"
+          echo "Selected Wear OS package: $image"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Wear OS emulator lifecycle tests (synthetic commands, no acoustic input)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ steps.wear.outputs.api }}
+          target: ${{ steps.wear.outputs.target }}
+          arch: ${{ steps.wear.outputs.arch }}
+          profile: wearos_large_round
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: |
+            gradle -p android --no-daemon :app:installDebug :app:installDebugAndroidTest
+            adb shell pm grant com.andriy.jarvis.preview android.permission.POST_NOTIFICATIONS
+            adb shell pm grant com.andriy.jarvis.preview android.permission.RECORD_AUDIO
+            gradle -p android --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.andriy.jarvis.WatchLifecycleTest
+      - name: Test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Watch7-lifecycle-test-evidence
+          path: |
+            android/app/build/reports/androidTests
+            android/app/build/outputs/androidTest-results
+      - name: Restore existing stable signing identity
+        env:
+          KEYSTORE: ${{ secrets.JARVIS_SIGNING_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$KEYSTORE"
+          printf '%s' "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/jarvis-stable.jks"
+          chmod 600 "$RUNNER_TEMP/jarvis-stable.jks"
+      - name: Build update-compatible candidate
+        env:
+          JARVIS_RELEASE_STORE_FILE: ${{ runner.temp }}/jarvis-stable.jks
+          JARVIS_RELEASE_STORE_PASSWORD: ${{ secrets.JARVIS_RELEASE_STORE_PASSWORD }}
+          JARVIS_RELEASE_KEY_ALIAS: ${{ secrets.JARVIS_RELEASE_KEY_ALIAS }}
+          JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
+        run: gradle -p android --no-daemon :app:assembleRelease
+      - name: Verify package, version, pinned certificate and SHA-256
+        run: |
+          set -euo pipefail
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          signer="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          "$signer" verify --verbose --print-certs "$apk" > /tmp/signature.txt
+          expected="$(tr -d '[:space:]' < android/RELEASE-CERT-SHA256.txt | tr '[:upper:]' '[:lower:]')"
+          actual="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' /tmp/signature.txt | head -n1)"
+          test "$actual" = "$expected"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" > /tmp/badging.txt
+          grep -F "package: name='com.andriy.jarvis.stable' versionCode='50' versionName='0.1.40'" /tmp/badging.txt
+          mkdir -p android/dist
+          cp "$apk" android/dist/Dimon-0.1.40-watch7-candidate.apk
+          cp /tmp/signature.txt android/dist/SIGNATURE.txt
+          cp android/QA-DIMON-0.1.40-*.md android/dist/
+          cp android/WATCH7-AUDIT-0.1.40.md android/dist/
+          (cd android/dist && sha256sum Dimon-0.1.40-watch7-candidate.apk > SHA256SUMS.txt)
+          printf '%s\n' "$GITHUB_SHA" > android/dist/SOURCE-COMMIT.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Dimon-0.1.40-signed-candidate
+          path: android/dist/
+      - name: Publish candidate only from verified main
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view v0.1.40 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'Release already exists; never overwrite it.'
+            exit 1
+          fi
+          gh release create v0.1.40 android/dist/* --target "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY" --prerelease --title 'Дімон 0.1.40 — Watch7 diagnostic candidate (same signing key)' --notes-file android/WATCH7-AUDIT-0.1.40.md
+      - name: Remove signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/jarvis-stable.jks"

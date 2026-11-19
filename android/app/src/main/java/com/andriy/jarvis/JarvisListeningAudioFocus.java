@@ -22,6 +22,7 @@ public final class JarvisListeningAudioFocus {
     private AudioFocusRequest request;
     private boolean acquired;
     private final AudioManager.OnAudioFocusChangeListener listener = change -> {
+        JarvisDiagnostics.event(JarvisDiagnostics.Event.AUDIO_FOCUS,change);
         if (change == AudioManager.AUDIOFOCUS_LOSS)
             acquired = false;
     };

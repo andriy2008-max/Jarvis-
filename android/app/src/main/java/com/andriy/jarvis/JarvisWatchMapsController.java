@@ -36,7 +36,7 @@ public final class JarvisWatchMapsController {
         }
         Context app=context.getApplicationContext();
         Session session=new Session(app,request,completion);
-        session.begin();
+        session.begin(context);
     }
 
     private static final class Session {
@@ -46,18 +46,21 @@ public final class JarvisWatchMapsController {
         final long deadline=SystemClock.elapsedRealtime()+MAX_MS;
         long stageSince=SystemClock.elapsedRealtime();
         boolean finished;
+        final JarvisCallbackGate steps=new JarvisCallbackGate();
 
         Session(Context app,JarvisWatchMapsCommands.Request req,
                 JarvisWatchLocalController.Callback callback) {
             context=app;request=req;completion=callback;
+            MAIN.postDelayed(()->done(false,"Час очікування Google Карт минув."),MAX_MS);
         }
 
         void progress(String message) {
             if(!finished)Toast.makeText(context,message,Toast.LENGTH_SHORT).show();
         }
         void done(boolean ok,String message) {
-            if(finished)return;
+            if(finished || !completion.active())return;
             finished=true;
+            steps.cancel();
             progressFinal(message);
             completion.finished(ok,message);
         }
@@ -65,7 +68,7 @@ public final class JarvisWatchMapsController {
             Toast.makeText(context,message,Toast.LENGTH_SHORT).show();
         }
 
-        void begin() {
+        void begin(Context launcher) {
             Intent launch=context.getPackageManager()
                 .getLaunchIntentForPackage(MAPS_PACKAGE);
             if(launch==null) {
@@ -73,7 +76,7 @@ public final class JarvisWatchMapsController {
             }
             launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
                             Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
-            try { context.startActivity(launch); }
+            try { JarvisDiagnostics.event(JarvisDiagnostics.Event.EXTERNAL_LAUNCH,2); launcher.startActivity(launch); }
             catch(RuntimeException ex) {
                 done(false,"Wear OS не відкрила Google Карти.");return;
             }
@@ -94,7 +97,7 @@ public final class JarvisWatchMapsController {
         }
 
         void centerLocation(long deadlineHere) {
-            if(finished)return;
+            if(finished || !completion.active())return;
             if(!JarvisWatchScreenService.available(context)) {
                 done(true,"Google Карти відкрито на Watch7. За потреби натисни «Моє місце».");
                 return;
@@ -118,7 +121,7 @@ public final class JarvisWatchMapsController {
         }
 
         void step(JarvisWatchScreenService.MapsStep current) {
-            if(finished)return;
+            if(finished || !completion.active())return;
             long now=SystemClock.elapsedRealtime();
             if(now>=deadline) {
                 openWalkingIntent();return;
@@ -126,17 +129,19 @@ public final class JarvisWatchMapsController {
             if(now-stageSince>=12500L) {
                 openWalkingIntent();return;
             }
+            final long token=steps.begin();
             JarvisWatchScreenService.MapsStep next=next(current);
             JarvisWatchScreenService.Result r=JarvisWatchScreenService.mapsStep(
                 current,request.destination,(ok,detail)->{
-                    if(finished)return;
+                    if(finished || !completion.active() || !steps.finish(token))return;
                     if(!ok) {openWalkingIntent();return;}
                     advance(current,next);
                 });
             switch(r) {
-                case DONE:advance(current,next);return;
+                case DONE:if(steps.finish(token))advance(current,next);return;
                 case RUNNING:return;
                 case WAIT:
+                    steps.finish(token);
                     MAIN.postDelayed(()->step(current),2000L);
                     return;
                 case BLOCKED:
@@ -157,7 +162,7 @@ public final class JarvisWatchMapsController {
 
         void advance(JarvisWatchScreenService.MapsStep from,
                      JarvisWatchScreenService.MapsStep next) {
-            if(finished)return;
+            if(finished || !completion.active())return;
             if(from==JarvisWatchScreenService.MapsStep.FIRST_RESULT)
                 progress("Перший відповідний результат обрано. Відкриваю маршрут…");
             if(from==JarvisWatchScreenService.MapsStep.SET_DESTINATION)
@@ -174,7 +179,7 @@ public final class JarvisWatchMapsController {
 
         /** Documented Android Google Maps intent, not a phone-side launch. */
         void openWalkingIntent() {
-            if(finished)return;
+            if(finished || !completion.active())return;
             Uri uri=Uri.parse("google.navigation:q="+
                 Uri.encode(request.destination)+"&mode=w");
             Intent intent=new Intent(Intent.ACTION_VIEW,uri);
