@@ -130,10 +130,11 @@ public final class JarvisWatchSpotifyController {
             // If Spotify opens on the player, reveal the new Wear OS menu once,
             // but never swipe blindly before the app's own window is visible.
             if(step==JarvisWatchScreenService.SpotifyStep.OPEN_SEARCH &&
-               revealAttempts<3 && now-searchStart>=3800L &&
-               (lastRevealAt==0 || now-lastRevealAt>=2400L) &&
-               JarvisWatchScreenService.foreground(PACKAGE) &&
-               !JarvisWatchScreenService.spotifySearchAvailable()) {
+               JarvisWatchUiRules.revealSpotifyNavigation(
+                   revealAttempts,now-searchStart,
+                   lastRevealAt==0?Long.MAX_VALUE:now-lastRevealAt,
+                   JarvisWatchScreenService.foreground(PACKAGE),
+                   JarvisWatchScreenService.spotifySearchAvailable())) {
                 // The original short swipe sometimes left Search below the
                 // Spotify navigation fold. Retry only while Search is absent.
                 revealAttempts++;
