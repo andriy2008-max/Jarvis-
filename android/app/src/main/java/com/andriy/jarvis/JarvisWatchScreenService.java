@@ -361,7 +361,7 @@ public final class JarvisWatchScreenService extends AccessibilityService {
     // restricted to Spotify's visible accessibility tree on THIS watch.
     // Screen locations are never copied from the paired phone.
     public enum SpotifyStep {
-        CHECK_HOME, SWIPE_HOME, REVEAL_NAV,
+        CHECK_HOME, DISMISS_IME, SWIPE_HOME, REVEAL_NAV,
         FIND_LIBRARY_PLAYLIST, SCROLL_LIBRARY_PLAYLISTS,
         OPEN_SEARCH, FOCUS_SEARCH, SET_QUERY, VERIFY_QUERY,
         SUBMIT_QUERY, SELECT_RESULT, PLAY_PLAYLIST, VERIFY_PLAYLIST
@@ -374,6 +374,22 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         return root!=null &&
             (s.spotifyHasEditable(root) ||
              s.spotifyHasLabel(root,"search","пошук","поиск"));
+    }
+
+    /** A resumed Spotify Search page may still have the full-screen Wear
+     * keyboard open. Dismiss only an active IME, never an app screen. */
+    public static boolean spotifyKeyboardVisible() {
+        JarvisWatchScreenService s=connected.get();
+        if(s==null || s.appRoot(SPOTIFY_PKG)==null)return false;
+        return s.spotifyImeVisible();
+    }
+
+    private boolean spotifyImeVisible() {
+        for(AccessibilityWindowInfo window:getWindows()) {
+            if(window.getType()==AccessibilityWindowInfo.TYPE_INPUT_METHOD &&
+               (window.isActive() || window.isFocused()))return true;
+        }
+        return false;
     }
 
     /** Only fingerprints the current Spotify accessibility viewport, in
@@ -416,6 +432,11 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         switch(step) {
             case CHECK_HOME:
                 return service.spotifyHomeVisible(root)?Result.DONE:Result.WAIT;
+            case DISMISS_IME:
+                return service.spotifyImeVisible()
+                    ?(service.performGlobalAction(GLOBAL_ACTION_BACK)
+                        ?Result.DONE:Result.BLOCKED)
+                    :Result.DONE;
             case SWIPE_HOME:
                 return service.spotifySwipeHome(completion);
             case FIND_LIBRARY_PLAYLIST:
