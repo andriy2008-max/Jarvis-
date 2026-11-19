@@ -5118,6 +5118,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
             startActivity(new Intent(this,FinanceActivity.class));
             return;
         }
+        if(!isWatchDevice) {
+            String budgetAnswer=FinanceBudgetVoiceController.handle(this,raw);
+            if(budgetAnswer!=null) {
+                appendDialogue("Дімон",budgetAnswer);
+                setStatus(budgetAnswer);
+                if(voiceEnabled)speakReply(budgetAnswer);
+                return;
+            }
+        }
         if(!isWatchDevice && FinanceVoiceQueries.matches(raw)) {
             String answer;
             try(FinanceLedger finance=new FinanceLedger(this)) {
