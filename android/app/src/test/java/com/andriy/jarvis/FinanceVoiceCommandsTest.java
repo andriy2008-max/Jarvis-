@@ -51,6 +51,46 @@ public final class FinanceVoiceCommandsTest {
         test("витрата кава 85 з рахунку моно",FinanceVoiceCommands.Kind.EXPENSE,"85","Їжа → Кафе","моно");
         test("запиши витрату 1800 на заправку з монобанку",FinanceVoiceCommands.Kind.EXPENSE,"1800","Транспорт → Пальне","монобанк");
         test("чайові 650 з рахунку картка роботи",FinanceVoiceCommands.Kind.INCOME,"650","чай","картка роботи");
+        // Approved local-first grammar. The category is exactly one word;
+        // everything after it is the memo, never a second category.
+        FinanceVoiceCommands.Entry shortExpense=
+            FinanceVoiceCommands.parse("Дімон, витратив 150 готівка транспорт таксі до роботи");
+        yes(shortExpense!=null &&
+            shortExpense.kind==FinanceVoiceCommands.Kind.EXPENSE &&
+            shortExpense.amount.equals("150") &&
+            shortExpense.account.equals("готівка") &&
+            shortExpense.category.equals("Транспорт") &&
+            shortExpense.note.equals("таксі до роботи"));
+        FinanceVoiceCommands.Entry shortIncome=
+            FinanceVoiceCommands.parse("заробив 350 готівка чайові столик п'ять");
+        yes(shortIncome!=null &&
+            shortIncome.kind==FinanceVoiceCommands.Kind.INCOME &&
+            shortIncome.category.equals("чай") &&
+            shortIncome.note.startsWith("столик "));
+        FinanceVoiceCommands.Entry russianSynonym=
+            FinanceVoiceCommands.parse("Потратив 50 моно транспорт автобус");
+        yes(russianSynonym!=null &&
+            russianSynonym.account.equals("карта моно") &&
+            russianSynonym.category.equals("Транспорт") &&
+            russianSynonym.note.equals("автобус"));
+        FinanceVoiceCommands.Entry card=
+            FinanceVoiceCommands.parse("Витратив 12,50 карта моно харчування кава");
+        yes(card!=null &&
+            card.amount.equals("12.5") &&
+            card.account.equals("карта моно") &&
+            card.category.equals("Харчування") &&
+            card.note.equals("кава"));
+        FinanceVoiceCommands.Entry later=
+            FinanceVoiceCommands.parse("Дімон заробив 15000 моно зарплата за листопад");
+        yes(later!=null && later.kind==FinanceVoiceCommands.Kind.INCOME &&
+            later.note.equals("за листопад"));
+        yes(FinanceVoiceCommands.parse(
+            "портатив 80 готівка транспорт")==null);
+        yes(FinanceVoiceCommands.parse(
+            "витратив 0 готівка транспорт")==null);
+        yes(FinanceVoiceCommands.parse(
+            "витратив 120 готівка невідома категорія")==null);
+        yes(FinanceVoiceFollowups.parse("Дімон, не 85, а 95")!=null);
         System.out.println("PASS FinanceVoiceCommandsTest");
     }
 }
