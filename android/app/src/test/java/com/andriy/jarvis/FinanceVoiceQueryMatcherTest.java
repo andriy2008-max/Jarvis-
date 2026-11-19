@@ -13,6 +13,10 @@ public final class FinanceVoiceQueryMatcherTest {
         check(true,"розкажи про фінансовий стан");
         check(true,"покажи чайові за зміну");
         check(true,"фінансовий звіт");
+        check(true,"баланс рахунків");
+        check(true,"залишок бюджету");
+        check(true,"звіти");
+        check(true,"фінансові звіти");
         check(false,"включи пісню");
         check(false,"запиши витрату кава 85");
         check(false,"перекажи 1000 мамі");
