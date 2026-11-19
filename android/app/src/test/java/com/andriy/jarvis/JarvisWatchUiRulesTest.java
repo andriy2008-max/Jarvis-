@@ -33,6 +33,42 @@ public final class JarvisWatchUiRulesTest {
             true,true,true,true,false),"reject incomplete tile fingerprint");
         yes(JarvisWatchUiRules.verifiedMapsHomeGrid(
             true,true,true,true,true),"top-left map tile only after home fingerprint");
+        yes(JarvisWatchUiRules.spotifyHomeConfirmed(true,false,false),
+            "selected Home tab identifies home");
+        yes(JarvisWatchUiRules.spotifyHomeConfirmed(false,true,false),
+            "visible Spotify home section identifies home");
+        yes(!JarvisWatchUiRules.spotifyHomeConfirmed(false,false,false),
+            "unknown screen is not assumed home");
+        yes(!JarvisWatchUiRules.spotifyHomeConfirmed(true,true,true),
+            "do not swipe behind an open search editor");
+        yes(JarvisWatchUiRules.mayReturnToSpotifyHome(0,true),
+            "return to home from player");
+        yes(JarvisWatchUiRules.mayReturnToSpotifyHome(2,true),
+            "bounded third navigation");
+        yes(!JarvisWatchUiRules.mayReturnToSpotifyHome(3,true),
+            "stop after three home attempts");
+        yes(!JarvisWatchUiRules.mayReturnToSpotifyHome(0,false),
+            "never navigate another foreground app");
+        yes(JarvisWatchUiRules.spotifyPlaylistNameMatches(
+            "Вечірній реп","ВЕЧІРНІЙ РЕП"),"library title match Ukrainian");
+        yes(JarvisWatchUiRules.spotifyPlaylistNameMatches(
+            "Мій плейлист","мій плейлист playlist"),"library playlist metadata");
+        yes(JarvisWatchUiRules.spotifyPlaylistNameMatches(
+            "Jazz Mix","jazz mix"),"library title match English");
+        yes(!JarvisWatchUiRules.spotifyPlaylistNameMatches(
+            "Jazz Mix","Jazz Mix 2026"),"never select approximate playlist");
+        yes(!JarvisWatchUiRules.spotifyPlaylistNameMatches(
+            "Мій реп","Мій реп пісня"),"never select track as playlist");
+        yes(JarvisWatchUiRules.mayScrollForPlaylist(0,0,true),
+            "scroll when no playlist is visible");
+        yes(JarvisWatchUiRules.mayScrollForPlaylist(15,1,true),
+            "bounded repeated viewport search");
+        yes(!JarvisWatchUiRules.mayScrollForPlaylist(16,0,true),
+            "stop after bounded scrolling");
+        yes(!JarvisWatchUiRules.mayScrollForPlaylist(3,2,true),
+            "stop when no viewport change");
+        yes(!JarvisWatchUiRules.mayScrollForPlaylist(0,0,false),
+            "never scroll another app");
         System.out.println("PASS JarvisWatchUiRulesTest");
     }
 }
