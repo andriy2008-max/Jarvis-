@@ -911,8 +911,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
             new LinearLayout.LayoutParams(-1,dp(46));
         telegramParams.topMargin=dp(7);
         content.addView(telegramTab,telegramParams);
-        Button financeApiTab=secondaryButton("💰 Менеджер фінансів · API",
-            ()->startActivity(new Intent(this,FinanceApiSettingsActivity.class)));
+        Button financeApiTab=secondaryButton("💰 JARVIS Finance",
+            ()->{
+                if(isWatchDevice) {
+                    setStatus("Фінанси зберігаються на Pixel. "+
+                        "Назви фінансову команду на годиннику.");
+                    return;
+                }
+                startActivity(new Intent(this,FinanceActivity.class));
+            });
         LinearLayout.LayoutParams financeApiParams=
             new LinearLayout.LayoutParams(-1,dp(46));
         financeApiParams.topMargin=dp(7);
@@ -5104,45 +5111,47 @@ public final class MainActivity extends Activity implements RecognitionListener 
             TelegramReplyController.perform(this,telegram,this::telegramResponse);
             return;
         }
-        // Local budget commands and read-only finance summaries use Pixel data,
-        // never a conversational AI guess or a third-party screen scrape.
-        if (!isWatchDevice) {
-            String insight=FinanceInsightsController.handle(this,raw);
-            if(insight!=null) {
-                appendDialogue("Дімон",insight);
-                setStatus(insight);
-                if(voiceEnabled)speakReply(insight);
-                return;
-            }
-        }
-        if (!isWatchDevice && FinanceManagerController.isRunning()) {
-            if(FinanceVoiceCommands.cancel(raw))FinanceManagerController.cancel();
-            else setStatus("Фінансовий запис виконується. Скажи «Скасуй витрату», щоб зупинити.");
+        // JARVIS Finance: local encrypted ledger on Pixel, no third-party
+        // API/Accessibility/Money Manager. Watch voice is handled separately
+        // by the phone's Wear message receiver with idempotent command IDs.
+        if(!isWatchDevice && FinanceVoiceQueries.open(raw)) {
+            startActivity(new Intent(this,FinanceActivity.class));
             return;
         }
-        if (!isWatchDevice && FinanceVoiceCommands.parse(raw)!=null) {
+        if(!isWatchDevice && FinanceVoiceQueries.matches(raw)) {
+            String answer;
+            try(FinanceLedger finance=new FinanceLedger(this)) {
+                android.app.KeyguardManager lock=(android.app.KeyguardManager)
+                    getSystemService(KEYGUARD_SERVICE);
+                if(lock!=null && lock.isDeviceLocked() &&
+                   !"true".equals(finance.setting("finance_voice_locked","false")))
+                    answer="Розблокуй Pixel, щоб отримати фінансові дані.";
+                else answer=FinanceVoiceQueries.answer(finance,raw);
+            } catch(RuntimeException failure) {
+                android.util.Log.e("DIMON_FINANCE","Finance query failed",failure);
+                answer="Не вдалося прочитати фінансовий журнал.";
+            }
+            appendDialogue("Дімон",answer);
+            setStatus(answer);
+            if(voiceEnabled)speakReply(answer);
+            return;
+        }
+        if(!isWatchDevice &&
+           (FinanceVoiceCommands.parse(raw)!=null ||
+            FinanceVoiceFollowups.parse(raw)!=null ||
+            FinanceBatchCommands.looksLikeBatch(raw) ||
+            FinanceVoiceClarification.maybeStart(raw) ||
+            (FinanceVoiceClarification.pending(this,"phone") &&
+             FinanceVoiceClarification.maybeReply(raw)))) {
             FinanceManagerController.start(this,raw,new FinanceManagerController.Listener(){
                 @Override public void onProgress(String detail){setStatus(detail);}
                 @Override public void onFinished(boolean ok,String detail){
-                    if(isFinishing()||isDestroyed())return;
+                    if(isFinishing() || isDestroyed())return;
                     appendDialogue("Дімон",detail);
                     setStatus(detail);
-                    if(!ok && voiceEnabled)speakReply(detail);
+                    if(voiceEnabled)speakReply(detail);
                 }
             });
-            return;
-        }
-        if (!isWatchDevice && FinanceVoiceCommands.shortFinanceIntent(raw)) {
-            String detail=FinanceVoiceCommands.shortIncomeIntent(raw)
-                ? "Не розпізнав короткий дохід. Скажи: «Заробив 350 готівка чайові столик 5». "+
-                  "Рахунок: готівка, моно або заначка гривні; категорія — одне слово."
-                : "Не розпізнав коротку витрату. Скажи: "+
-                  "«Витратив 150 готівка транспорт таксі». "+
-                  "Рахунок: готівка, моно або заначка гривні; "+
-                  "наступне одне слово — категорія, решта — примітка.";
-            appendDialogue("Дімон",detail);
-            setStatus(detail);
-            if(voiceEnabled)speakReply(detail);
             return;
         }
         if (!isWatchDevice && JarvisTaxiCommands.destination(raw) != null) {
