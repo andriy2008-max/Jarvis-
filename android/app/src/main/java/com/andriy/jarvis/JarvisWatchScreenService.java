@@ -230,7 +230,8 @@ public final class JarvisWatchScreenService extends AccessibilityService {
             if(x>.15f && x<.54f && y>.47f && y<.74f)lowerLeft++;
             if(x>.54f && x<.89f && y>.47f && y<.74f)lowerRight++;
         }
-        return upperLeft!=null && upperRight>0 && lowerLeft>0 && lowerRight>0
+        return JarvisWatchUiRules.verifiedMapsHomeGrid(
+            true,upperLeft!=null,upperRight>0,lowerLeft>0,lowerRight>0)
             ?mapsTapNode(upperLeft,cb):Result.WAIT;
     }
 
@@ -580,8 +581,8 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         if(title==null || title.isEmpty() || title.length()>75)return Result.BLOCKED;
         AccessibilityNodeInfo input=spotifyEditableNode(root);
         if(input==null)return Result.WAIT;
-        if(AppNameMatcher.normalize(title).equals(
-            AppNameMatcher.normalize(input.getText()==null?"":input.getText().toString())))
+        if(JarvisWatchUiRules.spotifyQueryVisible(title,
+            input.getText()==null?null:input.getText().toString()))
             return Result.DONE;
         Bundle args=new Bundle();
         args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,title);
@@ -593,7 +594,7 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         AccessibilityNodeInfo input=spotifyEditableNode(root);
         if(input==null || title==null)return Result.WAIT;
         String actual=input.getText()==null?"":input.getText().toString();
-        return AppNameMatcher.normalize(title).equals(AppNameMatcher.normalize(actual))
+        return JarvisWatchUiRules.spotifyQueryVisible(title,actual)
             ?Result.DONE:Result.WAIT;
     }
 
