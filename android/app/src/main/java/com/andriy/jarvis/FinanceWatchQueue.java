@@ -87,7 +87,7 @@ public final class FinanceWatchQueue {
             for(int i=0;i<pending.length()-1;i++){
                 try{rest.put(pending.getJSONObject(i));}catch(Exception e){return "Черга пошкоджена; не змінено.";}
             }
-            return p.edit().putString(TAIL,rest.toString()).commit()?
+            return p.edit().putString(TAIL,FinanceWatchVault.protect(rest.toString())).commit()?
                 "Останню команду, яка ще не надсилалась, прибрано з черги.":
                 "Не вдалося оновити чергу.";
         }
