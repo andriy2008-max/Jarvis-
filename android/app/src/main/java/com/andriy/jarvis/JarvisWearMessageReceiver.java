@@ -34,6 +34,15 @@ public final class JarvisWearMessageReceiver extends WearableListenerService {
                 "запитувати баланс голосом.","",false,null);
             return;
         }
+        if(financeAction) {
+            String budget=FinanceBudgetVoiceController.handle(this,financeText);
+            if(budget!=null) {
+                boolean ok=!budget.startsWith("Не вдалося") &&
+                    !budget.startsWith("Розблокуй");
+                sendReply(node,id,ok,budget,"",false,null);
+                return;
+            }
+        }
         if(financeAction && FinanceVoiceQueries.matches(financeText)) {
             try(FinanceLedger ledger=new FinanceLedger(this)) {
                 android.app.KeyguardManager guard=(android.app.KeyguardManager)
