@@ -79,6 +79,7 @@ public final class JarvisWatchSpotifyController {
         long lastRevealAt;
         int queryRetries;
         int homeSwipes;
+        int keyboardDismissals;
         int playlistScrolls;
         int unchangedPlaylistViews;
         String lastPlaylistViewport="";
@@ -156,6 +157,8 @@ public final class JarvisWatchSpotifyController {
             switch(step) {
                 case CHECK_HOME:
                     return JarvisWatchScreenService.SpotifyStep.REVEAL_NAV;
+                case DISMISS_IME:
+                    return JarvisWatchScreenService.SpotifyStep.CHECK_HOME;
                 case SWIPE_HOME:
                     return JarvisWatchScreenService.SpotifyStep.CHECK_HOME;
                 case REVEAL_NAV:
@@ -221,7 +224,16 @@ public final class JarvisWatchSpotifyController {
                 case WAIT:
                     steps.finish(stepToken);
                     if(step==JarvisWatchScreenService.SpotifyStep.CHECK_HOME) {
-                        if(JarvisWatchUiRules.mayReturnToSpotifyHome(
+                        if(JarvisWatchScreenService.spotifyKeyboardVisible() &&
+                           keyboardDismissals<2) {
+                            // Back here closes the keyboard, not Spotify.
+                            // Once the IME goes away, restore Home by a
+                            // verified right-swipe as the user requested.
+                            keyboardDismissals++;
+                            MAIN.postDelayed(
+                                ()->run(JarvisWatchScreenService.SpotifyStep.DISMISS_IME),
+                                700L);
+                        } else if(JarvisWatchUiRules.mayReturnToSpotifyHome(
                             homeSwipes,JarvisWatchScreenService.foreground(PACKAGE))) {
                             MAIN.postDelayed(
                                 ()->run(JarvisWatchScreenService.SpotifyStep.SWIPE_HOME),
