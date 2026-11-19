@@ -15,18 +15,35 @@ public final class FinanceVoiceCommands {
         public final String category;
         public final String account; // null means selected account in app
         public final int daysAgo; // 0=today, 1=yesterday, 2=day before yesterday
+        public final String note; // words after the one-word category
         public Entry(Kind kind,String amount,String category,String account) {
-            this(kind,amount,category,account,0);
+            this(kind,amount,category,account,0,"");
         }
         private Entry(Kind kind,String amount,String category,String account,int daysAgo) {
-            this.kind=kind;this.amount=amount;this.category=category;this.account=account;this.daysAgo=daysAgo;
+            this(kind,amount,category,account,daysAgo,"");
+        }
+        private Entry(Kind kind,String amount,String category,String account,int daysAgo,
+                      String note) {
+            this.kind=kind;this.amount=amount;this.category=category;
+            this.account=account;this.daysAgo=daysAgo;
+            this.note=note==null?"":note;
         }
         /** Keypad chars, without extra zeros or a hidden negative sign. */
         public String keypad() {return amount.replace('.',',');}
     }
     private static final String PREFIX=
-        "^(?:(?:джарвіс|джарвис|jarvis)[\\s,:—-]*)?"+
+        "^(?:(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[\\s,:—-]*)?"+
         "(?:запиши|додай|занеси|зафіксуй)\\s+";
+    // Approved short format: command, positive amount, named account,
+    // ONE category word, then all remaining words are the note.
+    // A repeated command ID is deduplicated by FinanceManagerController.
+    private static final Pattern SHORT_ENTRY=Pattern.compile(
+        "^(?:(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[\\s,:—-]*)?"+
+        "(витратив|потратив|заробив)\\s+"+
+        "([0-9]{1,7}(?:[,.][0-9]{1,2})?)\\s+"+
+        "(готівка|карта\\s+моно|моно|заначка\\s+гривні)\\s+"+
+        "([\\p{L}ʼ'’-]+)(?:\\s+(.{1,100}))?$",
+        Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
     private static final Pattern EXP=Pattern.compile(
         PREFIX+"(?:витрату|витрати)\\s+([0-9]{1,7}(?:[,.][0-9]{1,2})?)"+
         "\\s*(?:грн\\.?|грив(?:ня|ні|ень|ню))?(?:\\s+(?:на|за|категорія|категорію))?\\s+(.+)$",
@@ -45,6 +62,8 @@ public final class FinanceVoiceCommands {
             .replaceAll("[.!?]+$","");
         int daysAgo=s.endsWith(" позавчора")?2:s.endsWith(" вчора")?1:0;
         s=s.replaceFirst("\\s+(?:позавчора|вчора|сьогодні)$","").trim();
+        Entry shortEntry=parseShort(s,daysAgo);
+        if(shortEntry!=null)return shortEntry;
         Matcher m=EXP.matcher(s);
         Kind kind=Kind.EXPENSE;
         if(!m.matches()) {
@@ -69,11 +88,30 @@ public final class FinanceVoiceCommands {
         return category==null?null:new Entry(kind,amount,category,account,daysAgo);
     }
 
+    private static Entry parseShort(String voice,int daysAgo) {
+        Matcher m=SHORT_ENTRY.matcher(voice);
+        if(!m.matches())return null;
+        Kind kind=m.group(1).equals("заробив")?Kind.INCOME:Kind.EXPENSE;
+        String amount=m.group(2).replace(',','.');
+        try {
+            java.math.BigDecimal n=new java.math.BigDecimal(amount);
+            if(n.signum()<=0 || n.compareTo(new java.math.BigDecimal("999999"))>0)
+                return null;
+            amount=n.stripTrailingZeros().toPlainString();
+        } catch(NumberFormatException bad) {return null;}
+        String account=m.group(3).replaceAll("\\s+"," ").trim();
+        if(account.equals("моно"))account="карта моно";
+        String category=category(kind,m.group(4));
+        if(category==null)return null;
+        String note=m.group(5)==null?"":m.group(5).trim();
+        return new Entry(kind,amount,category,account,daysAgo,note);
+    }
+
     /** Explicit finance trigger prevents ambiguous taxi/song commands from recording money. */
     private static Entry natural(String speech){
-        String s=speech.replaceFirst("^(?:джарвіс|jarvis)[ ,:]*", "");
-        boolean income=s.matches("^(?:(?:запиши|додай)\\s+)?(?:дохід|чайові|зарплата|отримав)(?:\\s|:).*" );
-        if(!income&&!s.matches("^(?:(?:запиши|додай)\\s+)?(?:витрата|витрату|витратив|витратила)(?:\\s|:).*"))return null;
+        String s=speech.replaceFirst("^(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[ ,:]*", "");
+        boolean income=s.matches("^(?:(?:запиши|додай)\\s+)?(?:дохід|чайові|зарплата|отримав|заробив)(?:\\s|:).*" );
+        if(!income&&!s.matches("^(?:(?:запиши|додай)\\s+)?(?:витрата|витрату|витратив|потратив|витратила)(?:\\s|:).*"))return null;
         if(s.matches(".*(?:вчора|завтра|позавчора|долар|євро|usd|eur|борг|позик).*"))return null;
         AccountHint hint=accountHint(s);
         String account=hint.account;
@@ -85,7 +123,7 @@ public final class FinanceVoiceCommands {
             java.math.BigDecimal value=new java.math.BigDecimal(amount);
             if(value.signum()<=0||value.compareTo(new java.math.BigDecimal("999999"))>0)return null;
         }catch(RuntimeException e){return null;}
-        String descriptor=(s.substring(0,begin)+" "+s.substring(end)).replaceFirst("^(?:(?:запиши|додай)\\s+)?(?:витрата|витрату|витратив|витратила|дохід|отримав)[: ]*", "").replaceAll("\\b(?:грн|гривень|гривні)\\b", "").trim();
+        String descriptor=(s.substring(0,begin)+" "+s.substring(end)).replaceFirst("^(?:(?:запиши|додай)\\s+)?(?:витрата|витрату|витратив|потратив|витратила|дохід|отримав|заробив)[: ]*", "").replaceAll("\\b(?:грн|гривень|гривні)\\b", "").trim();
         descriptor=descriptor.replaceFirst("^(?:на|за|від)\\s+","").trim();
         if(descriptor.isEmpty())return null;
         String cat=category(income?Kind.INCOME:Kind.EXPENSE,descriptor);
