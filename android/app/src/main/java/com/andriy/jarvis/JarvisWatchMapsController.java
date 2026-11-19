@@ -84,8 +84,11 @@ public final class JarvisWatchMapsController {
                 "Відкриваю своє місце в Google Картах…":
                 "Відкриваю Google Карти, шукаю «"+request.destination+"»…");
             if(request.whereAmI) {
-                MAIN.postDelayed(()->centerLocation(SystemClock.elapsedRealtime()+13000L),
-                                 2300L);
+                // Wear Maps often launches to its four-tile home, not to
+                // the map canvas. The upper-left map tile must be opened
+                // before a "my location" control can become available.
+                MAIN.postDelayed(()->openMapHome(SystemClock.elapsedRealtime()+14500L),
+                                 1600L);
             } else if(JarvisWatchScreenService.available(context)) {
                 MAIN.postDelayed(()->step(JarvisWatchScreenService.MapsStep.OPEN_SEARCH),
                                  2400L);
@@ -96,10 +99,56 @@ public final class JarvisWatchMapsController {
             }
         }
 
-        void centerLocation(long deadlineHere) {
+        void openMapHome(long expires) {
             if(finished || !completion.active())return;
             if(!JarvisWatchScreenService.available(context)) {
-                done(true,"Google Карти відкрито на Watch7. За потреби натисни «Моє місце».");
+                done(false,"Для натискання кнопки карти увімкни службу "+
+                    "«Дімон — екран годинника» у спеціальних можливостях.");
+                return;
+            }
+            long now=SystemClock.elapsedRealtime();
+            if(now>=expires) {
+                done(false,"Дімон не знайшов кнопку карти на головному екрані Google Карт.");
+                return;
+            }
+            if(!JarvisWatchScreenService.foreground(MAPS_PACKAGE)) {
+                MAIN.postDelayed(()->openMapHome(expires),2000L);
+                return;
+            }
+            JarvisWatchScreenService.Result result=JarvisWatchScreenService.mapsStep(
+                JarvisWatchScreenService.MapsStep.OPEN_MAP,null,(ok,detail)->{
+                    if(finished || !completion.active())return;
+                    if(!ok) {
+                        done(false,"Wear OS скасувала натискання кнопки карти.");
+                        return;
+                    }
+                    MAIN.postDelayed(()->centerLocation(expires),1000L);
+                });
+            switch(result) {
+                case DONE:
+                    MAIN.postDelayed(()->centerLocation(expires),1000L);
+                    return;
+                case RUNNING:return; // Wait for the gesture callback.
+                case WAIT:
+                    MAIN.postDelayed(()->openMapHome(expires),2000L);
+                    return;
+                case BLOCKED:
+                default:
+                    done(false,"Дімон не зміг натиснути кнопку карти на Watch7.");
+            }
+        }
+
+        void centerLocation(long deadlineHere) {
+            if(finished || !completion.active())return;
+            if(JarvisWatchScreenService.mapsHomeVisible()) {
+                if(SystemClock.elapsedRealtime()>=deadlineHere)
+                    done(false,"Google Карти залишилися на початковому екрані. "+
+                        "Не вдалося натиснути кнопку карти.");
+                else MAIN.postDelayed(()->openMapHome(deadlineHere),1700L);
+                return;
+            }
+            if(!JarvisWatchScreenService.available(context)) {
+                done(false,"Служба керування екраном Watch7 стала недоступною.");
                 return;
             }
             if(JarvisWatchScreenService.foreground(MAPS_PACKAGE)) {
