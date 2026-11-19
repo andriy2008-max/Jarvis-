@@ -194,6 +194,13 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/JarvisTaxiCommands.java \
             android/app/src/main/java/com/andriy/jarvis/BoltUiLabels.java \
             android/app/src/main/java/com/andriy/jarvis/FinanceVoiceCommands.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceVoiceFollowups.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceSlashCommands.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceNumberWords.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceCalendar.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceBatchCommands.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceCryptoFifo.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceVoiceQueryMatcher.java \
             android/app/src/main/java/com/andriy/jarvis/FinanceInsightsCommands.java \
             android/app/src/main/java/com/andriy/jarvis/FinanceManagerUiLabels.java \
             android/app/src/main/java/com/andriy/jarvis/TelegramReplyCommands.java \
@@ -208,6 +215,11 @@ jobs:
             android/app/src/test/java/com/andriy/jarvis/JarvisTaxiCommandsTest.java \
             android/app/src/test/java/com/andriy/jarvis/BoltUiLabelsTest.java \
             android/app/src/test/java/com/andriy/jarvis/FinanceVoiceCommandsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/FinanceVoiceFollowupsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/FinanceCalendarTest.java \
+            android/app/src/test/java/com/andriy/jarvis/FinanceBatchCommandsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/FinanceCryptoFifoTest.java \
+            android/app/src/test/java/com/andriy/jarvis/FinanceVoiceQueryMatcherTest.java \
             android/app/src/test/java/com/andriy/jarvis/FinanceInsightsCommandsTest.java \
             android/app/src/test/java/com/andriy/jarvis/FinanceManagerUiLabelsTest.java \
             android/app/src/test/java/com/andriy/jarvis/TelegramReplyCommandsTest.java \
@@ -292,6 +304,11 @@ jobs:
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisTaxiCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.BoltUiLabelsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.FinanceVoiceCommandsTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.FinanceVoiceFollowupsTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.FinanceCalendarTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.FinanceBatchCommandsTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.FinanceCryptoFifoTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.FinanceVoiceQueryMatcherTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.FinanceInsightsCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.FinanceManagerUiLabelsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.TelegramReplyCommandsTest
