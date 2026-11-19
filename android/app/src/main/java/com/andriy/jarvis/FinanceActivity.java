@@ -12,7 +12,22 @@ public final class FinanceActivity extends Activity {
     private FinanceLedger ledger; private LinearLayout body; private String tab="Огляд"; private String query="",filterKind="",filterPeriod="all"; private long filterAccount=-1,filterMin=0,filterMax=Long.MAX_VALUE; private boolean unlocked=false,authenticating=false,pickingDocument=false,backupRunning=false; private String lastDeleted; private char[] backupPassword;
     public void onCreate(Bundle state){super.onCreate(state);
         getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
-        ledger=new FinanceLedger(this);authenticate();
+        try {
+            ledger=new FinanceLedger(this);
+            authenticate();
+        } catch(RuntimeException | UnsatisfiedLinkError error) {
+            android.util.Log.e("DIMON_FINANCE",
+                "Unable to initialize encrypted finance ledger",error);
+            TextView message=new TextView(this);
+            message.setText("JARVIS Finance тимчасово недоступний. "+
+                "Старі дані не видалені. Не очищуй сховище Дімона. "+
+                "Перевір журнал помилок або резервну копію.");
+            message.setTextColor(Color.WHITE);
+            message.setTextSize(18);
+            message.setPadding(26,48,26,26);
+            message.setBackgroundColor(Color.rgb(10,18,30));
+            setContentView(message);
+        }
     }
     private void authenticate(){
         android.app.KeyguardManager km=(android.app.KeyguardManager)getSystemService(KEYGUARD_SERVICE);
