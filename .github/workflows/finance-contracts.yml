@@ -3,9 +3,14 @@ name: JARVIS Finance contracts (no APK)
 on:
   push:
     branches:
+      - main
+      - feature/restore-jarvis-finance
       - feature/finance-local-ledger
     paths:
       - android/app/src/main/java/com/andriy/jarvis/Finance*.java
+      - android/app/src/main/java/com/andriy/jarvis/JarvisWearPhoneLink.java
+      - android/app/src/main/java/com/andriy/jarvis/JarvisWearMessageReceiver.java
+      - android/app/src/main/java/com/andriy/jarvis/MainActivity.java
       - android/app/src/test/java/com/andriy/jarvis/Finance*Test.java
       - tools/finance/**
       - .github/workflows/finance-contracts.yml
