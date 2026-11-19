@@ -132,7 +132,8 @@ public final class JarvisWatchSpotifyController {
             if(step==JarvisWatchScreenService.SpotifyStep.OPEN_SEARCH &&
                revealAttempts<3 && now-searchStart>=3800L &&
                (lastRevealAt==0 || now-lastRevealAt>=2400L) &&
-               JarvisWatchScreenService.foreground(PACKAGE)) {
+               JarvisWatchScreenService.foreground(PACKAGE) &&
+               !JarvisWatchScreenService.spotifySearchAvailable()) {
                 // The original short swipe sometimes left Search below the
                 // Spotify navigation fold. Retry only while Search is absent.
                 revealAttempts++;
