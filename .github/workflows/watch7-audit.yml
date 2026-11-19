@@ -6,12 +6,18 @@ on:
       - '.github/workflows/watch7-audit.yml'
       - 'android/**'
       - 'tools/test-watch-contracts.sh'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/watch7-audit.yml'
+      - 'android/**'
+      - 'tools/test-watch-contracts.sh'
   workflow_dispatch:
 permissions:
   contents: write
 jobs:
   verify:
-    if: github.ref != 'refs/heads/main' || contains(github.event.head_commit.message, '[release-watch7-0.1.40]')
+    if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main' || contains(github.event.head_commit.message, '[release-watch7-0.1.40]')
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
