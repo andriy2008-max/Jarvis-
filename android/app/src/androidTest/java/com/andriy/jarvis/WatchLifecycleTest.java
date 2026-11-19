@@ -79,13 +79,26 @@ public final class WatchLifecycleTest {
         try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)) {
             for(int i=0;i<3;i++) {
                 scenario.onActivity(a->a.startActivity(new Intent(android.provider.Settings.ACTION_SETTINGS)));
-                inst.waitForIdleSync();
-                app.startActivity(new Intent(app,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|
-                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT|Intent.FLAG_ACTIVITY_SINGLE_TOP));
-                inst.waitForIdleSync();
+                awaitResumed(scenario, false);
+                // Preserve launcher action/categories: onNewIntent calls setIntent(), and
+                // ActivityScenario filters lifecycle events using Intent.filterEquals().
+                Intent reopen=Intent.makeMainActivity(new ComponentName(app,MainActivity.class));
+                reopen.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_REORDER_TO_FRONT|
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                app.startActivity(reopen);
+                awaitResumed(scenario, true);
                 scenario.onActivity(a->{ assertFalse(a.isFinishing());assertFalse(a.isDestroyed()); });
             }
         }
+    }
+    private void awaitResumed(ActivityScenario<MainActivity> scenario, boolean resumed) {
+        long deadline=SystemClock.elapsedRealtime()+10000;
+        do {
+            inst.waitForIdleSync();
+            if((scenario.getState()==androidx.lifecycle.Lifecycle.State.RESUMED)==resumed)return;
+            SystemClock.sleep(50);
+        } while(SystemClock.elapsedRealtime()<deadline);
+        fail("Expected resumed="+resumed+", actual state="+scenario.getState());
     }
     @Test public void backgroundSyncDoesNotBlockLocalCommands() {
         try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)) {
