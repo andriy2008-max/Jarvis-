@@ -4,6 +4,17 @@
 **Це діагностичний кандидат, не підтверджена стабільність фізичного Watch7.**
 Назва пакета com.andriy.jarvis.stable означає сумісність оновлення, а не результат фізичного QA.
 
+## Стан на 19.11.2026
+
+- Усі **59 Java test-класів** виконано локально: успіх, включно з 100 гонками callback та перевіркою дедуплікації після відновлення.
+- Останній код: локальні `:app:assembleDebug :app:assembleDebugAndroidTest` успішні (61 Gradle task). Це тестовий APK, не підписаний production-ключем реліз.
+- Попередня ревізія 1c1112b49ba690f167f7166490c166d2de7a9b94: 4 instrumentation-тести на Wear OS API 30 та stable signing verification пройдені в Actions 44375136604.
+- Поточний набір містить 6 instrumentation-тестів. Нові переходи до Settings/назад і відокремлення фонового SYNC від користувацької команди скомпільовані, але ще не виконані.
+- Сучасний образ перевірено в офіційному SDK-каталозі: API 34 android-wear/x86_64 та API 36 android-wear-signed/x86_64 доступні. Запитаний раніше API 35 android-wear/x86_64 відсутній.
+- GitHub Actions 44474338660 не почав жодного кроку. Точна annotation: **“The job was not started because your account is locked due to a billing issue.”**
+- Main і Releases не оновлювалися. Фінальний APK 0.1.40 / 50 не опубліковано. Не підмінювати його попереднім artifact зі старішої ревізії.
+- Для продовження: усунути billing-блокування акаунта GitHub, повторити workflow на останній гілці fix/watch7-lifecycle-audit, перевірити 6 emulator-тестів і підпис; лише після цього перенести перевірений код у main та опублікувати кандидат із чек-листами. Фізична перевірка Watch7 усе одно потрібна.
+
 ## Факти та межі висновків
 
 - 0.1.39/49 зібрано Actions 44344822645 із 1bf31c6f2e58d52d6a63dcd322c524a90eb73e96. Порівняння v0.1.39 → main показує лише зміну workflow. Вихідний Android-код попередніх Spotify-виправлень увійшов у дерево релізу. Це перевірка походження збірки; не декомпіляція встановленого на годиннику APK.
@@ -26,7 +37,7 @@
 | JarvisWatchSpotifyController.java | callback без дедлайну та одноразового завершення | Незалежний watchdog, gate кроків, контроль активності операції, повторне очікування |
 | JarvisWatchMapsController.java | запуск із application context, зависання жесту | Початковий запуск із видимої Activity, обмежена тривалість сесії |
 | JarvisWatchScreenService.java | винятки при зміні дерева Accessibility | Контрольований BLOCKED/WAIT із записом коду помилки; жодних координат Pixel |
-| JarvisWearPhoneLink.java | пошук вузлів без дедлайну | 12-секундний тайм-аут пошуку, захист старого epoch, метадані маршруту/відповіді |
+| JarvisWearPhoneLink.java | пошук вузлів без дедлайну | 12-секундний тайм-аут пошуку, захист старого epoch, метадані маршруту/відповіді; фоновий SYNC не блокує локальні команди, відновлення UI очікує завершення справжнього запиту |
 | JarvisApplication.java, JarvisDiagnostics.java | лише Spotify trace | Загальний bounded journal, lifecycle, process summary, uncaught handler із передачею системі, історія ApplicationExitInfo |
 | JarvisDiagnosticsActivity.java | немає звіту в UI | Перегляд, копіювання, share, очищення; ⋮ → Діагностика → Журнал роботи |
 | JarvisWatchSpotifyTrace.java | synchronous commit на UI кожного кроку | Асинхронний запис + Android process state summary |

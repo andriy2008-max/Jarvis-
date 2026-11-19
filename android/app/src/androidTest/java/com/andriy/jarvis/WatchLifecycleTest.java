@@ -87,6 +87,25 @@ public final class WatchLifecycleTest {
             }
         }
     }
+    @Test public void backgroundSyncDoesNotBlockLocalCommands() {
+        try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)) {
+            scenario.onActivity(a->{
+                JarvisWearPhoneLink link=new JarvisWearPhoneLink(a);
+                try {
+                    Field requesting=JarvisWearPhoneLink.class.getDeclaredField("requesting");
+                    Field type=JarvisWearPhoneLink.class.getDeclaredField("requestingType");
+                    requesting.setAccessible(true);type.setAccessible(true);
+                    requesting.set(link,true);type.set(link,JarvisWearProtocol.SYNC);
+                    assertTrue(link.busy());assertFalse(link.userRequestBusy());
+                    type.set(link,JarvisWearProtocol.COMMAND);
+                    assertTrue(link.userRequestBusy());
+                    requesting.set(link,false);
+                    assertFalse(link.userRequestBusy());
+                } catch(Exception error) {throw new AssertionError(error);}
+                finally {link.close();}
+            });
+        }
+    }
     @Test public void reportExcludesExceptionSecrets() throws Exception {
         String secret="sk-proj-private-message-password";
         JarvisDiagnostics.error(JarvisDiagnostics.Event.JAVA_EXCEPTION,new IllegalStateException(secret));

@@ -92,6 +92,10 @@ public final class JarvisWearPhoneLink {
     }
 
     public boolean busy() { return requesting || pendingId != null; }
+    public boolean userRequestBusy() {
+        return (requesting && !JarvisWearProtocol.SYNC.equals(requestingType)) ||
+            (pendingId != null && !JarvisWearProtocol.SYNC.equals(pendingType));
+    }
     public boolean active() { return !activeSession.isEmpty() && JarvisPhoneMode.isActive(); }
 
     public boolean spotifyRunning() {

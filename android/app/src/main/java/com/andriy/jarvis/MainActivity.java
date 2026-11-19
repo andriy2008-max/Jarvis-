@@ -652,7 +652,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         watchRecovery=()->{
             if(!foreground || isDestroyed())return;
             boolean local=JarvisWatchLocalController.busy();
-            boolean remote=watchPhoneLink!=null && watchPhoneLink.busy();
+            boolean remote=watchPhoneLink!=null && watchPhoneLink.userRequestBusy();
             if(!manualCapture && !listening)processing=local || remote;
             String recovered=JarvisWatchLocalController.takeResult();
             if(recoveringPhoneReply && !remote) {
@@ -666,7 +666,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             }
             if(face!=null && !speaking && !manualCapture && !listening)
                 face.setState(processing?"thinking":"idle");
-            if(local || (recoveringPhoneReply && remote))wakeHandler.postDelayed(watchRecovery,300L);
+            if(local || remote)wakeHandler.postDelayed(watchRecovery,300L);
         };
         wakeHandler.post(watchRecovery);
     }
