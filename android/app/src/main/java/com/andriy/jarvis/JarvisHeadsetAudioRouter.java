@@ -23,6 +23,7 @@ public final class JarvisHeadsetAudioRouter {
 
     private final AudioManager audio;
     private final Context context;
+    private final boolean isWatch;
     private boolean acquired;
     private boolean selectedByUs;
     private boolean callbackRegistered;
@@ -42,6 +43,8 @@ public final class JarvisHeadsetAudioRouter {
 
     public JarvisHeadsetAudioRouter(Context context) {
         this.context=context.getApplicationContext();
+        isWatch=this.context.getPackageManager().hasSystemFeature(
+            android.content.pm.PackageManager.FEATURE_WATCH);
         audio=(AudioManager)this.context.getSystemService(Context.AUDIO_SERVICE);
     }
 
@@ -62,15 +65,15 @@ public final class JarvisHeadsetAudioRouter {
     /** Never start recognition from the phone when a required headset could
      * not be requested. The recognition service may still override the route. */
     public boolean begin() {
-        if (acquired) return mode==JarvisMicrophoneChoice.Mode.AUTO || selectedByUs;
-        mode=selected(context);
+        if (acquired) return isWatch || mode==JarvisMicrophoneChoice.Mode.AUTO || selectedByUs;
+        mode=JarvisMicrophoneChoice.effectiveMode(isWatch,selected(context));
         problem="";
         if (audio==null) {
             problem="Не вдалося відкрити аудіосистему Android.";
-            return mode==JarvisMicrophoneChoice.Mode.AUTO;
+            return isWatch || mode==JarvisMicrophoneChoice.Mode.AUTO;
         }
         if (Build.VERSION.SDK_INT<Build.VERSION_CODES.S) {
-            if (mode==JarvisMicrophoneChoice.Mode.AUTO) return true;
+            if (isWatch || mode==JarvisMicrophoneChoice.Mode.AUTO) return true;
             problem="Вибір мікрофона потребує Android 12 або новішого.";
             return false;
         }
@@ -118,6 +121,13 @@ public final class JarvisHeadsetAudioRouter {
         if (Build.VERSION.SDK_INT<Build.VERSION_CODES.S)
             return mode==JarvisMicrophoneChoice.Mode.AUTO;
         try {
+            // Avoid Bluetooth-SCO renegotiation and repeated route changes
+            // when connected headphones report additional device events.
+            if (isWatch && selectedByUs) {
+                AudioDeviceInfo current=audio.getCommunicationDevice();
+                if(current!=null && (current.getType()==AudioDeviceInfo.TYPE_BUILTIN_SPEAKER ||
+                   current.getType()==AudioDeviceInfo.TYPE_BUILTIN_EARPIECE))return true;
+            }
             clearSelection();
             List<AudioDeviceInfo> outputs=audio.getAvailableCommunicationDevices();
             AudioDeviceInfo[] inputs=audio.getDevices(AudioManager.GET_DEVICES_INPUTS);
@@ -143,6 +153,14 @@ public final class JarvisHeadsetAudioRouter {
                 return true;
             }
             if(choice==null) {
+                // The watch must not stop listening just because Bluetooth
+                // changed during capture. Android SpeechRecognizer can still
+                // pick its own microphone, so log this as best-effort.
+                if(isWatch) {
+                    problem="Wear OS не надала вбудований аудіомаршрут. Спробую мікрофон годинника.";
+                    Log.w(TAG,problem);
+                    return true;
+                }
                 problem=mode==JarvisMicrophoneChoice.Mode.HEADSET
                     ? "Гарнітура з мікрофоном не підключена або недоступна Android."
                     : "Не вдалося вибрати вбудований мікрофон телефона.";
@@ -151,6 +169,10 @@ public final class JarvisHeadsetAudioRouter {
             selectedByUs=audio.setCommunicationDevice(choice);
             if(!selectedByUs) {
                 problem="Android відхилив вибір мікрофона. Перевір підключення та повтори.";
+                if(isWatch) {
+                    Log.w(TAG,"Wear OS refused built-in microphone route; recognition continues");
+                    return true;
+                }
                 return mode==JarvisMicrophoneChoice.Mode.AUTO;
             }
             problem="";
@@ -163,7 +185,7 @@ public final class JarvisHeadsetAudioRouter {
             problem="Не вдалося налаштувати мікрофон Android.";
             Log.w(TAG,problem,error);
         }
-        return mode==JarvisMicrophoneChoice.Mode.AUTO;
+        return isWatch || mode==JarvisMicrophoneChoice.Mode.AUTO;
     }
 
     private static boolean hasBuiltinMic(AudioDeviceInfo[] inputs) {
