@@ -12,7 +12,7 @@ public final class FinanceVoiceFollowups {
         private Correction(String oldValue,String newValue){oldAmount=oldValue;newAmount=newValue;}
     }
     private static final Pattern CORRECTION=Pattern.compile(
-        "^(?:(?:джарвіс|джарвис|jarvis)[\\s,:—-]*)?не\\s+([0-9]{1,7}(?:[,.][0-9]{1,2})?)"+
+        "^(?:(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[\\s,:—-]*)?не\\s+([0-9]{1,7}(?:[,.][0-9]{1,2})?)"+
         "\\s*(?:грн)?\\s*[,;]?\\s+а\\s+([0-9]{1,7}(?:[,.][0-9]{1,2})?)\\s*(?:грн)?[.!?]*$",
         Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
     private FinanceVoiceFollowups(){}
