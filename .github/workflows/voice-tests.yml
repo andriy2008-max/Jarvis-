@@ -381,6 +381,6 @@ jobs:
         shell: bash
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'platforms;android-36' 'build-tools;35.0.0'
       - name: Compile Android code only (does not build an APK)
         run: gradle -p android --no-daemon --stacktrace :app:compileDebugJavaWithJavac
