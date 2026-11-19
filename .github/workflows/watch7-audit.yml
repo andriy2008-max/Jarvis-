@@ -35,7 +35,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sdkmanager --list > /tmp/sdk-images.txt
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --list > /tmp/sdk-images.txt
           image="$(awk '{print $1}' /tmp/sdk-images.txt | grep -E '^system-images;android-(3[4-9]|[4-9][0-9]);android-wear[^;]*;x86_64$' | sort -Vu | tail -1)"
           test -n "$image"
           IFS=';' read -r family platform target arch <<< "$image"
