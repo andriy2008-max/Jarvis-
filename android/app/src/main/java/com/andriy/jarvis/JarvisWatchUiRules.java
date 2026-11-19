@@ -19,6 +19,42 @@ public final class JarvisWatchUiRules {
                 .toLowerCase(java.util.Locale.ROOT).replaceAll("\\s+"," "));
     }
 
+    /** Spotify home has to be identified before attempting a watch-only
+     * navigation gesture. A selected Home tab is stronger evidence than a
+     * passive label. Recently-played sections can also identify home. */
+    public static boolean spotifyHomeConfirmed(boolean homeTabSelected,
+            boolean homeSectionVisible,boolean hasEditableSearch) {
+        return !hasEditableSearch && (homeTabSelected || homeSectionVisible);
+    }
+
+    /** Never loop indefinitely through an unknown Spotify page. */
+    public static boolean mayReturnToSpotifyHome(int completedSwipes,
+            boolean spotifyForeground) {
+        return spotifyForeground && completedSwipes>=0 && completedSwipes<3;
+    }
+
+    /** A named playlist must be discovered directly in the library,
+     * never by submitting its name into the Spotify Search tab. */
+    public static boolean spotifyPlaylistNameMatches(String wanted,String visible) {
+        if(wanted==null || visible==null || wanted.trim().isEmpty())return false;
+        String target=wanted.trim().toLowerCase(java.util.Locale.ROOT)
+            .replaceAll("\\s+"," ");
+        String actual=visible.trim().toLowerCase(java.util.Locale.ROOT)
+            .replaceAll("\\s+"," ");
+        return actual.equals(target) ||
+            actual.equals(target+" playlist") ||
+            actual.equals(target+" плейлист") ||
+            actual.equals(target+" плейліст");
+    }
+
+    /** Retry bounded scrolling only after a visible-name lookup fails.
+     * If the accessibility viewport does not change twice, stop. */
+    public static boolean mayScrollForPlaylist(int scrollAttempts,
+            int unchangedViewports,boolean spotifyForeground) {
+        return spotifyForeground && scrollAttempts>=0 &&
+            scrollAttempts<16 && unchangedViewports<2;
+    }
+
     /** An unlabelled map icon may only be clicked when all four tiles and
      * the "Recent" heading were recognized in the actual Maps view. */
     public static boolean verifiedMapsHomeGrid(boolean recent,
