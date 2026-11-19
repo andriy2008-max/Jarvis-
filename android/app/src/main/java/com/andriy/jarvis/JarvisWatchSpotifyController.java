@@ -233,6 +233,13 @@ public final class JarvisWatchSpotifyController {
                             MAIN.postDelayed(
                                 ()->run(JarvisWatchScreenService.SpotifyStep.DISMISS_IME),
                                 700L);
+                        } else if(homeSwipes==0 &&
+                                  SystemClock.elapsedRealtime()-searchStart<4200L) {
+                            // Foreground does not mean Spotify's home/player
+                            // has rendered yet; never swipe a loading screen.
+                            MAIN.postDelayed(
+                                ()->run(JarvisWatchScreenService.SpotifyStep.CHECK_HOME),
+                                900L);
                         } else if(JarvisWatchUiRules.mayReturnToSpotifyHome(
                             homeSwipes,JarvisWatchScreenService.foreground(PACKAGE))) {
                             MAIN.postDelayed(
