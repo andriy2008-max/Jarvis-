@@ -361,7 +361,9 @@ public final class JarvisWatchScreenService extends AccessibilityService {
     // restricted to Spotify's visible accessibility tree on THIS watch.
     // Screen locations are never copied from the paired phone.
     public enum SpotifyStep {
-        OPEN_SEARCH, REVEAL_NAV, FOCUS_SEARCH, SET_QUERY, VERIFY_QUERY,
+        CHECK_HOME, SWIPE_HOME, REVEAL_NAV,
+        FIND_LIBRARY_PLAYLIST, SCROLL_LIBRARY_PLAYLISTS,
+        OPEN_SEARCH, FOCUS_SEARCH, SET_QUERY, VERIFY_QUERY,
         SUBMIT_QUERY, SELECT_RESULT, PLAY_PLAYLIST, VERIFY_PLAYLIST
     }
     private static final String SPOTIFY_PKG="com.spotify.music";
@@ -372,6 +374,14 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         return root!=null &&
             (s.spotifyHasEditable(root) ||
              s.spotifyHasLabel(root,"search","пошук","поиск"));
+    }
+
+    /** Only fingerprints the current Spotify accessibility viewport, in
+     * memory. Playlist names are never logged, uploaded or persisted. */
+    public static String spotifyPlaylistViewport() {
+        JarvisWatchScreenService s=connected.get();
+        AccessibilityNodeInfo root=s==null?null:s.appRoot(SPOTIFY_PKG);
+        return root==null?"":s.spotifyViewport(root);
     }
 
     public static Result spotifyStep(SpotifyStep step,String title,
@@ -404,6 +414,14 @@ public final class JarvisWatchScreenService extends AccessibilityService {
             root=service.spotifyRootUnderKeyboard();
         if(root==null)return Result.WAIT;
         switch(step) {
+            case CHECK_HOME:
+                return service.spotifyHomeVisible(root)?Result.DONE:Result.WAIT;
+            case SWIPE_HOME:
+                return service.spotifySwipeHome(completion);
+            case FIND_LIBRARY_PLAYLIST:
+                return service.spotifyFindLibraryPlaylist(root,title,completion);
+            case SCROLL_LIBRARY_PLAYLISTS:
+                return service.spotifyScrollLibraryDown(completion);
             case OPEN_SEARCH:
                 if(service.spotifyHasEditable(root))return Result.DONE;
                 return service.spotifyTapExact(root,completion,
@@ -481,6 +499,80 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         }
         if(seen>MAX_NODES)result.clear();
         return result;
+    }
+
+    /** Verify home using Spotify-owned UI nodes. A visible Home button alone
+     * is not evidence that it is the current, selected page. */
+    private boolean spotifyHomeVisible(AccessibilityNodeInfo root) {
+        boolean selected=false,section=false;
+        for(AccessibilityNodeInfo node:spotifyNodes(root)) {
+            if(node.isEditable())continue;
+            if((node.isSelected() || node.isChecked()) &&
+               spotifyNodeMatches(node,"home","головна","домой"))
+                selected=true;
+            if(spotifyNodeMatches(node,"recently played","recently played music",
+                "недавно прослухане","нещодавно прослухані",
+                "нещодавно відтворені","your shows","made for you",
+                "для тебе"))
+                section=true;
+        }
+        return JarvisWatchUiRules.spotifyHomeConfirmed(
+            selected,section,spotifyHasEditable(root));
+    }
+
+    private String spotifyViewport(AccessibilityNodeInfo root) {
+        StringBuilder fingerprint=new StringBuilder();
+        for(AccessibilityNodeInfo n:spotifyNodes(root)) {
+            CharSequence text=n.getText();
+            if(text==null || text.length()==0)continue;
+            if(fingerprint.length()>1200)break;
+            fingerprint.append('|').append(AppNameMatcher.normalize(text.toString()));
+        }
+        return fingerprint.toString();
+    }
+
+    /** Playlist selection never uses the global Search field. Only an exact
+     * matching visible title inside Spotify is eligible. */
+    private Result spotifyFindLibraryPlaylist(AccessibilityNodeInfo root,
+            String wanted,Completion cb) {
+        if(wanted==null || wanted.trim().isEmpty())return Result.BLOCKED;
+        AccessibilityNodeInfo best=null;
+        Rect bestRect=null;
+        for(AccessibilityNodeInfo n:spotifyNodes(root)) {
+            if(n.isEditable())continue;
+            if(!JarvisWatchUiRules.spotifyPlaylistNameMatches(wanted,spotifyLabel(n)) &&
+               !JarvisWatchUiRules.spotifyPlaylistNameMatches(wanted,
+                   spotifyDescription(n)))continue;
+            Rect bounds=new Rect();
+            n.getBoundsInScreen(bounds);
+            if(bounds.width()<6 || bounds.height()<6)continue;
+            if(best==null || bounds.top<bestRect.top) {
+                best=n;bestRect=bounds;
+            }
+        }
+        return best==null?Result.WAIT:spotifyTapNode(best,cb);
+    }
+
+    /** First gesture on the Home screen opens its music / playlist list.
+     * Subsequent user-requested sweeps through the library go DOWN. */
+    private Result spotifyScrollLibraryDown(Completion cb) {
+        if(appRoot(SPOTIFY_PKG)==null)return Result.WAIT;
+        android.util.DisplayMetrics m=getResources().getDisplayMetrics();
+        if(m.widthPixels<160 || m.heightPixels<160)return Result.BLOCKED;
+        Path p=new Path();
+        p.moveTo(m.widthPixels*.5f,m.heightPixels*.18f);
+        p.lineTo(m.widthPixels*.5f,m.heightPixels*.85f);
+        return gesture(SPOTIFY_PKG,p,500L,cb);
+    }
+
+    private Result spotifySwipeHome(Completion cb) {
+        if(appRoot(SPOTIFY_PKG)==null)return Result.WAIT;
+        android.util.DisplayMetrics m=getResources().getDisplayMetrics();
+        if(m.widthPixels<160 || m.heightPixels<160)return Result.BLOCKED;
+        Path p=new Path();
+        p.moveTo(m.widthPixels*.15f,m.heightPixels*.52f);
+        p.lineTo(m.widthPixels*.86f,m.heightPixels*.52f);
+        return gesture(SPOTIFY_PKG,p,500L,cb);
     }
 
     private boolean spotifyHasEditable(AccessibilityNodeInfo root) {
