@@ -647,6 +647,20 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         return gesture(pkg,p,340L,cb);
     }
 
+    /** Gesture completion is delivered asynchronously on the UI looper.
+     * A client callback exception must not crash the accessibility service
+     * and take the whole watch process back to the watch face. */
+    static void safeGestureCompletion(Completion cb,boolean ok,String detail) {
+        if(cb==null)return;
+        try {
+            cb.finished(ok,detail);
+        } catch(RuntimeException error) {
+            JarvisDiagnostics.error(JarvisDiagnostics.Event.ACCESSIBILITY_ERROR,error);
+            android.util.Log.e("DIMON_WATCH_CONTROL",
+                "Wear gesture completion callback failed",error);
+        }
+    }
+
     private Result gesture(String pkg,Path p,long ms,Completion cb) {
         if(appRoot(pkg)==null)return Result.WAIT;
         GestureDescription description=new GestureDescription.Builder()
@@ -655,10 +669,10 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         try{
             accepted=dispatchGesture(description,new GestureResultCallback(){
                 @Override public void onCompleted(GestureDescription gesture) {
-                    cb.finished(true,"Жест виконано на годиннику.");
+                    safeGestureCompletion(cb,true,"Жест виконано на годиннику.");
                 }
                 @Override public void onCancelled(GestureDescription gesture) {
-                    cb.finished(false,"Wear OS скасувала жест.");
+                    safeGestureCompletion(cb,false,"Wear OS скасувала жест.");
                 }
             },main);
         }catch(RuntimeException error){
