@@ -14,19 +14,18 @@ public final class FinanceVoiceCommands {
         public final String amount; // canonical positive decimal with dot
         public final String category;
         public final String account; // null means selected account in app
-        public final String note; // optional transaction memo, never a new category
+        public final int daysAgo; // 0=today, 1=yesterday, 2=day before yesterday
         public Entry(Kind kind,String amount,String category,String account) {
-            this(kind,amount,category,account,null);
+            this(kind,amount,category,account,0);
         }
-        public Entry(Kind kind,String amount,String category,String account,String note) {
-            this.kind=kind;this.amount=amount;this.category=category;
-            this.account=account;this.note=note;
+        private Entry(Kind kind,String amount,String category,String account,int daysAgo) {
+            this.kind=kind;this.amount=amount;this.category=category;this.account=account;this.daysAgo=daysAgo;
         }
         /** Keypad chars, without extra zeros or a hidden negative sign. */
         public String keypad() {return amount.replace('.',',');}
     }
     private static final String PREFIX=
-        "^(?:(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[\\s,:—-]*)?"+
+        "^(?:(?:джарвіс|джарвис|jarvis)[\\s,:—-]*)?"+
         "(?:запиши|додай|занеси|зафіксуй)\\s+";
     private static final Pattern EXP=Pattern.compile(
         PREFIX+"(?:витрату|витрати)\\s+([0-9]{1,7}(?:[,.][0-9]{1,2})?)"+
@@ -36,98 +35,24 @@ public final class FinanceVoiceCommands {
         PREFIX+"(?:дохід|доход|надходження)\\s+([0-9]{1,7}(?:[,.][0-9]{1,2})?)"+
         "\\s*(?:грн\\.?|грив(?:ня|ні|ень|ню))?(?:\\s+(?:від|за|категорія|категорію))?\\s+(.+)$",
         Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
-    // Fast spoken format: «витратив 150 готівка транспорт таксі на роботу».
-    // The account is mandatory, the category is ONE exact word,
-    // and every following word belongs exclusively to the note.
-    private static final Pattern SHORT_EXP=Pattern.compile(
-        "^(?:витратив|потратив)\\s+" +
-        "([0-9]{1,7}(?:[,.][0-9]{1,2})?)" +
-        "(?:\\s*(?:грн\\.?|грив(?:ня|ні|ень|ню)))?\\s+(.+)$",
-        Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
-
-    private static final Pattern SHORT_INC=Pattern.compile(
-        "^(?:заробив)\\s+" +
-        "([0-9]{1,7}(?:[,.][0-9]{1,2})?)" +
-        "(?:\\s*(?:грн\\.?|грив(?:ня|ні|ень|ню)))?\\s+(.+)$",
-        Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE);
-
-    private static final String[][] SHORT_ACCOUNTS={
-        {"карта моно","карта моно"},{"карти моно","карта моно"},
-        {"картка моно","карта моно"},{"картки моно","карта моно"},
-        {"моно","карта моно"},
-        {"готівка","готівка"},{"готівки","готівка"},
-        {"заначка гривні","заначка гривні"},
-        {"заначки гривні","заначка гривні"},
-        {"заначка","заначка гривні"},
-        {"заначки","заначка гривні"}
-    };
     private FinanceVoiceCommands(){}
-
-    /** Recognized short expense prefix, even if its arguments are invalid.
-     * Callers must provide an error rather than route it to conversational AI. */
-    public static boolean shortExpenseIntent(String voice) {
-        String normalized=CommandPatterns.normalize(voice);
-        return normalized.matches("^(?:витратив|потратив)(?:\\s+.*)?$");
-    }
-
-    /** A spoken income command uses the same strict account/category/note
-     * grammar as expenses, but never falls back to an expense category. */
-    public static boolean shortIncomeIntent(String voice) {
-        String normalized=CommandPatterns.normalize(voice);
-        return normalized.matches("^заробив(?:\\s+.*)?$");
-    }
-
-    public static boolean shortFinanceIntent(String voice) {
-        return shortExpenseIntent(voice) || shortIncomeIntent(voice);
-    }
-
-    private static Entry parseShort(String normalized,Kind kind) {
-        Matcher m=(kind==Kind.EXPENSE ? SHORT_EXP : SHORT_INC).matcher(normalized);
-        if(!m.matches())return null;
-        String amount=positiveAmount(m.group(1));
-        if(amount==null)return null;
-        String details=m.group(2).replaceAll("\\s+"," ").trim();
-        if(details.isEmpty())return null;
-        for(String[] alias:SHORT_ACCOUNTS){
-            String prefix=alias[0]+" ";
-            if(!details.startsWith(prefix))continue;
-            String rest=details.substring(prefix.length()).trim();
-            if(rest.isEmpty())return null;
-            String[] parts=rest.split(" ",2);
-            // One word is the entire category, NOT a free-form description.
-            String category=category(kind,parts[0]);
-            if(category==null)return null;
-            String note=parts.length>1?parts[1].trim():null;
-            if(note!=null && !validNote(note))return null;
-            return new Entry(kind,amount,category,alias[1],note);
-        }
-        return null;
-    }
-
-    private static String positiveAmount(String raw) {
-        try {
-            java.math.BigDecimal value=new java.math.BigDecimal(raw.replace(',','.'));
-            if(value.signum()<=0 || value.compareTo(new java.math.BigDecimal("999999"))>0)
-                return null;
-            return value.stripTrailingZeros().toPlainString();
-        } catch(NumberFormatException bad) {
-            return null;
-        }
-    }
 
     public static Entry parse(String voice) {
         if(voice==null||voice.length()>230)return null;
-        String s=voice.toLowerCase(Locale.forLanguageTag("uk-UA")).trim()
+        String expanded=FinanceSlashCommands.expand(voice);
+        if(expanded==null)return null;
+        String s=FinanceNumberWords.normalize(expanded.toLowerCase(Locale.forLanguageTag("uk-UA")).trim())
             .replaceAll("[.!?]+$","");
-        if(shortExpenseIntent(s))
-            return parseShort(CommandPatterns.normalize(s),Kind.EXPENSE);
-        if(shortIncomeIntent(s))
-            return parseShort(CommandPatterns.normalize(s),Kind.INCOME);
+        int daysAgo=s.endsWith(" позавчора")?2:s.endsWith(" вчора")?1:0;
+        s=s.replaceFirst("\\s+(?:позавчора|вчора|сьогодні)$","").trim();
         Matcher m=EXP.matcher(s);
         Kind kind=Kind.EXPENSE;
         if(!m.matches()) {
             m=INC.matcher(s);
-            if(!m.matches())return null;
+            if(!m.matches()){
+                Entry fallback=natural(s);
+                return fallback==null?null:new Entry(fallback.kind,fallback.amount,fallback.category,fallback.account,daysAgo);
+            }
             kind=Kind.INCOME;
         }
         String amount=m.group(1).replace(',','.');
@@ -137,72 +62,62 @@ public final class FinanceVoiceCommands {
         if(number.signum()<=0 || number.compareTo(new java.math.BigDecimal("999999"))>0)
             return null;
         amount=number.stripTrailingZeros().toPlainString();
-        String descriptor=m.group(2).trim();
-        String account=null;
-        // Optional account suffix. Never interpret "з ... " elsewhere.
-        final String[][] suffixes={
-            {"(?:з|із|зі|на)\\s+готівк(?:и|а|у)\\s*$","готівка"},
-            {"(?:з|із|зі|на)\\s+карт(?:и|а|у)\\s+моно\\s*$","карта моно"},
-            {"(?:з|із|зі|на)\\s+заначк(?:и|а|у)\\s+гривн(?:і|я|ю|ень)\\s*$","заначка гривні"}
-        };
-        for(String[] suffix:suffixes) {
-            Pattern p=Pattern.compile("(?:[,;]?\\s*)"+suffix[0]);
-            Matcher match=p.matcher(descriptor);
-            if(match.find()){
-                account=suffix[1];descriptor=descriptor.substring(0,match.start()).trim();
-                break;
-            }
-        }
-        // Explicit wording: "на транспорт примітка таксі".
-        // Short wording: "на транспорт автобус" or "на харчування обід".
-        // The category must still be an exact known category; never create
-        // a different expense by guessing an unrelated free-text category.
-        String note=null;
-        // A trailing memo marker with no content is an incomplete command,
-        // not the note text itself.
-        if(descriptor.matches("(?s).*\\s+(?:примітка|примітку|коментар|коментарем|опис)$"))
-            return null;
-        Matcher memo=Pattern.compile(
-            "^(.*?)\\s+(?:примітка|примітку|коментар|коментарем|опис)\\s+(.+)$")
-            .matcher(descriptor);
-        if(memo.matches()){
-            descriptor=memo.group(1).trim();
-            note=memo.group(2).trim();
-        }
+        AccountHint hint=accountHint(m.group(2).trim());
+        String descriptor=hint.description;
+        String account=hint.account;
         String category=category(kind,descriptor);
-        if(category==null){
-            String[] words=descriptor.split("\\s+");
-            // Match the longest valid category prefix; remaining words are
-            // the memo (e.g. transport -> taxi or bus).
-            for(int count=words.length-1;count>=1;count--){
-                String prefix=String.join(" ",java.util.Arrays.copyOfRange(words,0,count));
-                category=category(kind,prefix);
-                if(category!=null){
-                    if(note!=null)return null; // two memo syntaxes are ambiguous
-                    note=String.join(" ",java.util.Arrays.copyOfRange(words,count,words.length));
-                    break;
-                }
-            }
-        }
-        if(category==null)return null;
-        if(kind==Kind.EXPENSE && note==null && descriptor.equals("таксі"))
-            note="таксі";
-        if(kind==Kind.EXPENSE && note==null && descriptor.equals("автобус")){
-            category="Транспорт";note="автобус";
-        }
-        if(note!=null && (!validNote(note)))return null;
-        return new Entry(kind,amount,category,account,note);
+        return category==null?null:new Entry(kind,amount,category,account,daysAgo);
     }
 
-    /** A finite, single-line memo. Money Manager receives it only through
-     * a verified editable field; never in a command or an API guess. */
-    public static boolean validNote(String note) {
-        return note!=null && !note.trim().isEmpty() && note.length()<=100 &&
-            note.indexOf('\n')<0 && note.indexOf('\r')<0 &&
-            note.chars().noneMatch(ch->Character.isISOControl(ch));
+    /** Explicit finance trigger prevents ambiguous taxi/song commands from recording money. */
+    private static Entry natural(String speech){
+        String s=speech.replaceFirst("^(?:джарвіс|jarvis)[ ,:]*", "");
+        boolean income=s.matches("^(?:(?:запиши|додай)\\s+)?(?:дохід|чайові|зарплата|отримав)(?:\\s|:).*" );
+        if(!income&&!s.matches("^(?:(?:запиши|додай)\\s+)?(?:витрата|витрату|витратив|витратила)(?:\\s|:).*"))return null;
+        if(s.matches(".*(?:вчора|завтра|позавчора|долар|євро|usd|eur|борг|позик).*"))return null;
+        AccountHint hint=accountHint(s);
+        String account=hint.account;
+        s=hint.description;
+        java.util.regex.Matcher number=Pattern.compile("(?<![0-9])([0-9]+(?:[,.][0-9]{1,2})?)(?![0-9])").matcher(s);
+        if(!number.find())return null;
+        String amount=number.group(1).replace(',','.');int begin=number.start(),end=number.end();if(number.find())return null;
+        try{
+            java.math.BigDecimal value=new java.math.BigDecimal(amount);
+            if(value.signum()<=0||value.compareTo(new java.math.BigDecimal("999999"))>0)return null;
+        }catch(RuntimeException e){return null;}
+        String descriptor=(s.substring(0,begin)+" "+s.substring(end)).replaceFirst("^(?:(?:запиши|додай)\\s+)?(?:витрата|витрату|витратив|витратила|дохід|отримав)[: ]*", "").replaceAll("\\b(?:грн|гривень|гривні)\\b", "").trim();
+        descriptor=descriptor.replaceFirst("^(?:на|за|від)\\s+","").trim();
+        if(descriptor.isEmpty())return null;
+        String cat=category(income?Kind.INCOME:Kind.EXPENSE,descriptor);
+        if(cat==null&&descriptor.equals("кава"))cat="Їжа → Кафе";
+        if(cat==null)return null;
+        return new Entry(income?Kind.INCOME:Kind.EXPENSE,amount,cat,account);
     }
 
-    static String category(Kind kind,String value){
+    private static final class AccountHint {
+        final String description,account;
+        AccountHint(String description,String account){this.description=description;this.account=account;}
+    }
+    /** Extract account only from a clearly marked suffix, never from category words. */
+    private static AccountHint accountHint(String value){
+        String s=value.trim();
+        if(s.endsWith("готівкою"))return new AccountHint(s.substring(0,s.length()-"готівкою".length()).trim(),"готівка");
+        final String[][] known={
+            {"(?:з|із|зі|на)\\s+готівк(?:и|а|у)","готівка"},
+            {"(?:з|із|зі|на)\\s+карт(?:и|а|у)\\s+моно","карта моно"},
+            {"(?:з|із|зі|на)\\s+монобанк(?:у|а)?","монобанк"},
+            {"(?:з|із|зі|на)\\s+заначк(?:и|а|у)\\s+гривн(?:і|я|ю|ень)","заначка гривні"}
+        };
+        for(String[] option:known){
+            Matcher m=Pattern.compile("(?:[,;]?\\s+)"+option[0]+"\\s*$").matcher(s);
+            if(m.find())return new AccountHint(s.substring(0,m.start()).trim(),option[1]);
+        }
+        Matcher other=Pattern.compile("(?:[,;]?\\s+)(?:з|із|зі|на)\\s+рахунк(?:у|а)\\s+([\\p{L}\\p{N} _-]{2,45})\\s*$").matcher(s);
+        if(other.find())return new AccountHint(s.substring(0,other.start()).trim(),other.group(1).trim());
+        return new AccountHint(s,null);
+    }
+
+    private static String category(Kind kind,String value){
         String s=value.replaceAll("\\s+"," ").trim();
         if(kind==Kind.INCOME){
             switch(s) {
@@ -218,10 +133,14 @@ public final class FinanceVoiceCommands {
             }
         }
         switch(s){
+            case "кава":case "каву":case "кафе":return "Їжа → Кафе";
             case "харчування":case "їжу":case "їжа":case "їжі":
             case "продукти":case "продуктів":case "продукти харчування":
                 return "Харчування";
             case "транспорт":case "проїзд":case "таксі":return "Транспорт";
+            case "заправка":case "заправку":case "бензин":case "пальне":return "Транспорт → Пальне";
+            case "комуналка":case "комунальні":case "комуналку":return "Комунальні";
+            case "інтернет":case "інтернету":return "Зв’язок";
             case "розваги":case "розваг":return "Розваги";
             case "підписки":case "підписку":return "підписки";
             case "шопінг":case "покупки":case "покупку":return "Шопінг";

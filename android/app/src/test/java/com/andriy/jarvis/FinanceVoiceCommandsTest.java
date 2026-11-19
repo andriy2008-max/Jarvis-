@@ -9,14 +9,6 @@ public final class FinanceVoiceCommandsTest {
             e.category.equals(category) &&
             (account==null?e.account==null:account.equals(e.account)));
     }
-    private static void testNote(String phrase, FinanceVoiceCommands.Kind kind,
-                                 String amount, String category, String account, String note) {
-        FinanceVoiceCommands.Entry parsed=FinanceVoiceCommands.parse(phrase);
-        yes(parsed!=null && parsed.kind==kind && parsed.amount.equals(amount) &&
-            parsed.category.equals(category) && note.equals(parsed.note) &&
-            (account==null?parsed.account==null:account.equals(parsed.account)));
-    }
-
     public static void main(String[] args){
         test("Джарвіс, запиши витрату 350 гривень на харчування",
             FinanceVoiceCommands.Kind.EXPENSE,"350","Харчування",null);
@@ -28,81 +20,6 @@ public final class FinanceVoiceCommandsTest {
             FinanceVoiceCommands.Kind.INCOME,"1000","Зарплата",null);
         test("додай дохід 500 чайові на карту моно",
             FinanceVoiceCommands.Kind.INCOME,"500","чай","карта моно");
-        // User-requested transaction memos stay separate from the category.
-        testNote("Джарвіс запиши витрату 150 гривень на транспорт таксі",
-            FinanceVoiceCommands.Kind.EXPENSE,"150","Транспорт",null,"таксі");
-        testNote("запиши витрату 150 гривень на транспорт автобус",
-            FinanceVoiceCommands.Kind.EXPENSE,"150","Транспорт",null,"автобус");
-        testNote("запиши витрату 150 гривень на транспорт примітка таксі",
-            FinanceVoiceCommands.Kind.EXPENSE,"150","Транспорт",null,"таксі");
-        testNote("запиши витрату 12,50 на харчування кава з карти моно",
-            FinanceVoiceCommands.Kind.EXPENSE,"12.5","Харчування","карта моно","кава");
-        testNote("запиши дохід 200 гривень чайові столик 5",
-            FinanceVoiceCommands.Kind.INCOME,"200","чай",null,"столик 5");
-        testNote("запиши витрату 150 на таксі",
-            FinanceVoiceCommands.Kind.EXPENSE,"150","Транспорт",null,"таксі");
-        yes(FinanceVoiceCommands.parse("запиши витрату 150 на транспорт примітка")==null);
-        yes(FinanceVoiceCommands.parse("запиши витрату 150 на щось таксі")==null);
-        yes(FinanceVoiceCommands.parse("запиши витрату 150 на транспорт")!=null);
-        // Fast format: verb, amount, known account, exactly ONE category
-        // word; any remaining words become the note (not another category).
-        testNote("витратив 150 готівка транспорт таксі",
-            FinanceVoiceCommands.Kind.EXPENSE,"150","Транспорт","готівка","таксі");
-        testNote("Потратив 50 моно транспорт автобус на роботу",
-            FinanceVoiceCommands.Kind.EXPENSE,"50","Транспорт","карта моно",
-            "автобус на роботу");
-        testNote("Витратив 150 карта моно харчування кава і круасан",
-            FinanceVoiceCommands.Kind.EXPENSE,"150","Харчування","карта моно",
-            "кава і круасан");
-        testNote("Джарвіс, витратив 12,50 грн заначка гривні шопінг футболка",
-            FinanceVoiceCommands.Kind.EXPENSE,"12.5","Шопінг","заначка гривні",
-            "футболка");
-        testNote("витратив 150 готівки транспорт автобус",
-            FinanceVoiceCommands.Kind.EXPENSE,"150","Транспорт","готівка","автобус");
-        test("витратив 180 грн готівка транспорт",
-            FinanceVoiceCommands.Kind.EXPENSE,"180","Транспорт","готівка");
-        test("витратив 90 моно телефон",
-            FinanceVoiceCommands.Kind.EXPENSE,"90","Телефон","карта моно");
-        yes(FinanceVoiceCommands.shortExpenseIntent("джарвіс, витратив 150 готівка транспорт"));
-        yes(!FinanceVoiceCommands.shortExpenseIntent("джарвіс, портатив 150 готівка транспорт"));
-        yes(FinanceVoiceCommands.parse("портатив 150 готівка транспорт")==null);
-        yes(FinanceVoiceCommands.shortExpenseIntent("потратив"));
-        yes(FinanceVoiceCommands.parse("витратив 0 готівка транспорт")==null);
-        yes(FinanceVoiceCommands.parse("витратив 1000000 готівка транспорт")==null);
-        yes(FinanceVoiceCommands.parse("витратив 150 транспорт таксі")==null);
-        yes(FinanceVoiceCommands.parse("витратив 150 невідомий транспорт таксі")==null);
-        yes(FinanceVoiceCommands.parse("витратив 150 готівка невідоме таксі")==null);
-        yes(FinanceVoiceCommands.parse("витратив 150 готівка")==null);
-        yes(FinanceVoiceCommands.parse("витратив 150")==null);
-        // "заробив" is an INCOME only. Account and one-word income
-        // category are required; every remaining word is exactly the memo.
-        testNote("Заробив 350 готівка чайові столик сім",
-            FinanceVoiceCommands.Kind.INCOME,"350","чай","готівка","столик сім");
-        testNote("Джарвіс, заробив 15000 грн моно зарплата за листопад",
-            FinanceVoiceCommands.Kind.INCOME,"15000","Зарплата","карта моно","за листопад");
-        testNote("заробив 200,50 карта моно підробіток доставка ввечері",
-            FinanceVoiceCommands.Kind.INCOME,"200.5","Підробіток","карта моно",
-            "доставка ввечері");
-        testNote("заробив 90 заначка гривні бонус подарунок від друга",
-            FinanceVoiceCommands.Kind.INCOME,"90","Бонус","заначка гривні",
-            "подарунок від друга");
-        test("заробив 120 готівка борг",
-            FinanceVoiceCommands.Kind.INCOME,"120","борг","готівка");
-        test("заробив 100 моно інвестиції",
-            FinanceVoiceCommands.Kind.INCOME,"100","Інвестиції","карта моно");
-        yes(FinanceVoiceCommands.shortIncomeIntent("джарвіс заробив"));
-        yes(FinanceVoiceCommands.shortFinanceIntent("заробив 100 моно чайові"));
-        yes(FinanceVoiceCommands.parse("заробив 0 моно зарплата")==null);
-        yes(FinanceVoiceCommands.parse("заробив 1000000 моно зарплата")==null);
-        yes(FinanceVoiceCommands.parse("заробив 200 моно транспорт таксі")==null);
-        yes(FinanceVoiceCommands.parse("заробив 200 монобанк чайові")==null);
-        yes(FinanceVoiceCommands.parse("заробив 200 чайові")==null);
-        yes(FinanceVoiceCommands.parse("заробив 200")==null);
-        yes(FinanceVoiceCommands.parse("заробив")==null);
-        yes(FinanceVoiceCommands.parse("заробив 200 моно невідоме примітка")==null);
-        yes(!FinanceVoiceCommands.shortIncomeIntent("витратив 150 моно транспорт"));
-        yes(!FinanceVoiceCommands.shortFinanceIntent("переказ 1000 на карту"));
-        yes(!FinanceVoiceCommands.shortExpenseIntent("переказ 1000 на карту"));
         yes(FinanceVoiceCommands.parse("переказ 1000 на карту")==null);
         yes(FinanceVoiceCommands.parse("переказ з карти 200")==null);
         yes(FinanceVoiceCommands.parse("запиши витрату 0 на транспорт")==null);
@@ -111,6 +28,29 @@ public final class FinanceVoiceCommandsTest {
         yes(FinanceVoiceCommands.parse("запиши витрату 200 на зарплата")==null);
         yes(FinanceVoiceCommands.cancel("Джарвіс, скасуй витрату"));
         yes(!FinanceVoiceCommands.cancel("запиши витрату"));
+        test("витрата кава 85",FinanceVoiceCommands.Kind.EXPENSE,"85","Їжа → Кафе",null);
+        test("чайові 650 готівкою",FinanceVoiceCommands.Kind.INCOME,"650","чай","готівка");
+        yes(FinanceVoiceCommands.parse("таксі 250")==null);
+        yes(FinanceVoiceCommands.parse("витрата кава 85 завтра")==null);
+        yes(FinanceVoiceCommands.parse("витрата кава 85 і таксі 250")==null);
+        FinanceVoiceCommands.Entry yesterday=FinanceVoiceCommands.parse("витрата кава 85 вчора");
+        yes(yesterday!=null && yesterday.daysAgo==1 && yesterday.category.equals("Їжа → Кафе"));
+        FinanceVoiceCommands.Entry earlier=FinanceVoiceCommands.parse("витратив 150 на каву позавчора");
+        yes(earlier!=null && earlier.daysAgo==2 && earlier.amount.equals("150"));
+        FinanceVoiceCommands.Entry today=FinanceVoiceCommands.parse("запиши витрату 300 гривень на транспорт сьогодні");
+        yes(today!=null && today.daysAgo==0);
+        yes(FinanceVoiceCommands.parse("витратив 120 на каву завтра")==null);
+        test("витрата кава вісімдесят п'ять",FinanceVoiceCommands.Kind.EXPENSE,"85","Їжа → Кафе",null);
+        test("витратив на каву двісті п'ятдесят",FinanceVoiceCommands.Kind.EXPENSE,"250","Їжа → Кафе",null);
+        test("витрата кава півтори тисячі",FinanceVoiceCommands.Kind.EXPENSE,"1500","Їжа → Кафе",null);
+        test("/витрата 85 кава",FinanceVoiceCommands.Kind.EXPENSE,"85","Їжа → Кафе",null);
+        test("/дохід 650 чайові",FinanceVoiceCommands.Kind.INCOME,"650","чай",null);
+        yes(FinanceVoiceCommands.parse("/видалити 85")==null);
+        yes(FinanceVoiceCommands.parse("/витрата")==null);
+        yes("який баланс".equals(FinanceSlashCommands.expand("/баланс")));
+        test("витрата кава 85 з рахунку моно",FinanceVoiceCommands.Kind.EXPENSE,"85","Їжа → Кафе","моно");
+        test("запиши витрату 1800 на заправку з монобанку",FinanceVoiceCommands.Kind.EXPENSE,"1800","Транспорт → Пальне","монобанк");
+        test("чайові 650 з рахунку картка роботи",FinanceVoiceCommands.Kind.INCOME,"650","чай","картка роботи");
         System.out.println("PASS FinanceVoiceCommandsTest");
     }
 }

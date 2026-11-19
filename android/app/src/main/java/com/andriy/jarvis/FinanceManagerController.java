@@ -1,322 +1,74 @@
 package com.andriy.jarvis;
-
 import android.content.Context;
-import android.content.Intent;
-import android.os.Handler;
-import android.os.Looper;
-import android.os.SystemClock;
-
-/**
- * Money Manager expense/income entry by a user-requested voice command.
- * Uses only verified Accessibility screens of com.freeman.moneymanager.
- * Never performs a transfer or edits existing entries. No blind retries
- * after the final save gesture, avoiding duplicated financial records.
- */
+/** Local finance dispatcher; no external app or Accessibility writes. */
 public final class FinanceManagerController {
-    private static final String PACKAGE="com.freeman.moneymanager";
-    private static final Handler HANDLER=new Handler(Looper.getMainLooper());
-    private static final long POLL_MS=480L;
-    private static final long LIMIT_MS=68000L;
-    private static FinanceManagerController active;
-
-    public interface Listener {
-        void onProgress(String message);
-        void onFinished(boolean success,String message);
-    }
-    private enum Stage {
-        OPEN, WAIT_ADD, TYPE, WAIT_TYPE, CATEGORY, WAIT_EDITOR,
-        OPEN_ACCOUNT, WAIT_ACCOUNT, SELECT_ACCOUNT, WAIT_AMOUNT,
-        NOTE, VERIFY_NOTE, KEY, VERIFY, SAVE, VERIFY_SAVED
-    }
-
-    private final Context context;
-    private final FinanceVoiceCommands.Entry entry;
-    private final Listener listener;
-    private final JarvisPhoneModeManager.Lease lease;
-    private final Runnable tick=this::poll;
-    private final long openedAt=SystemClock.elapsedRealtime();
-    private Stage stage=Stage.OPEN;
-    private long since=openedAt;
-    private int digitIndex;
-    private boolean finished;
-    private boolean saveAttempted;
-    private int attempts;
-
-    private FinanceManagerController(Context context,FinanceVoiceCommands.Entry entry,
-                                     Listener listener,JarvisPhoneModeManager.Lease lease){
-        this.context=context;
-        this.entry=entry;
-        this.listener=listener;
-        this.lease=lease;
-    }
-    public static synchronized boolean isRunning(){return active!=null;}
-    public static void cancel(){
-        FinanceManagerController flow;
-        synchronized(FinanceManagerController.class){flow=active;}
-        if(flow!=null)flow.finish(false,
-            flow.saveAttempted?"Натискання збереження вже виконано. Перевір запис у застосунку.":
-                "Запис витрати/доходу скасовано до збереження.");
-    }
-
+    private FinanceManagerController(){}
+    public interface Listener {void onProgress(String message);void onFinished(boolean success,String message);}
+    public static boolean isRunning(){return false;}
+    public static void cancel(){}
     public static void start(Context context,String utterance,Listener listener) {
+        start(context,utterance,java.util.UUID.randomUUID().toString(),listener);
+    }
+    public static synchronized void start(Context context,String utterance,String commandId,Listener listener) {
+        start(context,utterance,commandId,System.currentTimeMillis(),listener);
+    }
+    public static synchronized void start(Context context,String utterance,String commandId,long capturedAt,Listener listener) {
         if(listener==null)return;
-        FinanceVoiceCommands.Entry request=FinanceVoiceCommands.parse(utterance);
-        if(request==null){
-            listener.onFinished(false,"Не розпізнав суму або категорію. " +
-                "Спробуй «Запиши витрату 350 гривень на харчування».");return;
-        }
-        if(context.getPackageManager().hasSystemFeature(
-            android.content.pm.PackageManager.FEATURE_WATCH)){
-            listener.onFinished(false,"Фінансовий запис виконується на телефоні.");return;
-        }
-        synchronized(FinanceManagerController.class){
-            if(active!=null){listener.onFinished(false,
-                "Попередня операція ще виконується. Не створюватиму дублікат.");return;}
-        }
-        Intent launch=context.getPackageManager().getLaunchIntentForPackage(PACKAGE);
-        if(launch==null){
-            listener.onFinished(false,
-                "Не встановлено «Менеджер фінансів» (com.freeman.moneymanager).");return;
-        }
-        JarvisPhoneModeManager.Lease lease=JarvisPhoneModeManager.acquireForCommand(context);
-        if(!lease.granted){listener.onFinished(false,lease.message);return;}
-        try {
-            context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-        } catch(RuntimeException error) {
-            JarvisPhoneModeManager.releaseForCommand(lease,false);
-            listener.onFinished(false,"Android не зміг відкрити «Менеджер фінансів».");return;
-        }
-        FinanceManagerController task=new FinanceManagerController(context,request,listener,lease);
-        synchronized(FinanceManagerController.class){active=task;}
-        listener.onProgress("Відкриваю «Менеджер фінансів» для "+
-            (request.kind==FinanceVoiceCommands.Kind.EXPENSE?"витрати":"доходу")+
-            " "+request.amount+" грн...");
-        HANDLER.postDelayed(task.tick,700L);
-    }
-    private void move(Stage next,String status){
-        stage=next;
-        since=SystemClock.elapsedRealtime();
-        listener.onProgress(status);
-    }
-    private void poll(){
-        if(finished)return;
-        if (!JarvisPhoneScreenGuard.available(context)) {
-            finish(false,JarvisPhoneScreenGuard.MESSAGE + (saveAttempted
-                ? " Збереження вже натиснуто: спочатку перевір історію, не повторюй запис." : ""));
+        if(capturedAt<=0||capturedAt>System.currentTimeMillis()+300000L){listener.onFinished(false,"Перевір дату й час годинника.");return;}
+        if(FinanceBatchCommands.looksLikeBatch(utterance)){
+            FinanceBatchController.start(context,utterance,commandId,capturedAt,listener);
             return;
         }
-        if(!ScreenControlAccessibilityService.isSessionActive()){
-            finish(false,"Керування екраном вимкнулося. Фінансову операцію зупинено.");return;
+        FinanceVoiceFollowups.Correction correction=FinanceVoiceFollowups.parse(utterance);
+        if(correction!=null){
+            FinanceCorrectionController.start(context,utterance,commandId,capturedAt,correction,listener);
+            return;
         }
-        long elapsed=SystemClock.elapsedRealtime()-since;
-        if(SystemClock.elapsedRealtime()-openedAt>LIMIT_MS){
-            finish(false,"Час очікування «Менеджера фінансів» вичерпано. "+
-                (saveAttempted?"Перевір, чи запис збережено.":"Запис не підтверджував."));return;
+        final int sourceSeparator=commandId.lastIndexOf(':');
+        final String sourceId=sourceSeparator<1?"phone":commandId.substring(0,sourceSeparator);
+        String command=utterance;
+        boolean clarified=false;
+        if(FinanceVoiceClarification.pending(context,sourceId)||FinanceVoiceClarification.maybeStart(utterance)){
+            try(FinanceLedger check=new FinanceLedger(context)){
+                String receipt=check.receipt(commandId,utterance);
+                if(receipt!=null){listener.onFinished(true,receipt);return;}
+            }catch(RuntimeException e){listener.onFinished(false,"Не вдалося перевірити фінансовий журнал.");return;}
+            FinanceVoiceClarification.Step step=FinanceVoiceClarification.process(context,sourceId,utterance);
+            if(step!=null){
+                if(step.command==null){listener.onFinished(true,step.reply);return;}
+                command=step.command;clarified=true;
+            }
         }
-        if(!ScreenControlAccessibilityService.financeVisible()){
-            HANDLER.postDelayed(tick,POLL_MS);return;
-        }
-        ScreenControlAccessibilityService.FinanceScreen screen=
-            ScreenControlAccessibilityService.financeScreen();
-        switch(stage){
-            case OPEN:
-                if(screen==ScreenControlAccessibilityService.FinanceScreen.HOME){
-                    ScreenControlAccessibilityService.FinanceStep step=
-                        ScreenControlAccessibilityService.financePlus();
-                    if(step==ScreenControlAccessibilityService.FinanceStep.TAPPED)
-                        move(Stage.WAIT_ADD,"Відкриваю форму операції...");
-                    else if(step==ScreenControlAccessibilityService.FinanceStep.BLOCKED){
-                        finish(false,"Неможливо безпечно натиснути «+».");return;
-                    }
-                } else if(screen==ScreenControlAccessibilityService.FinanceScreen.CATEGORY) {
-                    move(Stage.TYPE,"Форма «Додати» вже відкрита...");
-                } else if(elapsed>11000L) {
-                    finish(false,"Не впізнав головний екран «Менеджера фінансів».");return;
-                }
-                break;
-            case WAIT_ADD:
-                if(screen==ScreenControlAccessibilityService.FinanceScreen.CATEGORY)
-                    move(Stage.TYPE,"Вибираю тип операції...");
-                else if(elapsed>7000L){
-                    finish(false,"Після «+» форма додавання не відкрилася.");return;
-                }
-                break;
-            case TYPE:
-                if(screen!=ScreenControlAccessibilityService.FinanceScreen.CATEGORY)break;
-                ScreenControlAccessibilityService.FinanceStep typed=
-                    ScreenControlAccessibilityService.financeType(entry.kind);
-                if(typed==ScreenControlAccessibilityService.FinanceStep.TAPPED)
-                    move(Stage.WAIT_TYPE,"Обрав тип. Перевіряю категорії...");
-                else if(typed==ScreenControlAccessibilityService.FinanceStep.BLOCKED){
-                    finish(false,"Не зміг вибрати тип операції.");return;
-                }
-                break;
-            case WAIT_TYPE:
-                if(elapsed>=650L && screen==ScreenControlAccessibilityService.FinanceScreen.CATEGORY)
-                    move(Stage.CATEGORY,"Шукаю категорію «"+entry.category+"»...");
-                else if(elapsed>=7000L){
-                    finish(false,"Категорії не з'явилися.");return;
-                }
-                break;
-            case CATEGORY:
-                if(screen!=ScreenControlAccessibilityService.FinanceScreen.CATEGORY)break;
-                ScreenControlAccessibilityService.FinanceStep category=
-                    ScreenControlAccessibilityService.financeCategory(entry);
-                if(category==ScreenControlAccessibilityService.FinanceStep.TAPPED)
-                    move(Stage.WAIT_EDITOR,"Вибрав категорію. Очікую суму/рахунок...");
-                else if(category==ScreenControlAccessibilityService.FinanceStep.BLOCKED){
-                    finish(false,"Не зміг безпечно вибрати категорію.");return;
-                }
-                break;
-            case WAIT_EDITOR:
-                if(screen==ScreenControlAccessibilityService.FinanceScreen.ACCOUNTS)
-                    move(Stage.SELECT_ACCOUNT,"Перевіряю рахунок...");
-                else if(screen==ScreenControlAccessibilityService.FinanceScreen.AMOUNT)
-                    move(entry.account==null?nextAmountStage():Stage.OPEN_ACCOUNT,
-                        entry.account==null?"Готую суму і примітку...":"Вибираю вказаний рахунок...");
-                else if(elapsed>8500L){
-                    finish(false,"Не знайшов поле суми після вибору категорії.");return;
-                }
-                break;
-            case OPEN_ACCOUNT:
-                if(screen==ScreenControlAccessibilityService.FinanceScreen.ACCOUNTS) {
-                    move(Stage.SELECT_ACCOUNT,"Вибираю рахунок...");
-                } else if(screen==ScreenControlAccessibilityService.FinanceScreen.AMOUNT) {
-                    ScreenControlAccessibilityService.FinanceStep pick=
-                        ScreenControlAccessibilityService.financeOpenAccounts();
-                    if(pick==ScreenControlAccessibilityService.FinanceStep.TAPPED)
-                        move(Stage.WAIT_ACCOUNT,"Відкриваю рахунки...");
-                    else if(pick==ScreenControlAccessibilityService.FinanceStep.BLOCKED){
-                        finish(false,"Не можу відкрити вибір рахунку.");return;
-                    }
-                }
-                break;
-            case WAIT_ACCOUNT:
-                if(screen==ScreenControlAccessibilityService.FinanceScreen.ACCOUNTS)
-                    move(Stage.SELECT_ACCOUNT,"Знаходжу рахунок...");
-                else if(elapsed>7000L){
-                    finish(false,"Вибір рахунків не відкрився.");return;
-                }
-                break;
-            case SELECT_ACCOUNT:
-                if(screen==ScreenControlAccessibilityService.FinanceScreen.AMOUNT) {
-                    move(nextAmountStage(),"Готую суму і примітку...");
-                } else if(screen==ScreenControlAccessibilityService.FinanceScreen.ACCOUNTS) {
-                    ScreenControlAccessibilityService.FinanceStep choice=
-                        ScreenControlAccessibilityService.financeAccount(entry.account);
-                    if(choice==ScreenControlAccessibilityService.FinanceStep.TAPPED)
-                        move(Stage.WAIT_AMOUNT,entry.account==null?
-                            "Залишаю поточний рахунок...":
-                            "Вибрав рахунок «"+entry.account+"»...");
-                    else if(choice==ScreenControlAccessibilityService.FinanceStep.BLOCKED){
-                        finish(false,"Рахунок недоступний або не впізнаний.");return;
-                    }
-                }
-                break;
-            case WAIT_AMOUNT:
-                if(screen==ScreenControlAccessibilityService.FinanceScreen.AMOUNT)
-                    move(nextAmountStage(),"Поле суми готове...");
-                else if(elapsed>8000L){
-                    finish(false,"Після вибору рахунку сума не відкрилася.");return;
-                }
-                break;
-            case NOTE:
-                if(screen!=ScreenControlAccessibilityService.FinanceScreen.AMOUNT)break;
-                ScreenControlAccessibilityService.FinanceStep noteStep=
-                    ScreenControlAccessibilityService.financeSetNote(entry.note);
-                if(noteStep==ScreenControlAccessibilityService.FinanceStep.TAPPED)
-                    move(Stage.VERIFY_NOTE,"Перевіряю примітку «"+entry.note+"»...");
-                else if(noteStep==ScreenControlAccessibilityService.FinanceStep.BLOCKED){
-                    finish(false,"Не знайшов доступного текстового поля «Примітка» "+
-                        "у Менеджері фінансів. Нічого не зберіг. "+
-                        "Відкрий поле вручну або перевір екран.");return;
-                }
-                break;
-            case VERIFY_NOTE:
-                if(ScreenControlAccessibilityService.financeNoteMatches(entry.note) &&
-                   screen==ScreenControlAccessibilityService.FinanceScreen.AMOUNT)
-                    move(Stage.KEY,"Примітку перевірено. Вводжу суму...");
-                else if(elapsed>5500L) {
-                    finish(false,"Не зміг підтвердити текст примітки. "+
-                        "Операцію не зберіг.");return;
-                }
-                break;
-            case KEY:
-                if(screen!=ScreenControlAccessibilityService.FinanceScreen.AMOUNT)break;
-                String digits=entry.keypad();
-                if(digitIndex==0) {
-                    String visible=ScreenControlAccessibilityService.financeVisibleAmount();
-                    if(visible!=null && !FinanceManagerUiLabels.amountEquals("0",visible)) {
-                        finish(false,"У полі вже є сума «"+visible+
-                            "». Не додаватиму цифри до попереднього запису.");return;
-                    }
-                }
-                if(digitIndex<digits.length()) {
-                    ScreenControlAccessibilityService.FinanceStep key=
-                        ScreenControlAccessibilityService.financeDigit(
-                            digits.charAt(digitIndex));
-                    if(key==ScreenControlAccessibilityService.FinanceStep.TAPPED) {
-                        digitIndex++;
-                        if(digitIndex==digits.length())
-                            move(Stage.VERIFY,"Перевіряю введену суму перед збереженням...");
-                    } else if(key==ScreenControlAccessibilityService.FinanceStep.BLOCKED) {
-                        finish(false,"Не вдалося ввести цифру на клавіатурі.");return;
-                    }
-                }
-                break;
-            case VERIFY:
-                if(screen!=ScreenControlAccessibilityService.FinanceScreen.AMOUNT){
-                    finish(false,"Форма змінилася до перевірки суми. Не зберігав.");return;
-                }
-                String actual=ScreenControlAccessibilityService.financeVisibleAmount();
-                if(FinanceManagerUiLabels.amountEquals(entry.amount,actual))
-                    move(Stage.SAVE,"Сума збігається. Зберігаю операцію...");
-                else if(elapsed>4500L){
-                    finish(false,"Не зміг підтвердити суму "+entry.amount+
-                        " грн на екрані. Не натискав кнопку збереження.");return;
-                }
-                break;
-            case SAVE:
-                if(screen!=ScreenControlAccessibilityService.FinanceScreen.AMOUNT){
-                    finish(false,"Форма змінилася; збереження не натискав.");return;
-                }
-                // At most ONE submission gesture, even if app does not respond.
-                // This avoids accidentally duplicating an expense.
-                saveAttempted=true;
-                ScreenControlAccessibilityService.FinanceStep saved=
-                    ScreenControlAccessibilityService.financeConfirm(entry.amount);
-                if(saved==ScreenControlAccessibilityService.FinanceStep.TAPPED)
-                    move(Stage.VERIFY_SAVED,"Натиснув ✓. Перевіряю збереження...");
-                else{
-                    finish(false,"Не зміг підтвердити суму перед збереженням. "+
-                        "Перевір форму вручну.");return;
-                }
-                break;
-            case VERIFY_SAVED:
-                if(screen==ScreenControlAccessibilityService.FinanceScreen.HOME) {
-                    finish(false,"Збереження натиснуто, форма закрилася. Не можу підтвердити запис " +
-                        entry.amount+" грн, «"+entry.category+"» в історії. " +
-                        "Перевір операцію вручну; не повторюй команду до перевірки.");
-                    return;
-                }
-                if(elapsed>7000L){
-                    finish(false,"Натиснув ✓, але не підтвердив повернення до списку "+
-                        "операцій. Перевір запис вручну, не повторюй команду без перевірки.");
-                    return;
-                }
-                break;
-        }
-        if(!finished)HANDLER.postDelayed(tick,POLL_MS);
-    }
-    private Stage nextAmountStage(){
-        return entry.note==null ? Stage.KEY : Stage.NOTE;
-    }
-    private void finish(boolean success,String result){
-        if(finished)return;
-        finished=true;
-        HANDLER.removeCallbacks(tick);
-        synchronized(FinanceManagerController.class){if(active==this)active=null;}
-        JarvisPhoneModeManager.releaseForCommand(lease,success);
-        listener.onFinished(success,result);
+        FinanceVoiceCommands.Entry request=FinanceVoiceCommands.parse(command);
+        if(request==null){listener.onFinished(false,"Не розпізнав фінансовий запис.");return;}
+        final boolean clearClarification=clarified;
+        try(FinanceLedger ledger=new FinanceLedger(context)){
+            net.zetetic.database.sqlcipher.SQLiteDatabase db=ledger.getWritableDatabase();
+            db.beginTransaction();try{
+            String previous=ledger.receipt(commandId,utterance);if(previous!=null){listener.onFinished(true,previous);return;}
+            long account=-1;
+            if(request.account==null)account=Long.parseLong(ledger.setting("default_account","-1"));
+            else account=ledger.resolveAccount(request.account);
+            if(account<0){listener.onFinished(false,"Відкрий Фінанси у Джарвісі та додай рахунок або вкажи його назву в команді.");return;}
+            if(!ledger.currency(account).equals("UAH")){listener.onFinished(false,"Голосовий запис гривень потребує рахунку UAH.");return;}
+            if(request.category.equals("борг")||request.category.equals("крипта")){
+                listener.onFinished(false,"Для боргів та активів потрібен окремий тип обліку. Запис не створено.");return;
+            }
+            long effectiveTime=java.time.Instant.ofEpochMilli(capturedAt).atZone(java.time.ZoneId.systemDefault())
+                .minusDays(request.daysAgo).toInstant().toEpochMilli();
+            ledger.record(commandId,account,FinanceLedger.minor(request.amount),
+                request.kind==FinanceVoiceCommands.Kind.EXPENSE?"expense":"income",request.category,utterance,effectiveTime);
+            String reply="✅ "+request.amount+" ₴ · "+request.category+" · "+java.time.Instant.ofEpochMilli(effectiveTime).atZone(java.time.ZoneId.systemDefault()).toLocalDate()+". Записано у Джарвісі.";
+            ledger.receipt(commandId,utterance,reply);
+            int separator=commandId.lastIndexOf(':');
+            String source=separator<1?"phone":commandId.substring(0,separator);
+            ledger.setSetting("finance_last_id:"+source,commandId);
+            ledger.setSetting("finance_last_at:"+source,Long.toString(capturedAt));
+            db.setTransactionSuccessful();
+            }finally{db.endTransaction();}
+            if(clearClarification)FinanceVoiceClarification.clear(context,sourceId);
+            listener.onFinished(true,ledger.receipt(commandId,utterance));
+        }catch(IllegalArgumentException e){listener.onFinished(false,e.getMessage());}
+        catch(RuntimeException e){listener.onFinished(false,"Не вдалося зберегти фінансовий запис.");}
     }
 }
