@@ -82,6 +82,23 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         }
         return null;
     }
+    /** Text-only fallback for a full-screen Wear OS IME. Never tap behind
+     * keyboards, permission dialogs, or another foreground app. */
+    private AccessibilityNodeInfo spotifyRootUnderKeyboard() {
+        boolean ime=false;
+        AccessibilityNodeInfo spotify=null;
+        for(AccessibilityWindowInfo window:getWindows()) {
+            if(window.getType()==AccessibilityWindowInfo.TYPE_INPUT_METHOD)
+                ime=true;
+            if(window.getType()!=AccessibilityWindowInfo.TYPE_APPLICATION)continue;
+            AccessibilityNodeInfo root=window.getRoot();
+            if(root==null || root.getPackageName()==null)continue;
+            if(SPOTIFY_PKG.contentEquals(root.getPackageName()))spotify=root;
+            else if(window.isActive())return null;
+        }
+        return ime?spotify:null;
+    }
+
     public static boolean foreground(String expectedPackage) {
         JarvisWatchScreenService s=connected.get();
         return s!=null && s.appRoot(expectedPackage)!=null;
@@ -126,7 +143,7 @@ public final class JarvisWatchScreenService extends AccessibilityService {
     // The target application package is checked at every step and before
     // gesture injection. No fixed screen positions are used.
     public enum MapsStep {
-        CENTER_LOCATION,OPEN_SEARCH,SET_DESTINATION,SUBMIT_SEARCH,
+        OPEN_MAP,CENTER_LOCATION,OPEN_SEARCH,SET_DESTINATION,SUBMIT_SEARCH,
         FIRST_RESULT,DIRECTIONS,WALKING
     }
     private static final String MAPS_PKG="com.google.android.apps.maps";
@@ -139,6 +156,8 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         AccessibilityNodeInfo root=service.appRoot(MAPS_PKG);
         if(root==null)return Result.WAIT;
         switch(step) {
+            case OPEN_MAP:
+                return service.mapsOpenMapFromHome(root,completion);
             case CENTER_LOCATION:
                 return service.mapsTapExact(root,completion,
                     "my location","your location","current location",
@@ -173,6 +192,46 @@ public final class JarvisWatchScreenService extends AccessibilityService {
             JarvisDiagnostics.error(JarvisDiagnostics.Event.ACCESSIBILITY_ERROR,failure);
             return Result.BLOCKED;
         }
+    }
+
+    /** Watch Maps home shows four shortcuts over "Нещодавні". The user
+     * identified its upper-left tile as the map button. Click only when
+     * Maps' real accessibility tree confirms that home layout. */
+    private boolean mapsHome(AccessibilityNodeInfo root) {
+        return spotifyHasLabel(root,"нещодавні","recent","recents","recently");
+    }
+    public static boolean mapsHomeVisible() {
+        JarvisWatchScreenService s=connected.get();
+        AccessibilityNodeInfo root=s==null?null:s.appRoot(MAPS_PKG);
+        return root!=null && s.mapsHome(root);
+    }
+    private Result mapsOpenMapFromHome(AccessibilityNodeInfo root,Completion cb) {
+        if(!mapsHome(root))return Result.DONE; // Already in the map screen.
+        Result labelled=mapsTapExact(root,cb,
+            "map","maps","карта","карти","відкрити карту",
+            "переглянути карту","show map","open map");
+        if(labelled!=Result.WAIT)return labelled;
+        // On some localized Wear Maps versions the top-left tile has only
+        // an icon, no accessible label. Require the full 2x2 clickable grid
+        // plus "Нещодавні" before using the measured tile's bounds.
+        float width=getResources().getDisplayMetrics().widthPixels;
+        float height=getResources().getDisplayMetrics().heightPixels;
+        AccessibilityNodeInfo upperLeft=null;
+        int upperRight=0,lowerLeft=0,lowerRight=0;
+        for(AccessibilityNodeInfo node:spotifyNodes(root)) {
+            if(!node.isClickable() || node.isEditable())continue;
+            Rect rect=new Rect();node.getBoundsInScreen(rect);
+            if(rect.width()<width*.19f || rect.width()>width*.74f ||
+               rect.height()<height*.09f || rect.height()>height*.40f)continue;
+            float x=rect.exactCenterX()/width,y=rect.exactCenterY()/height;
+            if(x>.15f && x<.54f && y>.18f && y<.47f)
+                upperLeft=node;
+            if(x>.54f && x<.89f && y>.18f && y<.47f)upperRight++;
+            if(x>.15f && x<.54f && y>.47f && y<.74f)lowerLeft++;
+            if(x>.54f && x<.89f && y>.47f && y<.74f)lowerRight++;
+        }
+        return upperLeft!=null && upperRight>0 && lowerLeft>0 && lowerRight>0
+            ?mapsTapNode(upperLeft,cb):Result.WAIT;
     }
 
     private Result mapsTapExact(AccessibilityNodeInfo root,Completion cb,
@@ -301,10 +360,18 @@ public final class JarvisWatchScreenService extends AccessibilityService {
     // restricted to Spotify's visible accessibility tree on THIS watch.
     // Screen locations are never copied from the paired phone.
     public enum SpotifyStep {
-        OPEN_SEARCH, REVEAL_NAV, FOCUS_SEARCH, SET_QUERY, SUBMIT_QUERY,
-        SELECT_RESULT, PLAY_PLAYLIST, VERIFY_PLAYLIST
+        OPEN_SEARCH, REVEAL_NAV, FOCUS_SEARCH, SET_QUERY, VERIFY_QUERY,
+        SUBMIT_QUERY, SELECT_RESULT, PLAY_PLAYLIST, VERIFY_PLAYLIST
     }
     private static final String SPOTIFY_PKG="com.spotify.music";
+
+    public static boolean spotifySearchAvailable() {
+        JarvisWatchScreenService s=connected.get();
+        AccessibilityNodeInfo root=s==null?null:s.appRoot(SPOTIFY_PKG);
+        return root!=null &&
+            (s.spotifyHasEditable(root) ||
+             s.spotifyHasLabel(root,"search","пошук","поиск"));
+    }
 
     public static Result spotifyStep(SpotifyStep step,String title,
                                      boolean playlist,Completion completion) {
@@ -330,6 +397,10 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         JarvisWatchScreenService service=connected.get();
         if(service==null || step==null || completion==null)return Result.BLOCKED;
         AccessibilityNodeInfo root=service.appRoot(SPOTIFY_PKG);
+        if(root==null && (step==SpotifyStep.SET_QUERY ||
+                          step==SpotifyStep.VERIFY_QUERY ||
+                          step==SpotifyStep.SUBMIT_QUERY))
+            root=service.spotifyRootUnderKeyboard();
         if(root==null)return Result.WAIT;
         switch(step) {
             case OPEN_SEARCH:
@@ -337,11 +408,13 @@ public final class JarvisWatchScreenService extends AccessibilityService {
                 return service.spotifyTapExact(root,completion,
                     "search","пошук","поиск");
             case REVEAL_NAV:
-                return service.swipe(SPOTIFY_PKG,true,true,completion);
+                return service.spotifyRevealNavigation(completion);
             case FOCUS_SEARCH:
                 return service.spotifyFocusSearch(root,completion);
             case SET_QUERY:
                 return service.spotifySetQuery(root,title);
+            case VERIFY_QUERY:
+                return service.spotifyVerifyQuery(root,title);
             case SUBMIT_QUERY:
                 return service.spotifySubmitQuery(root);
             case SELECT_RESULT:
@@ -476,27 +549,63 @@ public final class JarvisWatchScreenService extends AccessibilityService {
             "що хочете послухати","що ви хочете послухати","пошук");
     }
 
+    /** Input fields can be hidden below a full-screen Wear OS keyboard. Text
+     * actions are safe here because the node is still owned by Spotify and
+     * the foreground overlay is strictly an IME (checked above). */
+    private AccessibilityNodeInfo spotifyEditableNode(AccessibilityNodeInfo root) {
+        ArrayDeque<AccessibilityNodeInfo> queue=new ArrayDeque<>();
+        queue.add(root);
+        AccessibilityNodeInfo only=null,focused=null;
+        int matches=0,visited=0;
+        while(!queue.isEmpty() && ++visited<=MAX_NODES) {
+            AccessibilityNodeInfo node=queue.removeFirst();
+            if(node==null || !node.isEnabled() || node.isPassword())continue;
+            if(node.getPackageName()!=null &&
+               !SPOTIFY_PKG.contentEquals(node.getPackageName()))continue;
+            if(node.isEditable()) {
+                matches++;
+                only=node;
+                if(node.isFocused())focused=node;
+            }
+            for(int i=0;i<node.getChildCount();i++) {
+                AccessibilityNodeInfo child=node.getChild(i);
+                if(child!=null)queue.addLast(child);
+            }
+        }
+        if(visited>MAX_NODES)return null;
+        return focused!=null?focused:matches==1?only:null;
+    }
+
     private Result spotifySetQuery(AccessibilityNodeInfo root,String title) {
         if(title==null || title.isEmpty() || title.length()>75)return Result.BLOCKED;
-        for(AccessibilityNodeInfo n:spotifyNodes(root)) {
-            if(!n.isEditable() || n.isPassword())continue;
-            Bundle args=new Bundle();
-            args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,title);
-            return n.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)
-                ?Result.DONE:Result.WAIT;
-        }
-        return Result.WAIT;
+        AccessibilityNodeInfo input=spotifyEditableNode(root);
+        if(input==null)return Result.WAIT;
+        if(AppNameMatcher.normalize(title).equals(
+            AppNameMatcher.normalize(input.getText()==null?"":input.getText().toString())))
+            return Result.DONE;
+        Bundle args=new Bundle();
+        args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,title);
+        return input.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)
+            ?Result.DONE:Result.WAIT;
+    }
+
+    private Result spotifyVerifyQuery(AccessibilityNodeInfo root,String title) {
+        AccessibilityNodeInfo input=spotifyEditableNode(root);
+        if(input==null || title==null)return Result.WAIT;
+        String actual=input.getText()==null?"":input.getText().toString();
+        return AppNameMatcher.normalize(title).equals(AppNameMatcher.normalize(actual))
+            ?Result.DONE:Result.WAIT;
     }
 
     private Result spotifySubmitQuery(AccessibilityNodeInfo root) {
-        for(AccessibilityNodeInfo n:spotifyNodes(root)) {
-            if(!n.isEditable() || n.isPassword())continue;
+        AccessibilityNodeInfo input=spotifyEditableNode(root);
+        if(input!=null) {
             if(Build.VERSION.SDK_INT>=30) {
                 int enter=AccessibilityNodeInfo.AccessibilityAction
                     .ACTION_IME_ENTER.getId();
-                for(AccessibilityNodeInfo.AccessibilityAction action:n.getActionList()) {
+                for(AccessibilityNodeInfo.AccessibilityAction action:input.getActionList()) {
                     if(action.getId()==enter)
-                        return n.performAction(enter)?Result.DONE:Result.WAIT;
+                        return input.performAction(enter)?Result.DONE:Result.WAIT;
                 }
             }
             // Some Spotify versions update results on each keystroke and
@@ -504,6 +613,19 @@ public final class JarvisWatchScreenService extends AccessibilityService {
             return Result.DONE;
         }
         return Result.WAIT;
+    }
+
+    /** A longer, slower swipe on the WATCH (not Pixel) that actually reaches
+     * the Spotify navigation row on round screens. */
+    private Result spotifyRevealNavigation(Completion cb) {
+        if(appRoot(SPOTIFY_PKG)==null)return Result.WAIT;
+        android.util.DisplayMetrics metrics=getResources().getDisplayMetrics();
+        float w=metrics.widthPixels,h=metrics.heightPixels;
+        if(w<160 || h<160)return Result.BLOCKED;
+        Path path=new Path();
+        path.moveTo(w*.50f,h*.88f);
+        path.lineTo(w*.50f,h*.12f);
+        return gesture(SPOTIFY_PKG,path,550L,cb);
     }
 
     private static boolean spotifyTitleMatches(String label,String wanted) {
