@@ -78,6 +78,10 @@ public final class JarvisWatchSpotifyController {
         int revealAttempts;
         long lastRevealAt;
         int queryRetries;
+        int homeSwipes;
+        int playlistScrolls;
+        int unchangedPlaylistViews;
+        String lastPlaylistViewport="";
         boolean finished;
         final JarvisCallbackGate steps=new JarvisCallbackGate();
 
@@ -106,7 +110,9 @@ public final class JarvisWatchSpotifyController {
             if(finished || !callback.active())return;
             if(JarvisWatchScreenService.foreground(PACKAGE)) {
                 JarvisWatchSpotifyTrace.mark(context,"SPOTIFY_FOREGROUND");
-                run(JarvisWatchScreenService.SpotifyStep.OPEN_SEARCH);
+                // Every automated Watch7 Spotify request begins by verifying
+                // the Home screen; a resumed player may be on another page.
+                run(JarvisWatchScreenService.SpotifyStep.CHECK_HOME);
                 return;
             }
             if(SystemClock.elapsedRealtime()>=expires) {
@@ -142,16 +148,24 @@ public final class JarvisWatchSpotifyController {
                 run(JarvisWatchScreenService.SpotifyStep.REVEAL_NAV);
                 return;
             }
-            if(step==JarvisWatchScreenService.SpotifyStep.REVEAL_NAV) {
-                perform(step,JarvisWatchScreenService.SpotifyStep.OPEN_SEARCH);
-                return;
-            }
             perform(step,next(step));
         }
 
         private JarvisWatchScreenService.SpotifyStep next(
             JarvisWatchScreenService.SpotifyStep step) {
             switch(step) {
+                case CHECK_HOME:
+                    return JarvisWatchScreenService.SpotifyStep.REVEAL_NAV;
+                case SWIPE_HOME:
+                    return JarvisWatchScreenService.SpotifyStep.CHECK_HOME;
+                case REVEAL_NAV:
+                    return kind==SpotifyMusicCommands.Kind.PLAYLIST
+                        ?JarvisWatchScreenService.SpotifyStep.FIND_LIBRARY_PLAYLIST
+                        :JarvisWatchScreenService.SpotifyStep.OPEN_SEARCH;
+                case FIND_LIBRARY_PLAYLIST:
+                    return JarvisWatchScreenService.SpotifyStep.PLAY_PLAYLIST;
+                case SCROLL_LIBRARY_PLAYLISTS:
+                    return JarvisWatchScreenService.SpotifyStep.FIND_LIBRARY_PLAYLIST;
                 case OPEN_SEARCH:
                     return JarvisWatchScreenService.SpotifyStep.FOCUS_SEARCH;
                 case FOCUS_SEARCH:
@@ -206,7 +220,32 @@ public final class JarvisWatchSpotifyController {
                     break;
                 case WAIT:
                     steps.finish(stepToken);
-                    if(step==JarvisWatchScreenService.SpotifyStep.PLAY_PLAYLIST &&
+                    if(step==JarvisWatchScreenService.SpotifyStep.CHECK_HOME) {
+                        if(JarvisWatchUiRules.mayReturnToSpotifyHome(
+                            homeSwipes,JarvisWatchScreenService.foreground(PACKAGE))) {
+                            MAIN.postDelayed(
+                                ()->run(JarvisWatchScreenService.SpotifyStep.SWIPE_HOME),
+                                1300L);
+                        } else done(false,"Spotify не показав головний екран після "+
+                            "трьох свайпів вправо. Перевір екран Watch7.");
+                    } else if(step==JarvisWatchScreenService.SpotifyStep.FIND_LIBRARY_PLAYLIST) {
+                        // Search visible playlist names directly. The scroll is
+                        // attempted only AFTER the current viewport was checked.
+                        String visible=JarvisWatchScreenService.spotifyPlaylistViewport();
+                        if(playlistScrolls>0 && !visible.isEmpty() &&
+                           visible.equals(lastPlaylistViewport))
+                            unchangedPlaylistViews++;
+                        else unchangedPlaylistViews=0;
+                        lastPlaylistViewport=visible;
+                        if(JarvisWatchUiRules.mayScrollForPlaylist(
+                            playlistScrolls,unchangedPlaylistViews,
+                            JarvisWatchScreenService.foreground(PACKAGE))) {
+                            MAIN.postDelayed(
+                                ()->run(JarvisWatchScreenService.SpotifyStep.SCROLL_LIBRARY_PLAYLISTS),
+                                2000L);
+                        } else done(false,"Плейлист «"+title+"» не знайдено у видимому "+
+                            "списку Spotify на Watch7. Пошук не запускав.");
+                    } else if(step==JarvisWatchScreenService.SpotifyStep.PLAY_PLAYLIST &&
                        SystemClock.elapsedRealtime()-stageStart>12000L) {
                         done(false,"Плейлист відкрито, але кнопку відтворення "+
                             "на годиннику не знайдено.");
@@ -251,6 +290,14 @@ public final class JarvisWatchSpotifyController {
             if(next==null) {
                 done(false,"Не вдалося завершити сценарій Spotify.");return;
             }
+            if(step==JarvisWatchScreenService.SpotifyStep.SWIPE_HOME)
+                homeSwipes++;
+            if(step==JarvisWatchScreenService.SpotifyStep.SCROLL_LIBRARY_PLAYLISTS)
+                playlistScrolls++;
+            if(step==JarvisWatchScreenService.SpotifyStep.REVEAL_NAV)
+                status("Відкриваю список Spotify свайпом угору…");
+            if(step==JarvisWatchScreenService.SpotifyStep.FIND_LIBRARY_PLAYLIST)
+                status("Знайшов плейлист «"+title+"». Відкриваю без пошуку.");
             if(step==JarvisWatchScreenService.SpotifyStep.OPEN_SEARCH)
                 status("Відкрито пошук Spotify.");
             if(step==JarvisWatchScreenService.SpotifyStep.SET_QUERY)
@@ -260,6 +307,8 @@ public final class JarvisWatchSpotifyController {
             stageStart=SystemClock.elapsedRealtime();
             long delay=step==JarvisWatchScreenService.SpotifyStep.SUBMIT_QUERY?
                 1600L:step==JarvisWatchScreenService.SpotifyStep.REVEAL_NAV?
+                1400L:step==JarvisWatchScreenService.SpotifyStep.SWIPE_HOME?
+                1200L:step==JarvisWatchScreenService.SpotifyStep.SCROLL_LIBRARY_PLAYLISTS?
                 1100L:step==JarvisWatchScreenService.SpotifyStep.SET_QUERY?
                 1100L:step==JarvisWatchScreenService.SpotifyStep.SELECT_RESULT?
                 1200L:650L;
