@@ -11,7 +11,7 @@ def stableSigningReady = [stableKeystore, stableStorePassword, stableAlias, stab
 
 android {
     namespace 'com.andriy.jarvis'
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId 'com.andriy.jarvis'
