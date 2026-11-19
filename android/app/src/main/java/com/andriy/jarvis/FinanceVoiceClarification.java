@@ -21,7 +21,7 @@ public final class FinanceVoiceClarification {
     private static String clean(String voice){
         if(voice==null||voice.length()>220)return "";
         return FinanceNumberWords.normalize(voice.toLowerCase(Locale.forLanguageTag("uk-UA")).trim())
-            .replaceFirst("^(?:джарвіс|джарвис|jarvis)[,\\s:-]*","").replaceAll("[!?.,]+$","").trim();
+            .replaceFirst("^(?:дімон|димон|dimon|джарвіс|джарвис|jarvis)[,\\s:-]*","").replaceAll("[!?.,]+$","").trim();
     }
     public static boolean maybeStart(String voice){
         String s=clean(voice);
