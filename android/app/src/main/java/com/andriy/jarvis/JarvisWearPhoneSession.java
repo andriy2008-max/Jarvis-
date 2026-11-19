@@ -326,6 +326,12 @@ public final class JarvisWearPhoneSession {
                 session,false);
             return;
         }
+        String budgetReply=FinanceBudgetVoiceController.handle(context,command);
+        if(budgetReply!=null) {
+            out.reply(!budgetReply.startsWith("Не вдалося") &&
+                !budgetReply.startsWith("Розблокуй"),budgetReply,session,false);
+            return;
+        }
         if(FinanceVoiceQueries.matches(command)) {
             try(FinanceLedger ledger=new FinanceLedger(context)) {
                 android.app.KeyguardManager guard=(android.app.KeyguardManager)
