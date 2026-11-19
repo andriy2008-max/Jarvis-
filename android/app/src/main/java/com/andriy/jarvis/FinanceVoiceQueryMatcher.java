@@ -16,7 +16,11 @@ public final class FinanceVoiceQueryMatcher {
         // Deliberately reject commands that could contain expenditure amounts.
         if(s.startsWith("запиши ")||s.startsWith("витрата ")||s.startsWith("додай ")
             ||s.startsWith("перекажи ")||s.startsWith("оплати "))return false;
-        if(s.equals("фінансовий звіт")||s.equals("звіт фінанси")||s.equals("що з моїми фінансами"))return true;
+        if(s.equals("фінансовий звіт")||s.equals("звіт фінанси")||
+           s.equals("що з моїми фінансами")||
+           s.equals("баланс рахунків")||s.equals("баланси рахунків")||
+           s.equals("залишок бюджету")||s.equals("залишок бюджету на місяць")||
+           s.equals("звіти")||s.equals("фінансові звіти"))return true;
         boolean question=any(s,"скільки","покажи","який","яка","мої ","мій ","що з","скажи",
             "які ","розкажи","фінансовий ","чистий ","подушка ","прибуток ");
         if(!question)return false;
