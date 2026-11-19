@@ -18,6 +18,7 @@ public final class FinanceLedger extends SQLiteOpenHelper {
         super(c.getApplicationContext(),"jarvis-finance-secure.db",FinanceSecureKey.password(c),
             null,6,0,null,null,true);
         FinanceLegacyMigration.migrate(c,this);
+        FinanceBudgetMigration.migrate(c,this);
     }
     public void onConfigure(SQLiteDatabase db){db.setForeignKeyConstraintsEnabled(true);}
     public void onCreate(SQLiteDatabase db){
