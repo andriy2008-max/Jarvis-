@@ -11,6 +11,7 @@ permissions:
   contents: write
 jobs:
   verify:
+    if: github.ref != 'refs/heads/main' || contains(github.event.head_commit.message, '[release-watch7-0.1.40]')
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -29,6 +30,19 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
           gradle -p android --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Select an available modern Wear OS image
+        id: wear
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager --list > /tmp/sdk-images.txt
+          image="$(awk '{print $1}' /tmp/sdk-images.txt | grep -E '^system-images;android-(3[4-9]|[4-9][0-9]);android-wear[^;]*;x86_64$' | sort -Vu | tail -1)"
+          test -n "$image"
+          IFS=';' read -r family platform target arch <<< "$image"
+          echo "api=${platform#android-}" >> "$GITHUB_OUTPUT"
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+          echo "arch=$arch" >> "$GITHUB_OUTPUT"
+          echo "Selected Wear OS package: $image"
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -37,9 +51,9 @@ jobs:
       - name: Wear OS emulator lifecycle tests (synthetic commands, no acoustic input)
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
-          target: android-wear
-          arch: x86_64
+          api-level: ${{ steps.wear.outputs.api }}
+          target: ${{ steps.wear.outputs.target }}
+          arch: ${{ steps.wear.outputs.arch }}
           profile: wearos_large_round
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot

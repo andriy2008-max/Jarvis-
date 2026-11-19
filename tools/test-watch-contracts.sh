@@ -154,3 +154,14 @@ javac -encoding UTF-8 -d /tmp/jarvis-voice-tests android/app/src/main/java/com/a
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisCallbackGateTest
 javac -encoding UTF-8 -cp /tmp/jarvis-voice-tests -d /tmp/jarvis-voice-tests android/app/src/main/java/com/andriy/jarvis/JarvisCommandMetadata.java android/app/src/main/java/com/andriy/jarvis/JarvisRecentRequests.java android/app/src/test/java/com/andriy/jarvis/JarvisRecentRequestsTest.java
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisRecentRequestsTest
+
+# Remaining contracts from the original APK workflow and source test tree.
+javac -encoding UTF-8 -cp /tmp/jarvis-voice-tests -d /tmp/jarvis-voice-tests android/app/src/main/java/com/andriy/jarvis/TimerRules.java android/app/src/test/java/com/andriy/jarvis/TimerRulesTest.java android/app/src/main/java/com/andriy/jarvis/AiChatPolicy.java android/app/src/test/java/com/andriy/jarvis/AiChatPolicyTest.java android/app/src/main/java/com/andriy/jarvis/JarvisWearImageCommands.java android/app/src/test/java/com/andriy/jarvis/JarvisWearImageCommandsTest.java android/app/src/main/java/com/andriy/jarvis/AppNameMatcher.java android/app/src/test/java/com/andriy/jarvis/AppNameMatcherTest.java android/app/src/main/java/com/andriy/jarvis/SongRecognitionCommands.java android/app/src/test/java/com/andriy/jarvis/SongRecognitionCommandsTest.java android/app/src/main/java/com/andriy/jarvis/VoiceRanking.java android/app/src/test/java/com/andriy/jarvis/VoiceRankingTest.java android/app/src/main/java/com/andriy/jarvis/JarvisWearReplyPages.java android/app/src/test/java/com/andriy/jarvis/JarvisWearReplyPagesTest.java android/app/src/main/java/com/andriy/jarvis/WakeConversation.java android/app/src/test/java/com/andriy/jarvis/WakeConversationTest.java
+java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.TimerRulesTest
+java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.AiChatPolicyTest
+java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisWearImageCommandsTest
+java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.AppNameMatcherTest
+java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SongRecognitionCommandsTest
+java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.VoiceRankingTest
+java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisWearReplyPagesTest
+java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.WakeConversationTest
