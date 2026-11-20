@@ -40,6 +40,8 @@ jobs:
           javac -encoding UTF-8 -d /tmp/jarvis-finance-tests \
             android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java \
             android/app/src/main/java/com/andriy/jarvis/FinanceVoiceCommands.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceDeliveryPolicy.java \
+            android/app/src/test/java/com/andriy/jarvis/FinanceDeliveryPolicyTest.java \
             android/app/src/main/java/com/andriy/jarvis/FinanceVoiceFollowups.java \
             android/app/src/main/java/com/andriy/jarvis/FinanceSlashCommands.java \
             android/app/src/main/java/com/andriy/jarvis/FinanceNumberWords.java \
@@ -53,6 +55,7 @@ jobs:
             android/app/src/test/java/com/andriy/jarvis/FinanceBatchCommandsTest.java \
             android/app/src/test/java/com/andriy/jarvis/FinanceCryptoFifoTest.java \
             android/app/src/test/java/com/andriy/jarvis/FinanceVoiceQueryMatcherTest.java
+          java -cp /tmp/jarvis-finance-tests com.andriy.jarvis.FinanceDeliveryPolicyTest
           java -cp /tmp/jarvis-finance-tests com.andriy.jarvis.FinanceVoiceCommandsTest
           java -cp /tmp/jarvis-finance-tests com.andriy.jarvis.FinanceVoiceFollowupsTest
           java -cp /tmp/jarvis-finance-tests com.andriy.jarvis.FinanceCalendarTest

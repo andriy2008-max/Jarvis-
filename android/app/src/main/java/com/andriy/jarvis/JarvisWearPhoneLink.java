@@ -515,7 +515,14 @@ public final class JarvisWearPhoneLink {
             boolean financeReceipt=pendingId.equals(FinanceWatchQueue.firstId(context));
             if(financeReceipt) {
                 if(ok)FinanceWatchQueue.acknowledge(context,pendingId);
-                else FinanceWatchQueue.rejected(context,pendingId);
+                else if(FinanceDeliveryPolicy.finalRejection(detail))
+                    FinanceWatchQueue.rejected(context,pendingId);
+                else {
+                    // Network/SQLCipher/locked-account errors are not evidence
+                    // of a persisted transaction. Preserve the original ID
+                    // so a later retry cannot double-post on Pixel.
+                    FinanceWatchRetryJob.schedule(context,15*60_000L);
+                }
                 if(ok)FinanceWatchClarification.observe(context,detail);
             }
             pendingImageId=data.optString("image_id","");
