@@ -222,6 +222,18 @@ public final class SpotifyTrackSearchRulesTest {
             "do not select album instead of song");
         ok(!SpotifyTrackSearchRules.resultSongLabel("Мама • Playlist"),
             "do not select playlist instead of song");
+        ok(SpotifyTrackSearchRules.resultKeyboardAction(true,0,false)==0,
+            "hidden keyboard must not block first song even when editor remains active");
+        ok(SpotifyTrackSearchRules.resultKeyboardAction(true,1,false)==1,
+            "visible keyboard can be dismissed after search");
+        ok(SpotifyTrackSearchRules.resultKeyboardAction(true,1,true)==-1,
+            "never send a second Back while waiting for IME disappearance");
+        ok(SpotifyTrackSearchRules.resultKeyboardAction(true,0,true)==0,
+            "select result after keyboard disappears");
+        ok(SpotifyTrackSearchRules.resultKeyboardAction(false,1,false)==-1,
+            "never send Back in another app");
+        ok(SpotifyTrackSearchRules.resultKeyboardAction(true,-1,false)==-1,
+            "unknown windows must not trigger speculative taps");
         System.out.println("PASS SpotifyTrackSearchRulesTest");
     }
 }

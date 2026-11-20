@@ -52,6 +52,7 @@ public final class SpotifyPlaybackController {
     private boolean coordinatePlaylistPlayUsed;
     private int searchPromptAttempts;
     private int calibratedPromptTaps;
+    private boolean resultKeyboardDismissed;
     private boolean calibratedPromptPending;
 
     public SpotifyPlaybackController(Context context) {
@@ -172,6 +173,7 @@ public final class SpotifyPlaybackController {
         coordinatePlaylistPlayUsed = false;
         searchPromptAttempts = 0;
         calibratedPromptTaps = 0;
+        resultKeyboardDismissed = false;
         calibratedPromptPending = false;
         listener = callback;
         active = true;
@@ -399,6 +401,18 @@ public final class SpotifyPlaybackController {
                 // filters, or a mini-player changes the layout. Do not assume
                 // Y=510 or that the foreground app is already displaying songs.
                 if(age<1100L)break;
+                ScreenControlAccessibilityService.SpotifyStep keyboard=
+                    ScreenControlAccessibilityService.spotifyPrepareResultSelection(resultKeyboardDismissed);
+                if(keyboard!=ScreenControlAccessibilityService.SpotifyStep.ALREADY) {
+                    if(keyboard==ScreenControlAccessibilityService.SpotifyStep.CLICKED)
+                        resultKeyboardDismissed=true;
+                    else if(keyboard==ScreenControlAccessibilityService.SpotifyStep.BLOCKED) {
+                        finish(false,"Не вдалося закрити клавіатуру Spotify. Закрий її вручну й повтори команду.");
+                        return;
+                    }
+                    handler.postDelayed(poll,2000L);
+                    return;
+                }
                 ScreenControlAccessibilityService.SpotifyStep selected=
                     ScreenControlAccessibilityService.spotifyTapTrackResultAtIndex(
                         namedTrack,resultOrdinal,age,(ok,detail)->{

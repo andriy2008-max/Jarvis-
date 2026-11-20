@@ -146,6 +146,16 @@ public final class SpotifyTrackSearchRules {
      * sometimes hides ALL result labels from Accessibility. The first result
      * was reported near Y=510 on a 2400px screen; subsequent visible rows
      * step by approx. 0.115 of display height. Never target bottom player. */
+    /** 0: select results; 1: dismiss visible IME once; -1: wait.
+     * A still-active editor is deliberately NOT an input: it does not tell us
+     * whether its keyboard window is on screen. */
+    public static int resultKeyboardAction(boolean spotifyVisible,int keyboardState,
+            boolean alreadyDismissed) {
+        if(!spotifyVisible || keyboardState<0)return -1;
+        if(keyboardState==0)return 0;
+        return keyboardState==1 && !alreadyDismissed?1:-1;
+    }
+
     public static int calibratedResultY(int displayHeight,int ordinal) {
         if(ordinal<0 || ordinal>4)return -1;
         return Math.round(displayHeight*(0.2125f+ordinal*.115f));

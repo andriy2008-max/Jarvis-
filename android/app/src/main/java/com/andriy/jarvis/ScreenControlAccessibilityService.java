@@ -2755,6 +2755,40 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         }
     }
 
+    /** InputConnection may survive keyboard dismissal. Only interactive IME
+     * windows prove a keyboard is visible; unknown window state fails closed. */
+    private int spotifyKeyboardState() {
+        try {
+            java.util.List<android.view.accessibility.AccessibilityWindowInfo> windows=getWindows();
+            if(windows==null || windows.isEmpty())return -1;
+            for(android.view.accessibility.AccessibilityWindowInfo w:windows) {
+                if(w==null)continue;
+                if(w.getType()==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD) {
+                    Rect b=new Rect();w.getBoundsInScreen(b);
+                    if(!b.isEmpty())return 1;
+                }
+            }
+            return 0;
+        } catch(RuntimeException unavailable) { return -1; }
+    }
+
+    /** Called only after search submission. Never send Back on a hidden IME:
+     * that would navigate away from the result list. At most once per command. */
+    public static SpotifyStep spotifyPrepareResultSelection(boolean alreadyDismissed) {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null || !s.sessionActive)return SpotifyStep.BLOCKED;
+        boolean spotify=s.currentSpotifyRoot()!=null;
+        int action=SpotifyTrackSearchRules.resultKeyboardAction(
+            spotify,s.spotifyKeyboardState(),alreadyDismissed);
+        if(action==0)return SpotifyStep.ALREADY;
+        if(action==1) {
+            // Recheck immediately before global Back to avoid leaving Spotify.
+            if(s.currentSpotifyRoot()==null || s.spotifyKeyboardState()!=1)return SpotifyStep.WAIT;
+            return s.performGlobalAction(GLOBAL_ACTION_BACK)?SpotifyStep.CLICKED:SpotifyStep.BLOCKED;
+        }
+        return SpotifyStep.WAIT;
+    }
+
     /** Confirm the editor actually opened before treating the search-field
      * tap as successful. Gesture dispatch alone is not evidence of focus. */
     public static boolean spotifySearchEditorReady() {
@@ -2978,7 +3012,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         // The text label itself is well left of the row's three-dot/+ actions.
         int x=firstTitle.centerX(),y=firstTitle.centerY();
         AccessibilityNodeInfo still=s.currentSpotifyRoot();
-        if(still==null || !s.spotifyQueryPresent(still,title))
+        if(still==null || s.spotifyKeyboardState()!=0 || !s.spotifyQueryPresent(still,title))
             return SpotifyStep.WAIT;
         Path p=new Path();
         p.moveTo(x,y);
@@ -3002,7 +3036,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
            ordinal<0 || ordinal>=SpotifyResultCursor.MAX_RESULTS)
             return SpotifyStep.BLOCKED;
         AccessibilityNodeInfo root=s.currentSpotifyRoot();
-        if(root==null || s.spotifyOwnsInputMethod())return SpotifyStep.WAIT;
+        if(root==null || s.spotifyKeyboardState()!=0)return SpotifyStep.WAIT;
         // For the first result preserve exact-title selection when the
         // Spotify search header remains accessible; avoid duplicate taps.
         if(ordinal==0 && s.spotifyQueryPresent(root,title)) {
@@ -3046,7 +3080,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         // Use semantic row N only when earlier rows were actually found.
         if(songRows.size()>ordinal) {
             Rect box=songRows.get(ordinal);
-            if(s.currentSpotifyRoot()==null)return SpotifyStep.WAIT;
+            if(s.currentSpotifyRoot()==null || s.spotifyKeyboardState()!=0)return SpotifyStep.WAIT;
             Path p=new Path();
             p.moveTo(box.exactCenterX(),box.exactCenterY());
             FloatingJarvisService.avoidControl(box);
@@ -3067,7 +3101,9 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             s.currentSpotifyRoot()!=null,false,size.x,size.y,
             ordinal,resultAgeMs))return SpotifyStep.WAIT;
         int tapX=size.x/2,tapY=SpotifyTrackSearchRules.calibratedResultY(size.y,ordinal);
-        Rect current=new Rect();s.currentSpotifyRoot().getBoundsInScreen(current);
+        AccessibilityNodeInfo fresh=s.currentSpotifyRoot();
+        if(fresh==null || s.spotifyKeyboardState()!=0)return SpotifyStep.WAIT;
+        Rect current=new Rect();fresh.getBoundsInScreen(current);
         if(!current.contains(tapX,tapY))return SpotifyStep.WAIT;
         FloatingJarvisService.avoidControl(new Rect(
             tapX-32,tapY-32,tapX+32,tapY+32));
