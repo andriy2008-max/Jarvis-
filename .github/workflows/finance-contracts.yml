@@ -1,0 +1,80 @@
+name: JARVIS Finance contracts (no APK)
+
+on:
+  push:
+    branches:
+      - main
+      - feature/restore-jarvis-finance
+      - feature/finance-local-ledger
+    paths:
+      - android/app/src/main/java/com/andriy/jarvis/Finance*.java
+      - android/app/src/main/java/com/andriy/jarvis/JarvisWearPhoneLink.java
+      - android/app/src/main/java/com/andriy/jarvis/JarvisWearMessageReceiver.java
+      - android/app/src/main/java/com/andriy/jarvis/MainActivity.java
+      - android/app/src/test/java/com/andriy/jarvis/Finance*Test.java
+      - tools/finance/**
+      - .github/workflows/finance-contracts.yml
+  pull_request:
+    paths:
+      - android/app/src/main/java/com/andriy/jarvis/Finance*.java
+      - android/app/src/test/java/com/andriy/jarvis/Finance*Test.java
+      - tools/finance/**
+  workflow_dispatch:
+
+jobs:
+  finance-schema-and-voice:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: SQLite ledger schema and migration tests
+        run: python3 tools/finance/test_schema.py
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Ukrainian finance command parser contracts
+        run: |
+          mkdir -p /tmp/jarvis-finance-tests
+          javac -encoding UTF-8 -d /tmp/jarvis-finance-tests \
+            android/app/src/main/java/com/andriy/jarvis/CommandPatterns.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceVoiceCommands.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceVoiceFollowups.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceSlashCommands.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceNumberWords.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceCalendar.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceBatchCommands.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceCryptoFifo.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceVoiceQueryMatcher.java \
+            android/app/src/test/java/com/andriy/jarvis/FinanceVoiceCommandsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/FinanceVoiceFollowupsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/FinanceCalendarTest.java \
+            android/app/src/test/java/com/andriy/jarvis/FinanceBatchCommandsTest.java \
+            android/app/src/test/java/com/andriy/jarvis/FinanceCryptoFifoTest.java \
+            android/app/src/test/java/com/andriy/jarvis/FinanceVoiceQueryMatcherTest.java
+          java -cp /tmp/jarvis-finance-tests com.andriy.jarvis.FinanceVoiceCommandsTest
+          java -cp /tmp/jarvis-finance-tests com.andriy.jarvis.FinanceVoiceFollowupsTest
+          java -cp /tmp/jarvis-finance-tests com.andriy.jarvis.FinanceCalendarTest
+          java -cp /tmp/jarvis-finance-tests com.andriy.jarvis.FinanceBatchCommandsTest
+          java -cp /tmp/jarvis-finance-tests com.andriy.jarvis.FinanceCryptoFifoTest
+          java -cp /tmp/jarvis-finance-tests com.andriy.jarvis.FinanceVoiceQueryMatcherTest
+
+  android-compile-only:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Android debug Java compilation only (NO APK)
+        run: gradle -p android :app:compileDebugJavaWithJavac --no-daemon --stacktrace

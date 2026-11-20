@@ -23,6 +23,64 @@ public final class JarvisWearMessageReceiver extends WearableListenerService {
         if(node==null || node.isEmpty())return;
         String action=request.optString("action","");
         if(!JarvisWearProtocol.validAction(action))return;
+        // Finance requests sent from Watch7 always execute on the Pixel's
+        // encrypted first-party ledger. Never dispatch them to AI/third-party
+        // Money Manager or Android screen control.
+        String financeText=request.optString("text","");
+        boolean financeAction=JarvisWearProtocol.ASSISTANT.equals(action) ||
+            JarvisWearProtocol.COMMAND.equals(action);
+        if(financeAction && FinanceVoiceQueries.open(financeText)) {
+            sendReply(node,id,true,"JARVIS Finance відкривається на Pixel. "+
+                "На годиннику можна записувати витрати, доходи та "+
+                "запитувати баланс голосом.","",false,null);
+            return;
+        }
+        if(financeAction) {
+            String budget=FinanceBudgetVoiceController.handle(this,financeText);
+            if(budget!=null) {
+                boolean ok=!budget.startsWith("Не вдалося") &&
+                    !budget.startsWith("Розблокуй");
+                sendReply(node,id,ok,budget,"",false,null);
+                return;
+            }
+        }
+        if(financeAction && FinanceVoiceQueries.matches(financeText)) {
+            try(FinanceLedger ledger=new FinanceLedger(this)) {
+                android.app.KeyguardManager guard=(android.app.KeyguardManager)
+                    getSystemService(KEYGUARD_SERVICE);
+                if(guard!=null && guard.isDeviceLocked() &&
+                   !"true".equals(ledger.setting("finance_voice_locked","false"))) {
+                    sendReply(node,id,false,"Розблокуй Pixel для фінансового звіту.",
+                        "",false,null);
+                } else {
+                    sendReply(node,id,true,FinanceVoiceQueries.answer(ledger,financeText),
+                        "",false,null);
+                }
+            } catch(RuntimeException problem) {
+                android.util.Log.e("DIMON_FINANCE","Wear finance query failed",problem);
+                sendReply(node,id,false,"Не вдалося прочитати фінанси Pixel.",
+                    "",false,null);
+            }
+            return;
+        }
+        if(financeAction &&
+           (FinanceVoiceCommands.parse(financeText)!=null ||
+            FinanceVoiceFollowups.parse(financeText)!=null ||
+            FinanceBatchCommands.looksLikeBatch(financeText) ||
+            FinanceVoiceClarification.maybeStart(financeText) ||
+            (FinanceVoiceClarification.pending(this,node) &&
+             FinanceVoiceClarification.maybeReply(financeText)))) {
+            FinanceManagerController.start(this,financeText,node+":"+id,
+                request.optLong("captured_at",System.currentTimeMillis()),
+                new FinanceManagerController.Listener(){
+                    @Override public void onProgress(String detail) {}
+                    @Override public void onFinished(boolean ok,String detail) {
+                        sendReply(node,id,ok,detail,"",false,null);
+                    }
+                });
+            return;
+        }
+
         // Read-only SYNC need not evict real side-effect request IDs.
         if(!JarvisWearProtocol.SYNC.equals(action) && !claim(node,id))return;
 

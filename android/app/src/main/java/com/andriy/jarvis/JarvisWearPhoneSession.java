@@ -317,36 +317,49 @@ public final class JarvisWearPhoneSession {
                 out.reply(ok,message,telegramSession,false));
             return;
         }
-        // Finances are evaluated on the phone, even when a manual screen
-        // control session is active on the watch. Never use watch-local data.
-        String financeInsight=FinanceInsightsController.handle(context,command);
-        if(financeInsight!=null) {
-            out.reply(true,financeInsight,session,false);
-            return;
-        }
-        if(FinanceManagerController.isRunning()) {
-            if(FinanceVoiceCommands.cancel(command)) {
-                FinanceManagerController.cancel();
-                out.reply(true,"Зупинив фінансовий запис.",session,false);
-            } else out.reply(false,"Фінансова команда ще виконується.",session,false);
-            return;
-        }
-        if(FinanceVoiceCommands.shortFinanceIntent(command) &&
-           FinanceVoiceCommands.parse(command)==null){
-            out.reply(false,FinanceVoiceCommands.shortIncomeIntent(command)
-                ? "Не розпізнав короткий дохід. Скажи: «Заробив 350 готівка чайові столик 5»."
-                : "Не розпізнав коротку витрату. Скажи: «Витратив 150 готівка транспорт таксі».",
+        // Native JARVIS Finance fallback for phone-mode dispatch.
+        // The Wear receiver routes finance requests before entering this
+        // session, so normal Watch7 replies use stable message IDs.
+        if(FinanceVoiceQueries.open(command)) {
+            out.reply(true,"JARVIS Finance доступний на Pixel. "+
+                "Скажи «витратив» або «заробив», щоб додати операцію.",
                 session,false);
             return;
         }
-        if(FinanceVoiceCommands.parse(command)!=null) {
-            final String token=session;
-            FinanceManagerController.start(context,command,new FinanceManagerController.Listener(){
-                @Override public void onProgress(String detail) { }
-                @Override public void onFinished(boolean success,String detail) {
-                    out.reply(success,detail,token,false);
-                }
-            });
+        String budgetReply=FinanceBudgetVoiceController.handle(context,command);
+        if(budgetReply!=null) {
+            out.reply(!budgetReply.startsWith("Не вдалося") &&
+                !budgetReply.startsWith("Розблокуй"),budgetReply,session,false);
+            return;
+        }
+        if(FinanceVoiceQueries.matches(command)) {
+            try(FinanceLedger ledger=new FinanceLedger(context)) {
+                android.app.KeyguardManager guard=(android.app.KeyguardManager)
+                    context.getSystemService(Context.KEYGUARD_SERVICE);
+                boolean blocked=guard!=null && guard.isDeviceLocked() &&
+                    !"true".equals(ledger.setting("finance_voice_locked","false"));
+                out.reply(!blocked,blocked
+                    ?"Розблокуй Pixel для фінансового звіту."
+                    :FinanceVoiceQueries.answer(ledger,command),session,false);
+            }catch(RuntimeException problem) {
+                out.reply(false,"Помилка читання власного журналу фінансів.",
+                    session,false);
+            }
+            return;
+        }
+        if(FinanceVoiceCommands.parse(command)!=null ||
+           FinanceVoiceFollowups.parse(command)!=null ||
+           FinanceBatchCommands.looksLikeBatch(command) ||
+           FinanceVoiceClarification.maybeStart(command) ||
+           (FinanceVoiceClarification.pending(context,"phone") &&
+            FinanceVoiceClarification.maybeReply(command))) {
+            FinanceManagerController.start(context,command,
+                new FinanceManagerController.Listener() {
+                    @Override public void onProgress(String detail) {}
+                    @Override public void onFinished(boolean ok,String detail) {
+                        out.reply(ok,detail,session,false);
+                    }
+                });
             return;
         }
         SpotifyMusicCommands.Kind music = SpotifyMusicCommands.parse(command);

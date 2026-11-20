@@ -1208,33 +1208,44 @@ public final class FloatingJarvisService extends Service {
         if (JarvisMacros.handleVoice(this, raw, result -> {
             if (!closing) reply(result);
         })) return;
-        String financeInsight=FinanceInsightsController.handle(this,raw);
-        if(financeInsight!=null) {
-            reply(financeInsight);
+        // Floating Jarvis uses the same encrypted finance ledger as MainActivity.
+        if(FinanceVoiceQueries.open(raw)) {
+            try {
+                startActivity(new android.content.Intent(this,FinanceActivity.class)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+                reply("Відкриваю JARVIS Finance.");
+            }catch(RuntimeException failure){reply("Не вдалося відкрити JARVIS Finance.");}
             return;
         }
-        // Spoken short expenses must execute exactly like the full finance
-        // format when Jarvis is used from its small floating face.
-        if(FinanceManagerController.isRunning()) {
-            if(FinanceVoiceCommands.cancel(raw))FinanceManagerController.cancel();
-            else reply("Зараз виконую фінансовий запис. Дочекайся завершення або скажи «Скасуй витрату».");
+        String budgetResult=FinanceBudgetVoiceController.handle(this,raw);
+        if(budgetResult!=null){reply(budgetResult);return;}
+        if(FinanceVoiceQueries.matches(raw)) {
+            try(FinanceLedger ledger=new FinanceLedger(this)) {
+                android.app.KeyguardManager guard=(android.app.KeyguardManager)
+                    getSystemService(KEYGUARD_SERVICE);
+                if(guard!=null && guard.isDeviceLocked() &&
+                   !"true".equals(ledger.setting("finance_voice_locked","false")))
+                    reply("Розблокуй Pixel для фінансового звіту.");
+                else reply(FinanceVoiceQueries.answer(ledger,raw));
+            }catch(RuntimeException problem){reply("Не вдалося прочитати фінансовий журнал.");}
             return;
         }
-        if(FinanceVoiceCommands.parse(raw)!=null) {
+        if(FinanceVoiceCommands.parse(raw)!=null ||
+           FinanceVoiceFollowups.parse(raw)!=null ||
+           FinanceBatchCommands.looksLikeBatch(raw) ||
+           FinanceVoiceClarification.maybeStart(raw) ||
+           (FinanceVoiceClarification.pending(this,"phone") &&
+            FinanceVoiceClarification.maybeReply(raw))) {
             FinanceManagerController.start(this,raw,new FinanceManagerController.Listener(){
-                @Override public void onProgress(String detail){
-                    if(!closing)message(detail);
-                }
-                @Override public void onFinished(boolean success,String detail){
-                    if(!closing)reply(detail);
-                }
+                @Override public void onProgress(String detail){if(!closing)message(detail);}
+                @Override public void onFinished(boolean success,String detail){if(!closing)reply(detail);}
             });
             return;
         }
         if(FinanceVoiceCommands.shortFinanceIntent(raw)) {
             reply(FinanceVoiceCommands.shortIncomeIntent(raw)
-                ? "Не розпізнав короткий дохід. Скажи: «Заробив 350 готівка чайові столик 5»."
-                : "Не розпізнав коротку витрату. Скажи: «Витратив 150 готівка транспорт таксі».");
+                ? "Не розпізнав дохід. Скажи: «Заробив 350 готівка чайові столик 5»."
+                : "Не розпізнав витрату. Скажи: «Витратив 150 готівка транспорт таксі».");
             return;
         }
         JarvisPhoneMode.Transition transition = JarvisPhoneMode.transition(raw);
