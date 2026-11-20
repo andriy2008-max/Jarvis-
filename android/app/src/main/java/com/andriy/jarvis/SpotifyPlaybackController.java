@@ -49,6 +49,8 @@ public final class SpotifyPlaybackController {
     private boolean playlistRowRetried;
     private boolean coordinatePlaylistPlayUsed;
     private int searchPromptAttempts;
+    private int calibratedPromptTaps;
+    private boolean calibratedPromptPending;
 
     public SpotifyPlaybackController(Context context) {
         this.context = context;
@@ -160,6 +162,8 @@ public final class SpotifyPlaybackController {
         playlistRowRetried = false;
         coordinatePlaylistPlayUsed = false;
         searchPromptAttempts = 0;
+        calibratedPromptTaps = 0;
+        calibratedPromptPending = false;
         listener = callback;
         active = true;
         move(Stage.WAIT_APP, "Режим «Телефон»: очікую відкриття Spotify...");
@@ -309,10 +313,22 @@ public final class SpotifyPlaybackController {
                     move(Stage.FOCUS_SEARCH,"Натискаю «Що ви хочете послухати?»...");
                 break;
             case FOCUS_SEARCH:
-                if(successful(ScreenControlAccessibilityService.spotifyFocusSearch())) {
+                // The screenshot shows Spotify's visible Search box despite
+                // inaccessible Compose labels. Do not poll ACTION_CLICK
+                // forever: after normal lookup fails, use the user-calibrated
+                // Pixel point with a strict Spotify-only, portrait guard.
+                if(calibratedPromptPending)break;
+                if(ScreenControlAccessibilityService.spotifySearchEditorReady()) {
+                    move(Stage.TYPE_SEARCH,"Вводжу назву пісні «"+namedTrack+"»...");
+                } else if(successful(ScreenControlAccessibilityService.spotifyFocusSearch())) {
                     searchPromptAttempts++;
                     move(Stage.VERIFY_SEARCH_EDITOR,
                         "Перевіряю відкриття поля Spotify перед введенням назви…");
+                } else if(age>=1800L && calibratedPromptTaps<2) {
+                    tapPixelSearchPrompt(age);
+                } else if(age>=4500L && calibratedPromptTaps>=2) {
+                    finish(false,"Дві спроби натиснути поле Spotify не відкрили "+
+                        "пошук. Зупинено без випадкових дій.");
                 }
                 break;
             case VERIFY_SEARCH_EDITOR:
@@ -322,9 +338,12 @@ public final class SpotifyPlaybackController {
                     if(searchPromptAttempts<3)
                         move(Stage.FOCUS_SEARCH,
                             "Повторно натискаю рядок пошуку Spotify…");
+                    else if(calibratedPromptTaps<2)
+                        move(Stage.FOCUS_SEARCH,
+                            "Spotify не відкрив поле; пробую координату з Pixel…");
                     else
-                        finish(false,"Spotify не відкрив поле після трьох спроб. "+
-                            "Дімон не вводив текст у сторонню програму.");
+                        finish(false,"Spotify не відкрив поле після перевірених "+
+                            "натискань. Дімон не вводив текст у сторонню програму.");
                 }
                 break;
             case TYPE_SEARCH: {
@@ -568,6 +587,36 @@ public final class SpotifyPlaybackController {
             result == ScreenControlAccessibilityService.SpotifyStep.ALREADY;
     }
 
+    /** Only after the Spotify Search tab was opened, and only in the
+     * user-confirmed phone layout. A callback, not merely dispatchGesture(),
+     * owns verification; the keyboard must actually open next. */
+    private void tapPixelSearchPrompt(long focusAgeMs) {
+        if(calibratedPromptPending || !active || stage!=Stage.FOCUS_SEARCH)return;
+        final int previous=calibratedPromptTaps++;
+        calibratedPromptPending=true;
+        if(listener!=null)listener.onProgress(
+            "Натискаю білий рядок пошуку Spotify по центру Pixel ("+
+            calibratedPromptTaps+"/2)…");
+        ScreenControlAccessibilityService.spotifyTapPhoneSearchPrompt(
+            previous,focusAgeMs,(ok,detail)->{
+                if(!active || stage!=Stage.FOCUS_SEARCH)return;
+                calibratedPromptPending=false;
+                if(ok) {
+                    searchPromptAttempts++;
+                    move(Stage.VERIFY_SEARCH_EDITOR,
+                        "Натиснув рядок Spotify. Перевіряю появу клавіатури…");
+                } else if(calibratedPromptTaps>=2) {
+                    finish(false,"Spotify не прийняв натискання поля: "+detail);
+                } else {
+                    // Retry only after the next poll; never dispatch two
+                    // gestures concurrently or behind a different app.
+                    stageStart=SystemClock.elapsedRealtime()-1800L;
+                    if(listener!=null)listener.onProgress(
+                        "Перша спроба натискання Spotify не спрацювала.");
+                }
+            });
+    }
+
     private void finish(boolean success, String summary) {
         handler.removeCallbacks(poll);
         if(directBridge!=null) {
@@ -581,6 +630,7 @@ public final class SpotifyPlaybackController {
         namedPlaylist = null;
         namedTrack = null;
         coordinatePlaylistPlayUsed = false;
+        calibratedPromptPending = false;
         JarvisPhoneModeManager.Lease lease = temporaryControl;
         temporaryControl = null;
         // Always restore Jarvis' normal face, even on errors/cancellation.
