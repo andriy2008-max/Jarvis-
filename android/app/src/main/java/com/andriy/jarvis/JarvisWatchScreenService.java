@@ -513,6 +513,35 @@ public final class JarvisWatchScreenService extends AccessibilityService {
              s.spotifySearchIcon(root)!=null);
     }
 
+    /** Do not mistake a Search result for an opened playlist and tap
+     * the unrelated bottom mini-player's Play. A real detail page has
+     * the selected title near the top and its own Play/Pause control
+     * above the mini-player area. */
+    public static boolean spotifySelectedPlaylistPageReady(
+            String selectedTitle,String originalQuery) {
+        JarvisWatchScreenService service=connected.get();
+        AccessibilityNodeInfo root=service==null?null:service.appRoot(SPOTIFY_PKG);
+        if(root==null || selectedTitle==null || selectedTitle.trim().isEmpty() ||
+           service.spotifyImeVisible() ||
+           spotifySearchResultsVisible(originalQuery))return false;
+        Rect frame=new Rect();root.getBoundsInScreen(frame);
+        String wanted=AppNameMatcher.normalize(selectedTitle);
+        boolean titleTop=false,playVisible=false;
+        for(AccessibilityNodeInfo node:service.spotifyNodes(root)){
+            Rect bounds=new Rect();node.getBoundsInScreen(bounds);
+            float y=(bounds.centerY()-frame.top)/(float)Math.max(1,frame.height());
+            if(y>.055f && y<.63f &&
+               service.spotifyTitleMatches(spotifyLabel(node),wanted))
+                titleTop=true;
+            if(y>.15f && y<.76f && !node.isEditable() &&
+                spotifyNodeMatches(node,"play","play playlist","відтворити",
+                    "відтворення","слухати","воспроизвести",
+                    "pause","пауза","призупинити"))
+                playVisible=true;
+        }
+        return titleTop && playVisible;
+    }
+
     private AccessibilityNodeInfo spotifySearchIcon(AccessibilityNodeInfo root) {
         AccessibilityNodeInfo selected=null;
         Rect best=null;

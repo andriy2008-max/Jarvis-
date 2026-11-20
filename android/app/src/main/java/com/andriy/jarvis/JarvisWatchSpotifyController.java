@@ -192,6 +192,17 @@ public final class JarvisWatchSpotifyController {
                     "Перевір екран, інтернет і авторизацію.");
                 return;
             }
+            if(kind==SpotifyMusicCommands.Kind.TRACK &&
+               selectedPlaylistTitle!=null &&
+               step==JarvisWatchScreenService.SpotifyStep.PLAY_PLAYLIST &&
+               !JarvisWatchScreenService.spotifySelectedPlaylistPageReady(
+                   selectedPlaylistTitle,title)) {
+                if(now-stageStart>12000L)
+                    done(false,"Сторінку плейлиста «"+selectedPlaylistTitle+
+                        "» не підтверджено. Play не натискав навмання.");
+                else MAIN.postDelayed(()->run(step),850L);
+                return;
+            }
             // If Spotify opens on the player, reveal the new Wear OS menu once,
             // but never swipe blindly before the app's own window is visible.
             if(kind!=SpotifyMusicCommands.Kind.TRACK &&
