@@ -18,6 +18,7 @@ public final class SpotifyPlaybackController {
     }
 
     private static final String PACKAGE = "com.spotify.music";
+    private static final SpotifyResultCursor RESULT_CURSOR=new SpotifyResultCursor();
     private static final long POLL_MS = 430L;
     private static final long STAGE_TIMEOUT_MS = 20000L;
     private static final int MAX_LIBRARY_SCROLLS = 4;
@@ -35,6 +36,7 @@ public final class SpotifyPlaybackController {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable poll = this::tick;
     private SpotifyMusicCommands.Kind requested;
+    private int resultOrdinal;
     private String namedPlaylist;
     private String namedTrack;
     private Listener listener;
@@ -64,6 +66,9 @@ public final class SpotifyPlaybackController {
 
     public void start(SpotifyMusicCommands.Kind kind,String voice,Listener callback) {
         if (kind == null) return;
+        if(kind==SpotifyMusicCommands.Kind.NEXT_RESULT) {
+            nextSong(callback);return;
+        }
         SpotifyMusicCommands.NamedPlaylist named = kind == SpotifyMusicCommands.Kind.PLAYLIST
             ? SpotifyMusicCommands.namedPlaylist(voice) : null;
         String namedTrack=kind==SpotifyMusicCommands.Kind.TRACK
@@ -157,6 +162,10 @@ public final class SpotifyPlaybackController {
         requested = kind;
         namedPlaylist = named == null ? null : named.name;
         this.namedTrack = namedTrack;
+        resultOrdinal=0;
+        if(kind==SpotifyMusicCommands.Kind.TRACK &&
+            !namedTrack.equals(RESULT_CURSOR.query(SystemClock.elapsedRealtime())))
+            RESULT_CURSOR.begin(namedTrack,SystemClock.elapsedRealtime());
         scrolled = 0;
         playlistPlayRetried = false;
         playlistRowRetried = false;
@@ -168,6 +177,30 @@ public final class SpotifyPlaybackController {
         active = true;
         move(Stage.WAIT_APP, "Режим «Телефон»: очікую відкриття Spotify...");
         handler.post(poll);
+    }
+
+    /** Repeat without a new dictated title: the same last search query is
+     * reopened, then the next row is tapped. Each utterance advances by one.
+     * Both phone routes share the in-memory cursor, never the Watch cursor. */
+    private void nextSong(Listener callback) {
+        if(active) {
+            if(callback!=null)callback.onFinished(false,
+                "Spotify ще виконує попередню команду.");
+            return;
+        }
+        long now=SystemClock.elapsedRealtime();
+        String title=RESULT_CURSOR.query(now);
+        int index=RESULT_CURSOR.next(now);
+        if(title==null || index<0) {
+            if(callback!=null)callback.onFinished(false,
+                "Немає попереднього списку пісень або він застарів. "+
+                "Спочатку скажи «Увімкни пісню [назва]».");
+            return;
+        }
+        start(SpotifyMusicCommands.Kind.TRACK,
+            "увімкни пісню "+title,callback);
+        if(active && requested==SpotifyMusicCommands.Kind.TRACK)
+            resultOrdinal=index;
     }
 
     public void cancel() {
@@ -249,7 +282,9 @@ public final class SpotifyPlaybackController {
                     reason = "Не вдалося підтвердити пошук пісні клавішею Пошук/Enter.";
                     break;
                 case COORD_SELECT_FIRST:
-                    reason = "Пошук завершено, але Spotify не показав доступний перший результат із потрібною назвою.";
+                    reason = "Spotify не показав доступний результат №"+
+                        (resultOrdinal+1)+" або заблокував натискання. "+
+                        "Повтори команду після відкриття списку пісень.";
                     break;
                 case VERIFY_TRACK_PLAY:
                     reason = "Натискання виконано, але назва пісні не з'явилася у мініпрогравачі Spotify.";
@@ -365,15 +400,18 @@ public final class SpotifyPlaybackController {
                 // Y=510 or that the foreground app is already displaying songs.
                 if(age<1100L)break;
                 ScreenControlAccessibilityService.SpotifyStep selected=
-                    ScreenControlAccessibilityService.spotifyTapFirstTrackResult(
-                        namedTrack,(ok,detail)->{
+                    ScreenControlAccessibilityService.spotifyTapTrackResultAtIndex(
+                        namedTrack,resultOrdinal,age,(ok,detail)->{
                             if(!active || stage!=Stage.COORD_SELECT_FIRST)return;
                             if(!ok) {
                                 finish(false,"Spotify не зміг натиснути першу пісню: "+detail);
                                 return;
                             }
+                            RESULT_CURSOR.selected(resultOrdinal,
+                                SystemClock.elapsedRealtime());
                             move(Stage.VERIFY_TRACK_PLAY,
-                                "Першу пісню натиснуто. Перевіряю мініпрогравач Spotify...");
+                                "Натиснув результат №"+(resultOrdinal+1)+
+                                ". Перевіряю відтворення Spotify...");
                             handler.postDelayed(poll,650L);
                         });
                 if(selected==ScreenControlAccessibilityService.SpotifyStep.WAIT)
@@ -386,12 +424,21 @@ public final class SpotifyPlaybackController {
                 return;
             }
             case VERIFY_TRACK_PLAY:
-                if(ScreenControlAccessibilityService.spotifyMiniPlayerHasTrack(namedTrack)) {
+                if(resultOrdinal>0) {
+                    // Follow-up rows can be different recordings or artists.
+                    // We only know that Android accepted the row tap; the
+                    // mini-player will not necessarily show the original title.
+                    if(age>=1600L)finish(true,"Натиснув результат №"+
+                        (resultOrdinal+1)+" зі списку «"+namedTrack+
+                        "». Скажи «Інша пісня» для наступного.");
+                } else if(ScreenControlAccessibilityService.spotifyMiniPlayerHasTrack(namedTrack)) {
                     finish(true,"Spotify показує пісню «"+namedTrack+
-                        "» у мініпрогравачі. Перевір, чи є звук.");
+                        "» у мініпрогравачі. Перевір, чи є звук. "+
+                        "Скажи «Інша пісня» для наступного результату.");
                 } else if(age>=6500L) {
-                    finish(false,"Перша пісня була натиснута, але Spotify не "+
-                        "підтвердив її появу в мініпрогравачі. Повторно не натискав.");
+                    finish(false,"Перший результат натиснуто, але Spotify не "+
+                        "підтвердив його появу в мініпрогравачі. "+
+                        "Можна сказати «Інша пісня» для другого результату.");
                 }
                 break;
             case WAIT_PLAYLIST_PAGE: {
