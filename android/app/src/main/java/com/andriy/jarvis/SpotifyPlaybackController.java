@@ -27,7 +27,7 @@ public final class SpotifyPlaybackController {
     private enum Stage {
         WAIT_APP, OPEN_LIBRARY, OPEN_COLLECTION, WAIT_PLAYLIST_PAGE,
         CHOOSE_RAP, PLAY, VERIFY_PLAY,
-        OPEN_SEARCH_TAB, FOCUS_SEARCH, TYPE_SEARCH, SUBMIT_SEARCH,
+        OPEN_SEARCH_TAB, FOCUS_SEARCH, VERIFY_SEARCH_EDITOR, TYPE_SEARCH, SUBMIT_SEARCH,
         COORD_SELECT_FIRST, VERIFY_TRACK_PLAY
     }
 
@@ -48,6 +48,7 @@ public final class SpotifyPlaybackController {
     private boolean playlistPlayRetried;
     private boolean playlistRowRetried;
     private boolean coordinatePlaylistPlayUsed;
+    private int searchPromptAttempts;
 
     public SpotifyPlaybackController(Context context) {
         this.context = context;
@@ -158,6 +159,7 @@ public final class SpotifyPlaybackController {
         playlistPlayRetried = false;
         playlistRowRetried = false;
         coordinatePlaylistPlayUsed = false;
+        searchPromptAttempts = 0;
         listener = callback;
         active = true;
         move(Stage.WAIT_APP, "Режим «Телефон»: очікую відкриття Spotify...");
@@ -232,7 +234,9 @@ public final class SpotifyPlaybackController {
                     break;
                 case OPEN_SEARCH_TAB:
                 case FOCUS_SEARCH:
-                    reason = "Не вдалося відкрити пошук Spotify. Спробуй вручну відкрити вкладку «Пошук» та повторити команду.";
+                case VERIFY_SEARCH_EDITOR:
+                    reason = "Не вдалося натиснути рядок «Що ви хочете послухати?» у Spotify. "+
+                        "Перевір, чи він видно на вкладці «Пошук».";
                     break;
                 case TYPE_SEARCH:
                     reason = "Не вдалося ввести назву пісні в пошук Spotify.";
@@ -275,8 +279,13 @@ public final class SpotifyPlaybackController {
         boolean appIdentityEnough=requested==SpotifyMusicCommands.Kind.TRACK ||
             (requested==SpotifyMusicCommands.Kind.PLAYLIST &&
              (stage==Stage.WAIT_APP || stage==Stage.OPEN_LIBRARY));
-        if (!(appIdentityEnough ? ScreenControlAccessibilityService.spotifyCoordinateReady()
-                : ScreenControlAccessibilityService.spotifyVisible())) {
+        boolean spotifySearchIme=requested==SpotifyMusicCommands.Kind.TRACK &&
+            (stage==Stage.VERIFY_SEARCH_EDITOR || stage==Stage.TYPE_SEARCH ||
+             stage==Stage.SUBMIT_SEARCH) &&
+            ScreenControlAccessibilityService.spotifyOwnsInputMethod();
+        if (!(spotifySearchIme ||
+              (appIdentityEnough ? ScreenControlAccessibilityService.spotifyCoordinateReady()
+                : ScreenControlAccessibilityService.spotifyVisible()))) {
             handler.postDelayed(poll, POLL_MS);
             return;
         }
@@ -300,8 +309,23 @@ public final class SpotifyPlaybackController {
                     move(Stage.FOCUS_SEARCH,"Натискаю «Що ви хочете послухати?»...");
                 break;
             case FOCUS_SEARCH:
-                if(successful(ScreenControlAccessibilityService.spotifyFocusSearch()))
+                if(successful(ScreenControlAccessibilityService.spotifyFocusSearch())) {
+                    searchPromptAttempts++;
+                    move(Stage.VERIFY_SEARCH_EDITOR,
+                        "Перевіряю відкриття поля Spotify перед введенням назви…");
+                }
+                break;
+            case VERIFY_SEARCH_EDITOR:
+                if(ScreenControlAccessibilityService.spotifySearchEditorReady()) {
                     move(Stage.TYPE_SEARCH,"Вводжу назву пісні «"+namedTrack+"»...");
+                } else if(age>=2600L) {
+                    if(searchPromptAttempts<3)
+                        move(Stage.FOCUS_SEARCH,
+                            "Повторно натискаю рядок пошуку Spotify…");
+                    else
+                        finish(false,"Spotify не відкрив поле після трьох спроб. "+
+                            "Дімон не вводив текст у сторонню програму.");
+                }
                 break;
             case TYPE_SEARCH: {
                 ScreenControlAccessibilityService.SpotifyStep typed=

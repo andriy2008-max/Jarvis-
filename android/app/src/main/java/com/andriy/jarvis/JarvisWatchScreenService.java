@@ -82,6 +82,23 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         }
         return null;
     }
+    /** Text-only fallback for a full-screen Wear OS IME. Never tap behind
+     * keyboards, permission dialogs, or another foreground app. */
+    private AccessibilityNodeInfo spotifyRootUnderKeyboard() {
+        boolean ime=false;
+        AccessibilityNodeInfo spotify=null;
+        for(AccessibilityWindowInfo window:getWindows()) {
+            if(window.getType()==AccessibilityWindowInfo.TYPE_INPUT_METHOD)
+                ime=true;
+            if(window.getType()!=AccessibilityWindowInfo.TYPE_APPLICATION)continue;
+            AccessibilityNodeInfo root=window.getRoot();
+            if(root==null || root.getPackageName()==null)continue;
+            if(SPOTIFY_PKG.contentEquals(root.getPackageName()))spotify=root;
+            else if(window.isActive())return null;
+        }
+        return ime?spotify:null;
+    }
+
     public static boolean foreground(String expectedPackage) {
         JarvisWatchScreenService s=connected.get();
         return s!=null && s.appRoot(expectedPackage)!=null;
@@ -124,10 +141,11 @@ public final class JarvisWatchScreenService extends AccessibilityService {
 
     // Google Maps UI automation on this watch, never on the phone.
     // The target application package is checked at every step and before
-    // gesture injection. No fixed screen positions are used.
+    // gesture injection. The sole relative-location exception is the
+    // user-confirmed bottom-center route-mode control after Directions.
     public enum MapsStep {
-        CENTER_LOCATION,OPEN_SEARCH,SET_DESTINATION,SUBMIT_SEARCH,
-        FIRST_RESULT,DIRECTIONS,WALKING
+        OPEN_MAP,CENTER_LOCATION,OPEN_SEARCH,SET_DESTINATION,SUBMIT_SEARCH,
+        FIRST_RESULT,DIRECTIONS,WALKING,TAP_MODE_BOTTOM
     }
     private static final String MAPS_PKG="com.google.android.apps.maps";
 
@@ -139,6 +157,8 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         AccessibilityNodeInfo root=service.appRoot(MAPS_PKG);
         if(root==null)return Result.WAIT;
         switch(step) {
+            case OPEN_MAP:
+                return service.mapsOpenMapFromHome(root,completion);
             case CENTER_LOCATION:
                 return service.mapsTapExact(root,completion,
                     "my location","your location","current location",
@@ -166,6 +186,12 @@ public final class JarvisWatchScreenService extends AccessibilityService {
                 return service.mapsTapExact(root,completion,
                     "walking","walk","walking directions",
                     "пішки","пішохідний","пешком","пеший");
+            case TAP_MODE_BOTTOM:
+                // User-confirmed fallback: Wear Google Maps sometimes draws
+                // route-mode choices without accessible labels. Use a
+                // WATCH-relative point only after Directions was opened and
+                // labelled Walking failed for several seconds.
+                return service.mapsTapBottomRouteMode(root,completion);
             default:return Result.BLOCKED;
         }
 
@@ -173,6 +199,66 @@ public final class JarvisWatchScreenService extends AccessibilityService {
             JarvisDiagnostics.error(JarvisDiagnostics.Event.ACCESSIBILITY_ERROR,failure);
             return Result.BLOCKED;
         }
+    }
+
+    /** Watch Maps home shows four shortcuts over "Нещодавні". The user
+     * identified its upper-left tile as the map button. Click only when
+     * Maps' real accessibility tree confirms that home layout. */
+    private boolean mapsHome(AccessibilityNodeInfo root) {
+        return spotifyHasLabel(root,"нещодавні","recent","recents","recently");
+    }
+    public static boolean mapsHomeVisible() {
+        JarvisWatchScreenService s=connected.get();
+        AccessibilityNodeInfo root=s==null?null:s.appRoot(MAPS_PKG);
+        return root!=null && s.mapsHome(root);
+    }
+
+    /** Prevent fallback tapping into a search field or on-screen keyboard.
+     * Unknown app state is treated as unsafe, not as a blank route screen. */
+    public static boolean mapsInputOrKeyboardOpen() {
+        JarvisWatchScreenService s=connected.get();
+        if(s==null)return true;
+        try {
+            AccessibilityNodeInfo root=s.appRoot(MAPS_PKG);
+            if(root==null || s.spotifyHasEditable(root))return true;
+            for(AccessibilityWindowInfo window:s.getWindows()) {
+                if(window.getType()==AccessibilityWindowInfo.TYPE_INPUT_METHOD &&
+                   (window.isActive() || window.isFocused()))return true;
+            }
+            return false;
+        } catch(RuntimeException error) {
+            JarvisDiagnostics.error(JarvisDiagnostics.Event.ACCESSIBILITY_ERROR,error);
+            return true;
+        }
+    }
+    private Result mapsOpenMapFromHome(AccessibilityNodeInfo root,Completion cb) {
+        if(!mapsHome(root))return Result.DONE; // Already in the map screen.
+        Result labelled=mapsTapExact(root,cb,
+            "map","maps","карта","карти","відкрити карту",
+            "переглянути карту","show map","open map");
+        if(labelled!=Result.WAIT)return labelled;
+        // On some localized Wear Maps versions the top-left tile has only
+        // an icon, no accessible label. Require the full 2x2 clickable grid
+        // plus "Нещодавні" before using the measured tile's bounds.
+        float width=getResources().getDisplayMetrics().widthPixels;
+        float height=getResources().getDisplayMetrics().heightPixels;
+        AccessibilityNodeInfo upperLeft=null;
+        int upperRight=0,lowerLeft=0,lowerRight=0;
+        for(AccessibilityNodeInfo node:spotifyNodes(root)) {
+            if(!node.isClickable() || node.isEditable())continue;
+            Rect rect=new Rect();node.getBoundsInScreen(rect);
+            if(rect.width()<width*.19f || rect.width()>width*.74f ||
+               rect.height()<height*.09f || rect.height()>height*.40f)continue;
+            float x=rect.exactCenterX()/width,y=rect.exactCenterY()/height;
+            if(x>.15f && x<.54f && y>.18f && y<.47f)
+                upperLeft=node;
+            if(x>.54f && x<.89f && y>.18f && y<.47f)upperRight++;
+            if(x>.15f && x<.54f && y>.47f && y<.74f)lowerLeft++;
+            if(x>.54f && x<.89f && y>.47f && y<.74f)lowerRight++;
+        }
+        return JarvisWatchUiRules.verifiedMapsHomeGrid(
+            true,upperLeft!=null,upperRight>0,lowerLeft>0,lowerRight>0)
+            ?mapsTapNode(upperLeft,cb):Result.WAIT;
     }
 
     private Result mapsTapExact(AccessibilityNodeInfo root,Completion cb,
@@ -205,6 +291,25 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         Path point=new Path();
         point.moveTo(box.exactCenterX(),box.exactCenterY());
         return gesture(MAPS_PKG,point,90L,cb);
+    }
+
+    /** Only invoked after a verified Maps DIRECTIONS step. Unlike a phone
+     * coordinate, this uses this Wear display's actual dimensions. Never
+     * tap home, an open search editor or a full-screen keyboard. */
+    private Result mapsTapBottomRouteMode(AccessibilityNodeInfo root,Completion cb) {
+        if(root==null || mapsHome(root) || spotifyHasEditable(root))
+            return Result.WAIT;
+        for(AccessibilityWindowInfo window:getWindows()) {
+            if(window.getType()==AccessibilityWindowInfo.TYPE_INPUT_METHOD &&
+               (window.isActive() || window.isFocused()))
+                return Result.WAIT;
+        }
+        android.util.DisplayMetrics metrics=getResources().getDisplayMetrics();
+        int width=metrics.widthPixels,height=metrics.heightPixels;
+        if(width<160 || height<160)return Result.BLOCKED;
+        Path tap=new Path();
+        tap.moveTo(width*.50f,height*JarvisWatchUiRules.MAPS_ROUTE_MODE_BOTTOM_Y);
+        return gesture(MAPS_PKG,tap,95L,cb);
     }
 
     private Result mapsSetDestination(AccessibilityNodeInfo root,String destination) {
@@ -301,10 +406,44 @@ public final class JarvisWatchScreenService extends AccessibilityService {
     // restricted to Spotify's visible accessibility tree on THIS watch.
     // Screen locations are never copied from the paired phone.
     public enum SpotifyStep {
-        OPEN_SEARCH, REVEAL_NAV, FOCUS_SEARCH, SET_QUERY, SUBMIT_QUERY,
-        SELECT_RESULT, PLAY_PLAYLIST, VERIFY_PLAYLIST
+        CHECK_HOME, DISMISS_IME, SWIPE_HOME, REVEAL_NAV,
+        FIND_LIBRARY_PLAYLIST, SCROLL_LIBRARY_PLAYLISTS,
+        OPEN_SEARCH, FOCUS_SEARCH, SET_QUERY, VERIFY_QUERY,
+        SUBMIT_QUERY, SELECT_RESULT, PLAY_PLAYLIST, VERIFY_PLAYLIST
     }
     private static final String SPOTIFY_PKG="com.spotify.music";
+
+    public static boolean spotifySearchAvailable() {
+        JarvisWatchScreenService s=connected.get();
+        AccessibilityNodeInfo root=s==null?null:s.appRoot(SPOTIFY_PKG);
+        return root!=null &&
+            (s.spotifyHasEditable(root) ||
+             s.spotifyHasLabel(root,"search","пошук","поиск"));
+    }
+
+    /** A resumed Spotify Search page may still have the full-screen Wear
+     * keyboard open. Dismiss only an active IME, never an app screen. */
+    public static boolean spotifyKeyboardVisible() {
+        JarvisWatchScreenService s=connected.get();
+        if(s==null || s.appRoot(SPOTIFY_PKG)==null)return false;
+        return s.spotifyImeVisible();
+    }
+
+    private boolean spotifyImeVisible() {
+        for(AccessibilityWindowInfo window:getWindows()) {
+            if(window.getType()==AccessibilityWindowInfo.TYPE_INPUT_METHOD &&
+               (window.isActive() || window.isFocused()))return true;
+        }
+        return false;
+    }
+
+    /** Only fingerprints the current Spotify accessibility viewport, in
+     * memory. Playlist names are never logged, uploaded or persisted. */
+    public static String spotifyPlaylistViewport() {
+        JarvisWatchScreenService s=connected.get();
+        AccessibilityNodeInfo root=s==null?null:s.appRoot(SPOTIFY_PKG);
+        return root==null?"":s.spotifyViewport(root);
+    }
 
     public static Result spotifyStep(SpotifyStep step,String title,
                                      boolean playlist,Completion completion) {
@@ -330,18 +469,37 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         JarvisWatchScreenService service=connected.get();
         if(service==null || step==null || completion==null)return Result.BLOCKED;
         AccessibilityNodeInfo root=service.appRoot(SPOTIFY_PKG);
+        if(root==null && (step==SpotifyStep.SET_QUERY ||
+                          step==SpotifyStep.VERIFY_QUERY ||
+                          step==SpotifyStep.SUBMIT_QUERY))
+            root=service.spotifyRootUnderKeyboard();
         if(root==null)return Result.WAIT;
         switch(step) {
+            case CHECK_HOME:
+                return service.spotifyHomeVisible(root)?Result.DONE:Result.WAIT;
+            case DISMISS_IME:
+                return service.spotifyImeVisible()
+                    ?(service.performGlobalAction(GLOBAL_ACTION_BACK)
+                        ?Result.DONE:Result.BLOCKED)
+                    :Result.DONE;
+            case SWIPE_HOME:
+                return service.spotifySwipeHome(completion);
+            case FIND_LIBRARY_PLAYLIST:
+                return service.spotifyFindLibraryPlaylist(root,title,completion);
+            case SCROLL_LIBRARY_PLAYLISTS:
+                return service.spotifyScrollLibraryDown(completion);
             case OPEN_SEARCH:
                 if(service.spotifyHasEditable(root))return Result.DONE;
                 return service.spotifyTapExact(root,completion,
                     "search","пошук","поиск");
             case REVEAL_NAV:
-                return service.swipe(SPOTIFY_PKG,true,true,completion);
+                return service.spotifyRevealNavigation(completion);
             case FOCUS_SEARCH:
                 return service.spotifyFocusSearch(root,completion);
             case SET_QUERY:
                 return service.spotifySetQuery(root,title);
+            case VERIFY_QUERY:
+                return service.spotifyVerifyQuery(root,title);
             case SUBMIT_QUERY:
                 return service.spotifySubmitQuery(root);
             case SELECT_RESULT:
@@ -407,6 +565,80 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         }
         if(seen>MAX_NODES)result.clear();
         return result;
+    }
+
+    /** Verify home using Spotify-owned UI nodes. A visible Home button alone
+     * is not evidence that it is the current, selected page. */
+    private boolean spotifyHomeVisible(AccessibilityNodeInfo root) {
+        boolean selected=false,section=false;
+        for(AccessibilityNodeInfo node:spotifyNodes(root)) {
+            if(node.isEditable())continue;
+            if((node.isSelected() || node.isChecked()) &&
+               spotifyNodeMatches(node,"home","головна","домой"))
+                selected=true;
+            if(spotifyNodeMatches(node,"recently played","recently played music",
+                "недавно прослухане","нещодавно прослухані",
+                "нещодавно відтворені","your shows","made for you",
+                "для тебе"))
+                section=true;
+        }
+        return JarvisWatchUiRules.spotifyHomeConfirmed(
+            selected,section,spotifyHasEditable(root));
+    }
+
+    private String spotifyViewport(AccessibilityNodeInfo root) {
+        StringBuilder fingerprint=new StringBuilder();
+        for(AccessibilityNodeInfo n:spotifyNodes(root)) {
+            CharSequence text=n.getText();
+            if(text==null || text.length()==0)continue;
+            if(fingerprint.length()>1200)break;
+            fingerprint.append('|').append(AppNameMatcher.normalize(text.toString()));
+        }
+        return fingerprint.toString();
+    }
+
+    /** Playlist selection never uses the global Search field. Only an exact
+     * matching visible title inside Spotify is eligible. */
+    private Result spotifyFindLibraryPlaylist(AccessibilityNodeInfo root,
+            String wanted,Completion cb) {
+        if(wanted==null || wanted.trim().isEmpty())return Result.BLOCKED;
+        AccessibilityNodeInfo best=null;
+        Rect bestRect=null;
+        for(AccessibilityNodeInfo n:spotifyNodes(root)) {
+            if(n.isEditable())continue;
+            if(!JarvisWatchUiRules.spotifyPlaylistNameMatches(wanted,spotifyLabel(n)) &&
+               !JarvisWatchUiRules.spotifyPlaylistNameMatches(wanted,
+                   spotifyDescription(n)))continue;
+            Rect bounds=new Rect();
+            n.getBoundsInScreen(bounds);
+            if(bounds.width()<6 || bounds.height()<6)continue;
+            if(best==null || bounds.top<bestRect.top) {
+                best=n;bestRect=bounds;
+            }
+        }
+        return best==null?Result.WAIT:spotifyTapNode(best,cb);
+    }
+
+    /** First gesture on the Home screen opens its music / playlist list.
+     * Subsequent user-requested sweeps through the library go DOWN. */
+    private Result spotifyScrollLibraryDown(Completion cb) {
+        if(appRoot(SPOTIFY_PKG)==null)return Result.WAIT;
+        android.util.DisplayMetrics m=getResources().getDisplayMetrics();
+        if(m.widthPixels<160 || m.heightPixels<160)return Result.BLOCKED;
+        Path p=new Path();
+        p.moveTo(m.widthPixels*.5f,m.heightPixels*.18f);
+        p.lineTo(m.widthPixels*.5f,m.heightPixels*.85f);
+        return gesture(SPOTIFY_PKG,p,500L,cb);
+    }
+
+    private Result spotifySwipeHome(Completion cb) {
+        if(appRoot(SPOTIFY_PKG)==null)return Result.WAIT;
+        android.util.DisplayMetrics m=getResources().getDisplayMetrics();
+        if(m.widthPixels<160 || m.heightPixels<160)return Result.BLOCKED;
+        Path p=new Path();
+        p.moveTo(m.widthPixels*.15f,m.heightPixels*.52f);
+        p.lineTo(m.widthPixels*.86f,m.heightPixels*.52f);
+        return gesture(SPOTIFY_PKG,p,500L,cb);
     }
 
     private boolean spotifyHasEditable(AccessibilityNodeInfo root) {
@@ -476,27 +708,63 @@ public final class JarvisWatchScreenService extends AccessibilityService {
             "що хочете послухати","що ви хочете послухати","пошук");
     }
 
+    /** Input fields can be hidden below a full-screen Wear OS keyboard. Text
+     * actions are safe here because the node is still owned by Spotify and
+     * the foreground overlay is strictly an IME (checked above). */
+    private AccessibilityNodeInfo spotifyEditableNode(AccessibilityNodeInfo root) {
+        ArrayDeque<AccessibilityNodeInfo> queue=new ArrayDeque<>();
+        queue.add(root);
+        AccessibilityNodeInfo only=null,focused=null;
+        int matches=0,visited=0;
+        while(!queue.isEmpty() && ++visited<=MAX_NODES) {
+            AccessibilityNodeInfo node=queue.removeFirst();
+            if(node==null || !node.isEnabled() || node.isPassword())continue;
+            if(node.getPackageName()!=null &&
+               !SPOTIFY_PKG.contentEquals(node.getPackageName()))continue;
+            if(node.isEditable()) {
+                matches++;
+                only=node;
+                if(node.isFocused())focused=node;
+            }
+            for(int i=0;i<node.getChildCount();i++) {
+                AccessibilityNodeInfo child=node.getChild(i);
+                if(child!=null)queue.addLast(child);
+            }
+        }
+        if(visited>MAX_NODES)return null;
+        return focused!=null?focused:matches==1?only:null;
+    }
+
     private Result spotifySetQuery(AccessibilityNodeInfo root,String title) {
         if(title==null || title.isEmpty() || title.length()>75)return Result.BLOCKED;
-        for(AccessibilityNodeInfo n:spotifyNodes(root)) {
-            if(!n.isEditable() || n.isPassword())continue;
-            Bundle args=new Bundle();
-            args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,title);
-            return n.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)
-                ?Result.DONE:Result.WAIT;
-        }
-        return Result.WAIT;
+        AccessibilityNodeInfo input=spotifyEditableNode(root);
+        if(input==null)return Result.WAIT;
+        if(JarvisWatchUiRules.spotifyQueryVisible(title,
+            input.getText()==null?null:input.getText().toString()))
+            return Result.DONE;
+        Bundle args=new Bundle();
+        args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,title);
+        return input.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)
+            ?Result.DONE:Result.WAIT;
+    }
+
+    private Result spotifyVerifyQuery(AccessibilityNodeInfo root,String title) {
+        AccessibilityNodeInfo input=spotifyEditableNode(root);
+        if(input==null || title==null)return Result.WAIT;
+        String actual=input.getText()==null?"":input.getText().toString();
+        return JarvisWatchUiRules.spotifyQueryVisible(title,actual)
+            ?Result.DONE:Result.WAIT;
     }
 
     private Result spotifySubmitQuery(AccessibilityNodeInfo root) {
-        for(AccessibilityNodeInfo n:spotifyNodes(root)) {
-            if(!n.isEditable() || n.isPassword())continue;
+        AccessibilityNodeInfo input=spotifyEditableNode(root);
+        if(input!=null) {
             if(Build.VERSION.SDK_INT>=30) {
                 int enter=AccessibilityNodeInfo.AccessibilityAction
                     .ACTION_IME_ENTER.getId();
-                for(AccessibilityNodeInfo.AccessibilityAction action:n.getActionList()) {
+                for(AccessibilityNodeInfo.AccessibilityAction action:input.getActionList()) {
                     if(action.getId()==enter)
-                        return n.performAction(enter)?Result.DONE:Result.WAIT;
+                        return input.performAction(enter)?Result.DONE:Result.WAIT;
                 }
             }
             // Some Spotify versions update results on each keystroke and
@@ -504,6 +772,19 @@ public final class JarvisWatchScreenService extends AccessibilityService {
             return Result.DONE;
         }
         return Result.WAIT;
+    }
+
+    /** A longer, slower swipe on the WATCH (not Pixel) that actually reaches
+     * the Spotify navigation row on round screens. */
+    private Result spotifyRevealNavigation(Completion cb) {
+        if(appRoot(SPOTIFY_PKG)==null)return Result.WAIT;
+        android.util.DisplayMetrics metrics=getResources().getDisplayMetrics();
+        float w=metrics.widthPixels,h=metrics.heightPixels;
+        if(w<160 || h<160)return Result.BLOCKED;
+        Path path=new Path();
+        path.moveTo(w*.50f,h*.88f);
+        path.lineTo(w*.50f,h*.12f);
+        return gesture(SPOTIFY_PKG,path,550L,cb);
     }
 
     private static boolean spotifyTitleMatches(String label,String wanted) {
@@ -647,6 +928,20 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         return gesture(pkg,p,340L,cb);
     }
 
+    /** Gesture completion is delivered asynchronously on the UI looper.
+     * A client callback exception must not crash the accessibility service
+     * and take the whole watch process back to the watch face. */
+    static void safeGestureCompletion(Completion cb,boolean ok,String detail) {
+        if(cb==null)return;
+        try {
+            cb.finished(ok,detail);
+        } catch(RuntimeException error) {
+            JarvisDiagnostics.error(JarvisDiagnostics.Event.ACCESSIBILITY_ERROR,error);
+            android.util.Log.e("DIMON_WATCH_CONTROL",
+                "Wear gesture completion callback failed",error);
+        }
+    }
+
     private Result gesture(String pkg,Path p,long ms,Completion cb) {
         if(appRoot(pkg)==null)return Result.WAIT;
         GestureDescription description=new GestureDescription.Builder()
@@ -655,10 +950,10 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         try{
             accepted=dispatchGesture(description,new GestureResultCallback(){
                 @Override public void onCompleted(GestureDescription gesture) {
-                    cb.finished(true,"Жест виконано на годиннику.");
+                    safeGestureCompletion(cb,true,"Жест виконано на годиннику.");
                 }
                 @Override public void onCancelled(GestureDescription gesture) {
-                    cb.finished(false,"Wear OS скасувала жест.");
+                    safeGestureCompletion(cb,false,"Wear OS скасувала жест.");
                 }
             },main);
         }catch(RuntimeException error){

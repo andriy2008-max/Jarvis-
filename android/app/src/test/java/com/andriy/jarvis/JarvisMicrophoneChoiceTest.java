@@ -17,6 +17,14 @@ public final class JarvisMicrophoneChoiceTest {
             yes(!JarvisMicrophoneChoice.label(mode).isEmpty());
         }
         yes("auto".equals(JarvisMicrophoneChoice.stored(null)));
+        // Watch remains on its built-in mic when Bluetooth headphones appear.
+        for(JarvisMicrophoneChoice.Mode configured:JarvisMicrophoneChoice.Mode.values()) {
+            yes(JarvisMicrophoneChoice.effectiveMode(true,configured)==
+                JarvisMicrophoneChoice.Mode.PHONE);
+            yes(JarvisMicrophoneChoice.effectiveMode(false,configured)==configured);
+        }
+        yes(JarvisMicrophoneChoice.effectiveMode(false,null)==
+            JarvisMicrophoneChoice.Mode.AUTO);
         System.out.println("PASS JarvisMicrophoneChoiceTest");
     }
 }

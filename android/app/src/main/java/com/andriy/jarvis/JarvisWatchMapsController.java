@@ -46,6 +46,8 @@ public final class JarvisWatchMapsController {
         final long deadline=SystemClock.elapsedRealtime()+MAX_MS;
         long stageSince=SystemClock.elapsedRealtime();
         boolean finished;
+        boolean directionsOpened;
+        boolean bottomModeTapRequested;
         final JarvisCallbackGate steps=new JarvisCallbackGate();
 
         Session(Context app,JarvisWatchMapsCommands.Request req,
@@ -84,8 +86,11 @@ public final class JarvisWatchMapsController {
                 "Відкриваю своє місце в Google Картах…":
                 "Відкриваю Google Карти, шукаю «"+request.destination+"»…");
             if(request.whereAmI) {
-                MAIN.postDelayed(()->centerLocation(SystemClock.elapsedRealtime()+13000L),
-                                 2300L);
+                // Wear Maps often launches to its four-tile home, not to
+                // the map canvas. The upper-left map tile must be opened
+                // before a "my location" control can become available.
+                MAIN.postDelayed(()->openMapHome(SystemClock.elapsedRealtime()+14500L),
+                                 1600L);
             } else if(JarvisWatchScreenService.available(context)) {
                 MAIN.postDelayed(()->step(JarvisWatchScreenService.MapsStep.OPEN_SEARCH),
                                  2400L);
@@ -96,10 +101,56 @@ public final class JarvisWatchMapsController {
             }
         }
 
-        void centerLocation(long deadlineHere) {
+        void openMapHome(long expires) {
             if(finished || !completion.active())return;
             if(!JarvisWatchScreenService.available(context)) {
-                done(true,"Google Карти відкрито на Watch7. За потреби натисни «Моє місце».");
+                done(false,"Для натискання кнопки карти увімкни службу "+
+                    "«Дімон — екран годинника» у спеціальних можливостях.");
+                return;
+            }
+            long now=SystemClock.elapsedRealtime();
+            if(now>=expires) {
+                done(false,"Дімон не знайшов кнопку карти на головному екрані Google Карт.");
+                return;
+            }
+            if(!JarvisWatchScreenService.foreground(MAPS_PACKAGE)) {
+                MAIN.postDelayed(()->openMapHome(expires),2000L);
+                return;
+            }
+            JarvisWatchScreenService.Result result=JarvisWatchScreenService.mapsStep(
+                JarvisWatchScreenService.MapsStep.OPEN_MAP,null,(ok,detail)->{
+                    if(finished || !completion.active())return;
+                    if(!ok) {
+                        done(false,"Wear OS скасувала натискання кнопки карти.");
+                        return;
+                    }
+                    MAIN.postDelayed(()->centerLocation(expires),1000L);
+                });
+            switch(result) {
+                case DONE:
+                    MAIN.postDelayed(()->centerLocation(expires),1000L);
+                    return;
+                case RUNNING:return; // Wait for the gesture callback.
+                case WAIT:
+                    MAIN.postDelayed(()->openMapHome(expires),2000L);
+                    return;
+                case BLOCKED:
+                default:
+                    done(false,"Дімон не зміг натиснути кнопку карти на Watch7.");
+            }
+        }
+
+        void centerLocation(long deadlineHere) {
+            if(finished || !completion.active())return;
+            if(JarvisWatchScreenService.mapsHomeVisible()) {
+                if(SystemClock.elapsedRealtime()>=deadlineHere)
+                    done(false,"Google Карти залишилися на початковому екрані. "+
+                        "Не вдалося натиснути кнопку карти.");
+                else MAIN.postDelayed(()->openMapHome(deadlineHere),1700L);
+                return;
+            }
+            if(!JarvisWatchScreenService.available(context)) {
+                done(false,"Служба керування екраном Watch7 стала недоступною.");
                 return;
             }
             if(JarvisWatchScreenService.foreground(MAPS_PACKAGE)) {
@@ -123,18 +174,41 @@ public final class JarvisWatchMapsController {
         void step(JarvisWatchScreenService.MapsStep current) {
             if(finished || !completion.active())return;
             long now=SystemClock.elapsedRealtime();
-            if(now>=deadline) {
-                openWalkingIntent();return;
+            // Wear Maps sometimes renders the transport-mode control without
+            // Accessibility text. First try "Пішки" by label; if no label
+            // appeared after 4.2 seconds, tap the user-identified control at
+            // the bottom CENTER of this WATCH, once, and only after Directions.
+            if(current==JarvisWatchScreenService.MapsStep.WALKING &&
+               !bottomModeTapRequested &&
+               JarvisWatchUiRules.allowBottomRouteModeTap(
+                   directionsOpened,
+                   JarvisWatchScreenService.foreground(MAPS_PACKAGE),
+                   JarvisWatchScreenService.mapsHomeVisible(),
+                   JarvisWatchScreenService.mapsInputOrKeyboardOpen(),
+                   now-stageSince)) {
+                bottomModeTapRequested=true;
+                stageSince=now;
+                progress("Натискаю вибір способу пересування внизу Google Карт…");
+                step(JarvisWatchScreenService.MapsStep.TAP_MODE_BOTTOM);
+                return;
             }
-            if(now-stageSince>=12500L) {
-                openWalkingIntent();return;
+            if(now>=deadline || now-stageSince>=12500L) {
+                if(current==JarvisWatchScreenService.MapsStep.TAP_MODE_BOTTOM)
+                    done(false,"Не вдалося натиснути вибір маршруту в Google Картах Watch7.");
+                else openWalkingIntent();
+                return;
             }
             final long token=steps.begin();
             JarvisWatchScreenService.MapsStep next=next(current);
             JarvisWatchScreenService.Result r=JarvisWatchScreenService.mapsStep(
                 current,request.destination,(ok,detail)->{
                     if(finished || !completion.active() || !steps.finish(token))return;
-                    if(!ok) {openWalkingIntent();return;}
+                    if(!ok) {
+                        if(current==JarvisWatchScreenService.MapsStep.TAP_MODE_BOTTOM)
+                            done(false,"Wear OS скасувала натискання вибору маршруту.");
+                        else openWalkingIntent();
+                        return;
+                    }
                     advance(current,next);
                 });
             switch(r) {
@@ -145,7 +219,10 @@ public final class JarvisWatchMapsController {
                     MAIN.postDelayed(()->step(current),2000L);
                     return;
                 case BLOCKED:
-                default:openWalkingIntent();
+                default:
+                    if(current==JarvisWatchScreenService.MapsStep.TAP_MODE_BOTTOM)
+                        done(false,"Google Карти не дозволили натиснути вибір маршруту.");
+                    else openWalkingIntent();
             }
         }
 
@@ -165,10 +242,17 @@ public final class JarvisWatchMapsController {
             if(finished || !completion.active())return;
             if(from==JarvisWatchScreenService.MapsStep.FIRST_RESULT)
                 progress("Перший відповідний результат обрано. Відкриваю маршрут…");
+            if(from==JarvisWatchScreenService.MapsStep.DIRECTIONS)
+                directionsOpened=true;
             if(from==JarvisWatchScreenService.MapsStep.SET_DESTINATION)
                 progress("Адресу введено. Перевіряю варіанти…");
             if(from==JarvisWatchScreenService.MapsStep.WALKING) {
-                done(true,"Обрано піший маршрут у Google Картах Watch7.");
+                done(true,"Натиснув «Пішки» у Google Картах Watch7. Перевір маршрут.");
+                return;
+            }
+            if(from==JarvisWatchScreenService.MapsStep.TAP_MODE_BOTTOM) {
+                done(true,"Натиснув нижню центральну кнопку вибору способу "+
+                    "пересування в Google Картах Watch7. Перевір маршрут на екрані.");
                 return;
             }
             if(next==null) {openWalkingIntent();return;}

@@ -13,6 +13,12 @@ public final class JarvisMicrophoneChoice {
         return Mode.AUTO; // preserve existing automatic behavior
     }
 
+    /** Wear OS must never inherit the phone's automatic Bluetooth-headset input
+     * preference. PHONE means the BUILT-IN microphone of the CURRENT device. */
+    public static Mode effectiveMode(boolean isWatch, Mode configured) {
+        return isWatch ? Mode.PHONE : (configured==null ? Mode.AUTO : configured);
+    }
+
     public static String stored(Mode mode) {
         switch(mode == null ? Mode.AUTO : mode) {
             case PHONE: return "phone";

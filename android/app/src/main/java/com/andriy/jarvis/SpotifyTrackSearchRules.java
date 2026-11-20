@@ -60,6 +60,67 @@ public final class SpotifyTrackSearchRules {
             s.equals("поиск") || s.equals("что хочешь послушать");
     }
 
+    /** The big, white Spotify Search prompt on the Pixel is a different
+     * control from the bottom Search tab and the Search page heading.
+     * Match only explicit placeholder text before trying a gesture. */
+    public static boolean searchPrompt(String label) {
+        String s=normal(label);
+        return s.equals("що ви хочете послухати") ||
+            s.equals("що хочете послухати") ||
+            s.equals("що хочеш послухати") ||
+            s.equals("що ти хочеш послухати") ||
+            s.equals("what do you want to listen to") ||
+            s.equals("what would you like to listen to") ||
+            s.equals("что вы хотите послушать") ||
+            s.equals("что хочешь послушать") ||
+            s.equals("что ты хочешь послушать");
+    }
+
+    /** A prompt near the TOP of the Spotify Search page. No fixed screen
+     * coordinates: the user screenshot supplies only the relative region. */
+    public static boolean searchPromptRegion(int x,int y,int w,int h,
+                                              int left,int top,int right,int bottom) {
+        int pw=right-left,ph=bottom-top;
+        return pw>=240 && ph>=400 && w>=28 && h>=14 &&
+            w<pw*.96f && h<ph*.16f &&
+            x>left+pw*.09f && x<right-pw*.09f &&
+            y>top+ph*.07f && y<top+ph*.38f;
+    }
+
+    /** Screenshot-matched fallback when Spotify Compose does not expose the
+     * white search prompt as an Accessibility node. Both the top Search
+     * heading and the Music/Podcasts browse cards must be visible. */
+    public static boolean spotifyBrowseHeading(String label) {
+        String s=normal(label);
+        return s.equals("пошук") || s.equals("search") || s.equals("поиск");
+    }
+
+    public static boolean spotifyBrowseMusic(String label) {
+        String s=normal(label);
+        return s.equals("музика") || s.equals("music") || s.equals("музыка");
+    }
+
+    public static boolean spotifyBrowsePodcasts(String label) {
+        String s=normal(label);
+        return s.equals("подкасти") || s.equals("podcasts") ||
+            s.equals("подкасты");
+    }
+
+    /** The tappable gap between the heading and browse-card row is exactly
+     * where the user highlighted Spotify's Search prompt. This is a WATCH/
+     * PHONE-independent relative layout test, never an unguarded fixed tap. */
+    public static boolean searchLandingFallbackGeometry(
+            int headingTop,int headingBottom,int tileTop,
+            int frameTop,int frameBottom) {
+        int height=frameBottom-frameTop;
+        return height>=400 &&
+            headingTop>frameTop+height*.01f &&
+            headingBottom<frameTop+height*.25f &&
+            tileTop>frameTop+height*.18f &&
+            tileTop<frameTop+height*.53f &&
+            tileTop-headingBottom>height*.035f;
+    }
+
     /** Exact title, or accessibility combined label beginning with that
      * title plus a song/track type. Never match arbitrary subtitles. */
     public static boolean exactSong(String requested,String text) {

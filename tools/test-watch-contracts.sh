@@ -43,9 +43,11 @@ javac -encoding UTF-8 -d /tmp/jarvis-voice-tests \
   android/app/src/main/java/com/andriy/jarvis/JarvisTranscriptCorrection.java \
   android/app/src/main/java/com/andriy/jarvis/JarvisOrbPlacement.java \
   android/app/src/main/java/com/andriy/jarvis/ScreenControlCommands.java \
+  android/app/src/main/java/com/andriy/jarvis/JarvisWatchUiRules.java \
   android/app/src/main/java/com/andriy/jarvis/JarvisWatchMapsCommands.java \
   android/app/src/main/java/com/andriy/jarvis/JarvisWatchMusicFollowup.java \
   android/app/src/main/java/com/andriy/jarvis/JarvisWatchLocalCommands.java \
+  android/app/src/test/java/com/andriy/jarvis/JarvisWatchUiRulesTest.java \
   android/app/src/test/java/com/andriy/jarvis/JarvisWatchMapsCommandsTest.java \
   android/app/src/test/java/com/andriy/jarvis/JarvisWatchMusicFollowupTest.java \
   android/app/src/test/java/com/andriy/jarvis/JarvisWatchLocalCommandsTest.java \
@@ -101,6 +103,7 @@ javac -encoding UTF-8 -d /tmp/jarvis-voice-tests \
   android/app/src/test/java/com/andriy/jarvis/OfflineVoicePackRulesTest.java \
   android/app/src/test/java/com/andriy/jarvis/UkrainianVoiceTextTest.java
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.DimonVoiceNameTest
+java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisWatchUiRulesTest
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisWatchMapsCommandsTest
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisWatchMusicFollowupTest
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisWatchLocalCommandsTest

@@ -29,6 +29,55 @@ public final class SpotifyTrackSearchRulesTest {
         ok(!SpotifyTrackSearchRules.searchTab("Моя бібліотека"),"not library");
         ok(SpotifyTrackSearchRules.searchField("Що хочеш послухати?"),"search input");
         ok(SpotifyTrackSearchRules.searchField("Що ви хочете послухати?"),"reported Pixel search prompt");
+        // User's Pixel screenshot: Search tab is already open, but its
+        // large white input prompt is a separate non-clickable Compose node.
+        // The page must be recognized and the prompt itself tapped, not the
+        // bottom Search tab nor the mini-player.
+        ok(SpotifyTrackSearchRules.searchPrompt("Що ви хочете послухати?"),
+            "Pixel screenshot search placeholder in Ukrainian");
+        ok(SpotifyTrackSearchRules.searchPrompt("What do you want to listen to?"),
+            "English Spotify search prompt");
+        ok(SpotifyTrackSearchRules.searchPrompt("Что вы хотите послушать?"),
+            "Russian Spotify search prompt");
+        ok(!SpotifyTrackSearchRules.searchPrompt("Пошук"),
+            "do not confuse Search heading/tab with search prompt");
+        ok(!SpotifyTrackSearchRules.searchPrompt("Музика"),
+            "never tap a Spotify browse tile");
+        ok(SpotifyTrackSearchRules.searchPromptRegion(
+            330,272,475,67,0,0,684,1536),
+            "Pixel screenshot prompt is at top center");
+        ok(SpotifyTrackSearchRules.searchPromptRegion(
+            280,255,265,38,0,0,684,1536),
+            "non-clickable nested Compose text can be tapped");
+        ok(!SpotifyTrackSearchRules.searchPromptRegion(
+            330,800,475,67,0,0,684,1536),
+            "never tap content tiles as search prompt");
+        ok(!SpotifyTrackSearchRules.searchPromptRegion(
+            330,1440,475,67,0,0,684,1536),
+            "never tap Spotify miniplayer or bottom tab");
+        ok(!SpotifyTrackSearchRules.searchPromptRegion(
+            330,272,684,1536,0,0,684,1536),
+            "never tap a full-screen window");
+        ok(SpotifyTrackSearchRules.spotifyBrowseHeading("Пошук"),
+            "Search landing heading visible on screenshot");
+        ok(SpotifyTrackSearchRules.spotifyBrowseMusic("Музика"),
+            "Music browse tile on user screenshot");
+        ok(SpotifyTrackSearchRules.spotifyBrowsePodcasts("Подкасти"),
+            "Podcasts browse tile on user screenshot");
+        ok(!SpotifyTrackSearchRules.spotifyBrowseHeading("Нещодавні"),
+            "unrelated page cannot be mistaken for Search landing");
+        ok(SpotifyTrackSearchRules.searchLandingFallbackGeometry(
+            130,190,363,0,1536),
+            "screenshot with hidden Compose prompt can use bounded gap");
+        ok(!SpotifyTrackSearchRules.searchLandingFallbackGeometry(
+            130,190,205,0,1536),
+            "no search row gap between heading and tiles");
+        ok(!SpotifyTrackSearchRules.searchLandingFallbackGeometry(
+            130,190,1110,0,1536),
+            "never tap gap when browse cards are at screen bottom");
+        ok(!SpotifyTrackSearchRules.searchLandingFallbackGeometry(
+            770,815,1100,0,1536),
+            "never tap if Search heading is not at top");
         ok(SpotifyTrackSearchRules.searchField("Search Spotify"),"English search field");
         ok(!SpotifyTrackSearchRules.searchField("Надіслати"),"not unrelated field");
         ok(SpotifyTrackSearchRules.exactSong("Без бою","Без бою"),"exact song");

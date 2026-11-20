@@ -119,6 +119,61 @@ public final class WatchLifecycleTest {
             });
         }
     }
+    @Test public void malformedPhoneReplyReleasesPendingCommand() {
+        try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)) {
+            scenario.onActivity(a->{
+                JarvisWearPhoneLink link=new JarvisWearPhoneLink(a);
+                try {
+                    Field pending=JarvisWearPhoneLink.class.getDeclaredField("pendingId");
+                    Field node=JarvisWearPhoneLink.class.getDeclaredField("pendingNode");
+                    Field type=JarvisWearPhoneLink.class.getDeclaredField("pendingType");
+                    Field callback=JarvisWearPhoneLink.class.getDeclaredField("pendingCallback");
+                    for(Field field:new Field[]{pending,node,type,callback})
+                        field.setAccessible(true);
+                    pending.set(link,"pending-test-id");
+                    node.set(link,"phone-node");
+                    type.set(link,JarvisWearProtocol.ASSISTANT);
+                    final int[] responses={0};
+                    callback.set(link,(JarvisWearPhoneLink.Callback)(ok,detail)->{
+                        assertFalse("Malformed reply must fail",ok);
+                        responses[0]++;
+                    });
+                    com.google.android.gms.wearable.MessageEvent malformed=
+                        (com.google.android.gms.wearable.MessageEvent)
+                        java.lang.reflect.Proxy.newProxyInstance(
+                            com.google.android.gms.wearable.MessageEvent.class.getClassLoader(),
+                            new Class[]{com.google.android.gms.wearable.MessageEvent.class},
+                            (proxy,method,args)->{
+                                if(method.getName().equals("getPath"))return JarvisWearProtocol.REPLY;
+                                if(method.getName().equals("getSourceNodeId"))return "phone-node";
+                                if(method.getName().equals("getData"))return "{not-json".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                                if(method.getReturnType()==int.class)return 0;
+                                return null;
+                            });
+                    Method receive=JarvisWearPhoneLink.class.getDeclaredMethod(
+                        "onReply",com.google.android.gms.wearable.MessageEvent.class);
+                    receive.setAccessible(true);
+                    receive.invoke(link,malformed);
+                    assertEquals("Malformed reply must notify once",1,responses[0]);
+                    assertFalse("Malformed reply must clear pending state",link.busy());
+                } catch(Exception error) {throw new AssertionError(error);}
+                finally {link.close();}
+            });
+        }
+    }
+
+    @Test public void gestureCallbackExceptionsAreContained() {
+        try(ActivityScenario<MainActivity> scenario=ActivityScenario.launch(MainActivity.class)) {
+            scenario.onActivity(a->{
+                JarvisWatchScreenService.safeGestureCompletion(
+                    (ok,detail)->{throw new IllegalStateException("private callback text");},
+                    true,"done");
+                assertFalse("Callback failure cannot destroy watch activity",a.isFinishing());
+                assertFalse(a.isDestroyed());
+            });
+        }
+    }
+
     @Test public void reportExcludesExceptionSecrets() throws Exception {
         String secret="sk-proj-private-message-password";
         JarvisDiagnostics.error(JarvisDiagnostics.Event.JAVA_EXCEPTION,new IllegalStateException(secret));
