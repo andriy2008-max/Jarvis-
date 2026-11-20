@@ -58,6 +58,26 @@ public final class SpotifyTrackSearchRulesTest {
         ok(!SpotifyTrackSearchRules.searchPromptRegion(
             330,272,684,1536,0,0,684,1536),
             "never tap a full-screen window");
+        ok(SpotifyTrackSearchRules.spotifyBrowseHeading("Пошук"),
+            "Search landing heading visible on screenshot");
+        ok(SpotifyTrackSearchRules.spotifyBrowseMusic("Музика"),
+            "Music browse tile on user screenshot");
+        ok(SpotifyTrackSearchRules.spotifyBrowsePodcasts("Подкасти"),
+            "Podcasts browse tile on user screenshot");
+        ok(!SpotifyTrackSearchRules.spotifyBrowseHeading("Нещодавні"),
+            "unrelated page cannot be mistaken for Search landing");
+        ok(SpotifyTrackSearchRules.searchLandingFallbackGeometry(
+            130,190,363,0,1536),
+            "screenshot with hidden Compose prompt can use bounded gap");
+        ok(!SpotifyTrackSearchRules.searchLandingFallbackGeometry(
+            130,190,205,0,1536),
+            "no search row gap between heading and tiles");
+        ok(!SpotifyTrackSearchRules.searchLandingFallbackGeometry(
+            130,190,1110,0,1536),
+            "never tap gap when browse cards are at screen bottom");
+        ok(!SpotifyTrackSearchRules.searchLandingFallbackGeometry(
+            770,815,1100,0,1536),
+            "never tap if Search heading is not at top");
         ok(SpotifyTrackSearchRules.searchField("Search Spotify"),"English search field");
         ok(!SpotifyTrackSearchRules.searchField("Надіслати"),"not unrelated field");
         ok(SpotifyTrackSearchRules.exactSong("Без бою","Без бою"),"exact song");
