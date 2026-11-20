@@ -155,7 +155,7 @@ public final class FinanceVoiceCommands {
         return new AccountHint(s,null);
     }
 
-    private static String category(Kind kind,String value){
+    static String category(Kind kind,String value){
         String s=value.replaceAll("\\s+"," ").trim();
         if(kind==Kind.INCOME){
             switch(s) {

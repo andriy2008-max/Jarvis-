@@ -196,6 +196,9 @@ jobs:
             android/app/src/main/java/com/andriy/jarvis/JarvisTaxiCommands.java \
             android/app/src/main/java/com/andriy/jarvis/BoltUiLabels.java \
             android/app/src/main/java/com/andriy/jarvis/FinanceVoiceCommands.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceSlashCommands.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceNumberWords.java \
+            android/app/src/main/java/com/andriy/jarvis/FinanceVoiceFollowups.java \
             android/app/src/main/java/com/andriy/jarvis/FinanceInsightsCommands.java \
             android/app/src/main/java/com/andriy/jarvis/FinanceManagerUiLabels.java \
             android/app/src/main/java/com/andriy/jarvis/TelegramReplyCommands.java \
@@ -369,6 +372,6 @@ jobs:
         shell: bash
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;35.0.0'
       - name: Compile Android code only (does not build an APK)
         run: gradle -p android --no-daemon --stacktrace :app:compileDebugJavaWithJavac
