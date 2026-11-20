@@ -28,6 +28,8 @@ javac -encoding UTF-8 -d /tmp/jarvis-voice-tests \
   android/app/src/test/java/com/andriy/jarvis/FinanceManagerUiLabelsTest.java \
   android/app/src/test/java/com/andriy/jarvis/TelegramReplyCommandsTest.java \
   android/app/src/main/java/com/andriy/jarvis/SpotifyMusicCommands.java \
+  android/app/src/main/java/com/andriy/jarvis/SpotifyResultCursor.java \
+  android/app/src/test/java/com/andriy/jarvis/SpotifyResultCursorTest.java \
   android/app/src/main/java/com/andriy/jarvis/SpotifyUiLabels.java \
   android/app/src/main/java/com/andriy/jarvis/SpotifyTrackSearchRules.java \
   android/app/src/main/java/com/andriy/jarvis/SpotifyUriRules.java \
@@ -121,6 +123,7 @@ java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisMacroTriggerRulesTest
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.CommandPatternsTest
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisInstantCommandsTest
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyMusicCommandsTest
+java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyResultCursorTest
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyUiLabelsTest
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyTrackSearchRulesTest
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyUriRulesTest
