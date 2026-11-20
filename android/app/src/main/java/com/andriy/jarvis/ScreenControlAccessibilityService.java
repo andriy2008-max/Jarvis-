@@ -901,6 +901,27 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             s.trustedExternalApp("com.spotify.music");
     }
 
+    /** Fallback at the centre of the user-highlighted Pixel Search box.
+     * Called only after SpotifyPlaybackController opened the Search tab and
+     * normal Accessibility clicks failed. Gesture completion is asynchronous. */
+    public static void spotifyTapPhoneSearchPrompt(Completion cb) {
+        ScreenControlAccessibilityService s=connected.get();
+        if(cb==null)return;
+        if(s==null || !s.sessionActive || !JarvisPhoneScreenGuard.available(s) ||
+           s.currentSpotifyRoot()==null || spotifySearchEditorReady()) {
+            cb.finished(false,"Spotify не підтверджено або поле пошуку вже відкрите.");
+            return;
+        }
+        s.tapCalibratedForApp("com.spotify.music",-2,-2,null,cb);
+    }
+
+    /** Is the Spotify application root actually visible? The controller
+     * checks this before any calibrated touch, not just a stale window event. */
+    public static boolean spotifyRootVisible() {
+        ScreenControlAccessibilityService s=connected.get();
+        return s!=null && s.sessionActive && s.currentSpotifyRoot()!=null;
+    }
+
     public static void spotifyTapCalibrated(int x,int y,Completion cb) {
         ScreenControlAccessibilityService s=connected.get();
         if(s==null || !s.sessionActive || cb==null) {
@@ -948,12 +969,15 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         boolean bolt="ee.mtakso.client".equals(packageName);
         boolean spotify="com.spotify.music".equals(packageName);
         boolean playlistPlay=spotify && x==977 && y==1291;
+        boolean searchPrompt=spotify && x==-2 && y==-2;
         boolean allowed=bolt ? ((x==333 && y==645) || (x==450 && y==520)) :
-            (spotify && ((x==-1 && y==510) ||
+            (spotify && ((x==-1 && y==510) || searchPrompt ||
                 (x==665 && y==2224) ||
                 (playlistPlay && verifiedPlaylistName!=null)));
         if(!allowed || !sessionActive || !trustedExternalApp(packageName) ||
-           (playlistPlay && !verifiedNamedPlaylistReady(verifiedPlaylistName))) {
+           (playlistPlay && !verifiedNamedPlaylistReady(verifiedPlaylistName)) ||
+           (searchPrompt && (currentSpotifyRoot()==null ||
+                             spotifySearchEditorReady()))) {
             cb.finished(false,"Програма або сторінка потрібного плейлиста не підтверджена.");
             return;
         }
@@ -963,10 +987,14 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             cb.finished(false,"Не вдалося визначити екран.");return;
         }
         display.getRealSize(size);
-        // -1 is the explicit Spotify first-row horizontal centre, not a raw X.
-        final int tapX=(spotify && x==-1 && y==510) ? size.x/2 : x;
+        // -1 is the first song's horizontal centre. -2,-2 means the
+        // owner-calibrated Search prompt at centre x and 17.5% screen height.
+        final int tapX=(spotify && (x==-1 && y==510 || searchPrompt))
+            ? size.x/2 : x;
+        final int tapY=searchPrompt
+            ? SpotifyTrackSearchRules.calibratedPromptY(size.y):y;
         if(size.x<450 || size.y<size.x*1.6f ||
-           tapX<0 || y<0 || tapX>=size.x || y>=size.y) {
+           tapX<0 || tapY<0 || tapX>=size.x || tapY>=size.y) {
             cb.finished(false,"Невідповідна орієнтація або координати екрана.");
             return;
         }
@@ -976,7 +1004,7 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         final Runnable restore;
         try {
             if(!bolt)FloatingJarvisService.avoidControl(
-                new Rect(tapX-24,y-24,tapX+24,y+24));
+                new Rect(tapX-24,tapY-24,tapX+24,tapY+24));
             restore=FloatingJarvisService.hideForGesture();
         }catch(RuntimeException overlayFailure) {
             android.util.Log.w("JARVIS_COORDINATES",
@@ -995,13 +1023,15 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             main.postDelayed(()->{
                 try {
                     if(!sessionActive || !trustedExternalApp(packageName) ||
-                       (playlistPlay && !verifiedNamedPlaylistReady(verifiedPlaylistName))) {
+                       (playlistPlay && !verifiedNamedPlaylistReady(verifiedPlaylistName)) ||
+                       (searchPrompt && (currentSpotifyRoot()==null ||
+                                         spotifySearchEditorReady()))) {
                         finishTap.finished(false,
                             "Bolt або Spotify більше не на передньому плані.");
                         return;
                     }
                     Path path=new Path();
-                    path.moveTo(tapX,y);
+                    path.moveTo(tapX,tapY);
                     GestureDescription gesture=new GestureDescription.Builder()
                         .addStroke(new GestureDescription.StrokeDescription(path,0,90))
                         .build();
