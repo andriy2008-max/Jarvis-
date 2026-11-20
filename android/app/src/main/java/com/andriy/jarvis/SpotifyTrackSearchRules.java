@@ -83,7 +83,7 @@ public final class SpotifyTrackSearchRules {
         int pw=right-left,ph=bottom-top;
         return pw>=240 && ph>=400 && w>=28 && h>=14 &&
             w<pw*.96f && h<ph*.16f &&
-            x>left+pw*.09f && x<right-pw*.94f &&
+            x>left+pw*.09f && x<right-pw*.09f &&
             y>top+ph*.07f && y<top+ph*.38f;
     }
 
