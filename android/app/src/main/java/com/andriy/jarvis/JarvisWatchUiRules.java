@@ -27,7 +27,7 @@ public final class JarvisWatchUiRules {
     public static boolean mapsDistanceLabel(String text) {
         if(text==null)return false;
         return java.util.regex.Pattern.compile(
-            "(?iu).*\\b[0-9]+(?:[.,][0-9]+)?\\s*(?:км|km)\\b.*")
+            "(?iuU).*\\b[0-9]+(?:[.,][0-9]+)?\\s*(?:км|km)\\b.*")
             .matcher(text).matches();
     }
 
