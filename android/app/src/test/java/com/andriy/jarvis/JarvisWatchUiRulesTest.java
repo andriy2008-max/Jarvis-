@@ -69,6 +69,23 @@ public final class JarvisWatchUiRulesTest {
             "stop when no viewport change");
         yes(!JarvisWatchUiRules.mayScrollForPlaylist(0,0,false),
             "never scroll another app");
+        yes(JarvisWatchUiRules.MAPS_ROUTE_MODE_BOTTOM_Y>.80f &&
+            JarvisWatchUiRules.MAPS_ROUTE_MODE_BOTTOM_Y<.94f,
+            "mode tap stays at bottom center of round Watch screen");
+        yes(!JarvisWatchUiRules.allowBottomRouteModeTap(
+            false,true,false,false,6000L),"no tap before Directions");
+        yes(!JarvisWatchUiRules.allowBottomRouteModeTap(
+            true,false,false,false,6000L),"no tap on another foreground app");
+        yes(!JarvisWatchUiRules.allowBottomRouteModeTap(
+            true,true,true,false,6000L),"no tap on Maps home");
+        yes(!JarvisWatchUiRules.allowBottomRouteModeTap(
+            true,true,false,true,6000L),"no tap while search or keyboard is open");
+        yes(!JarvisWatchUiRules.allowBottomRouteModeTap(
+            true,true,false,false,4199L),"first attempt labelled walking action");
+        yes(JarvisWatchUiRules.allowBottomRouteModeTap(
+            true,true,false,false,4200L),"after route screen only, tap bottom");
+        yes(JarvisWatchUiRules.allowBottomRouteModeTap(
+            true,true,false,false,8000L),"fallback remains eligible until timeout");
         System.out.println("PASS JarvisWatchUiRulesTest");
     }
 }
