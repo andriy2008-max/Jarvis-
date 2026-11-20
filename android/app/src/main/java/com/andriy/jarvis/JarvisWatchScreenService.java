@@ -144,7 +144,7 @@ public final class JarvisWatchScreenService extends AccessibilityService {
     // gesture injection. No fixed screen positions are used.
     public enum MapsStep {
         OPEN_MAP,CENTER_LOCATION,OPEN_SEARCH,SET_DESTINATION,SUBMIT_SEARCH,
-        FIRST_RESULT,DIRECTIONS,WALKING
+        FIRST_RESULT,DIRECTIONS,WALKING,TAP_MODE_BOTTOM
     }
     private static final String MAPS_PKG="com.google.android.apps.maps";
 
@@ -185,6 +185,12 @@ public final class JarvisWatchScreenService extends AccessibilityService {
                 return service.mapsTapExact(root,completion,
                     "walking","walk","walking directions",
                     "пішки","пішохідний","пешком","пеший");
+            case TAP_MODE_BOTTOM:
+                // User-confirmed fallback: Wear Google Maps sometimes draws
+                // route-mode choices without accessible labels. Use a
+                // WATCH-relative point only after Directions was opened and
+                // labelled Walking failed for several seconds.
+                return service.mapsTapBottomRouteMode(root,completion);
             default:return Result.BLOCKED;
         }
 
@@ -265,6 +271,25 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         Path point=new Path();
         point.moveTo(box.exactCenterX(),box.exactCenterY());
         return gesture(MAPS_PKG,point,90L,cb);
+    }
+
+    /** Only invoked after a verified Maps DIRECTIONS step. Unlike a phone
+     * coordinate, this uses this Wear display's actual dimensions. Never
+     * tap home, an open search editor or a full-screen keyboard. */
+    private Result mapsTapBottomRouteMode(AccessibilityNodeInfo root,Completion cb) {
+        if(root==null || mapsHome(root) || spotifyHasEditable(root))
+            return Result.WAIT;
+        for(AccessibilityWindowInfo window:getWindows()) {
+            if(window.getType()==AccessibilityWindowInfo.TYPE_INPUT_METHOD &&
+               (window.isActive() || window.isFocused()))
+                return Result.WAIT;
+        }
+        android.util.DisplayMetrics metrics=getResources().getDisplayMetrics();
+        int width=metrics.widthPixels,height=metrics.heightPixels;
+        if(width<160 || height<160)return Result.BLOCKED;
+        Path tap=new Path();
+        tap.moveTo(width*.50f,height*JarvisWatchUiRules.MAPS_ROUTE_MODE_BOTTOM_Y);
+        return gesture(MAPS_PKG,tap,95L,cb);
     }
 
     private Result mapsSetDestination(AccessibilityNodeInfo root,String destination) {
