@@ -61,6 +61,8 @@ public final class JarvisWatchLocalCommands {
            local.matches("(?iu)^(?:відкрити|відкрий|запусти|зайди\\s+в|зайди\\s+до)\\s+(?:(?:програму|додаток|застосунок)\\s+)?(?:spotify|спотіфай|спотифай)[.!?]*$"))
             return new Request("spotify",null,null,null);
         SpotifyMusicCommands.Kind music=SpotifyMusicCommands.parse(local);
+        if(music==SpotifyMusicCommands.Kind.NEXT_RESULT)
+            return new Request(null,null,music,null);
         if(music==SpotifyMusicCommands.Kind.TRACK) {
             String title=SpotifyMusicCommands.namedTrack(local);
             return title==null?null:new Request(null,null,music,title);

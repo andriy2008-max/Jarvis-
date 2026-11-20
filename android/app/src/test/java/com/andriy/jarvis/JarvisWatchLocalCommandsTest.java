@@ -54,6 +54,18 @@ public final class JarvisWatchLocalCommandsTest {
         yes(ukrainian!=null && ukrainian.playsSpotify());
         yes(ukrainian.music==SpotifyMusicCommands.Kind.UKRAINIAN);
         yes("українські пісні".equals(ukrainian.musicTitle));
+        JarvisWatchLocalCommands.Request different=
+            JarvisWatchLocalCommands.spotifyOnWatch("Інша пісня");
+        yes(different!=null && different.playsSpotify());
+        yes(different.music==SpotifyMusicCommands.Kind.NEXT_RESULT);
+        yes(different.musicTitle==null);
+        JarvisWatchLocalCommands.Request wrong=
+            JarvisWatchLocalCommands.spotifyOnWatch("Дімон, не та пісня");
+        yes(wrong!=null && wrong.playsSpotify());
+        yes(wrong.music==SpotifyMusicCommands.Kind.NEXT_RESULT);
+        yes(JarvisWatchLocalCommands.parse(
+            "Не та пісня на годиннику").music==SpotifyMusicCommands.Kind.NEXT_RESULT);
+
 
         // Open Spotify on WATCH without the wake word or watch suffix.
         for(String speech:new String[]{

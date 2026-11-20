@@ -10,6 +10,9 @@ javac -encoding UTF-8 -d /tmp/jarvis-voice-tests \
   android/app/src/main/java/com/andriy/jarvis/JarvisTaxiCommands.java \
   android/app/src/main/java/com/andriy/jarvis/BoltUiLabels.java \
   android/app/src/main/java/com/andriy/jarvis/FinanceVoiceCommands.java \
+  android/app/src/main/java/com/andriy/jarvis/FinanceSlashCommands.java \
+  android/app/src/main/java/com/andriy/jarvis/FinanceNumberWords.java \
+  android/app/src/main/java/com/andriy/jarvis/FinanceVoiceFollowups.java \
   android/app/src/main/java/com/andriy/jarvis/FinanceInsightsCommands.java \
   android/app/src/main/java/com/andriy/jarvis/FinanceManagerUiLabels.java \
   android/app/src/main/java/com/andriy/jarvis/TelegramReplyCommands.java \
@@ -28,6 +31,7 @@ javac -encoding UTF-8 -d /tmp/jarvis-voice-tests \
   android/app/src/test/java/com/andriy/jarvis/FinanceManagerUiLabelsTest.java \
   android/app/src/test/java/com/andriy/jarvis/TelegramReplyCommandsTest.java \
   android/app/src/main/java/com/andriy/jarvis/SpotifyMusicCommands.java \
+  android/app/src/main/java/com/andriy/jarvis/SpotifyResultCursor.java \
   android/app/src/main/java/com/andriy/jarvis/SpotifyUiLabels.java \
   android/app/src/main/java/com/andriy/jarvis/SpotifyTrackSearchRules.java \
   android/app/src/main/java/com/andriy/jarvis/SpotifyUriRules.java \
@@ -73,6 +77,7 @@ javac -encoding UTF-8 -d /tmp/jarvis-voice-tests \
   android/app/src/main/java/com/andriy/jarvis/UkrainianVoiceText.java \
   android/app/src/test/java/com/andriy/jarvis/CommandPatternsTest.java \
   android/app/src/test/java/com/andriy/jarvis/SpotifyMusicCommandsTest.java \
+  android/app/src/test/java/com/andriy/jarvis/SpotifyResultCursorTest.java \
   android/app/src/test/java/com/andriy/jarvis/SpotifyUiLabelsTest.java \
   android/app/src/test/java/com/andriy/jarvis/SpotifyTrackSearchRulesTest.java \
   android/app/src/test/java/com/andriy/jarvis/SpotifyUriRulesTest.java \
@@ -121,6 +126,7 @@ java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisMacroTriggerRulesTest
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.CommandPatternsTest
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisInstantCommandsTest
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyMusicCommandsTest
+java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyResultCursorTest
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyUiLabelsTest
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyTrackSearchRulesTest
 java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyUriRulesTest

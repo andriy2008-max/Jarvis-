@@ -4909,6 +4909,14 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 if(voiceEnabled)speakReply(diagnostic);
                 return;
             }
+            // Contextual result selection must precede title-only followups.
+            if(SpotifyMusicCommands.nextResult(raw)) {
+                pendingWatchMusicKind=null;
+                JarvisWatchLocalCommands.Request nextSong=
+                    JarvisWatchLocalCommands.spotifyOnWatch(raw);
+                if(nextSong!=null)runWatchMusicRequest(nextSong);
+                return;
+            }
             if(pendingWatchMusicKind!=null) {
                 SpotifyMusicCommands.Kind pending=pendingWatchMusicKind;
                 pendingWatchMusicKind=null;

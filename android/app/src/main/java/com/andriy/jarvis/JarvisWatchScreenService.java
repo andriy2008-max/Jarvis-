@@ -16,6 +16,7 @@ import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import java.lang.ref.WeakReference;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 
 /**
  * Optional, local-only Wear OS screen control. Activated by the watch owner
@@ -511,12 +512,25 @@ public final class JarvisWatchScreenService extends AccessibilityService {
      * still require exact song/playlist names. */
     public static Result spotifyStep(SpotifyStep step,String title,boolean playlist,
                                      boolean genreDiscovery,Completion completion) {
-        // Original 4-argument implementation follows this wrapper.
-        return spotifyStepInternal(step,title,playlist,genreDiscovery,completion);
+        return spotifyStep(step,title,playlist,genreDiscovery,0,completion);
+    }
+
+    /** Ordinal zero selects the first song; later voice follow-ups use
+     * increasing ordinals against the re-opened original search query. */
+    public static Result spotifyStep(SpotifyStep step,String title,boolean playlist,
+            boolean genreDiscovery,int resultOrdinal,Completion completion) {
+        try {
+            return spotifyStepInternal(step,title,playlist,genreDiscovery,
+                resultOrdinal,completion);
+        } catch(RuntimeException error) {
+            JarvisDiagnostics.error(JarvisDiagnostics.Event.ACCESSIBILITY_ERROR,error);
+            return Result.BLOCKED;
+        }
     }
 
     private static Result spotifyStepInternal(SpotifyStep step,String title,
-                                     boolean playlist,boolean genreDiscovery,Completion completion) {
+            boolean playlist,boolean genreDiscovery,int resultOrdinal,
+            Completion completion) {
         JarvisWatchScreenService service=connected.get();
         if(service==null || step==null || completion==null)return Result.BLOCKED;
         AccessibilityNodeInfo root=service.appRoot(SPOTIFY_PKG);
@@ -554,7 +568,10 @@ public final class JarvisWatchScreenService extends AccessibilityService {
             case SUBMIT_QUERY:
                 return service.spotifySubmitQuery(root);
             case SELECT_RESULT:
-                return service.spotifySelectResult(root,title,playlist,genreDiscovery,completion);
+                return resultOrdinal==0 ||
+                    playlist || genreDiscovery
+                    ? service.spotifySelectResult(root,title,playlist,genreDiscovery,completion)
+                    : service.spotifySelectNextSongResult(root,title,resultOrdinal,completion);
             case PLAY_PLAYLIST:
                 // The mini-player can say Pause for an unrelated song.
                 // Prefer the playlist's actual Play action if it is visible.
@@ -886,6 +903,51 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         // its title is identical. Wait for a matching category to load.
         return selected==null || bestRank==2?
             Result.WAIT:spotifyTapNode(selected,cb);
+    }
+
+    /** Skip to the Nth song row of the ORIGINAL search on Watch7. This
+     * never uses a Pixel coordinate. Require song-typed accessibility labels
+     * (or an exact dictated title); do not click a generic button/player.
+     * A different query is not silently treated as the previous list. */
+    private Result spotifySelectNextSongResult(AccessibilityNodeInfo root,
+            String title,int ordinal,Completion cb) {
+        if(root==null || ordinal<1 || ordinal>=SpotifyResultCursor.MAX_RESULTS ||
+           spotifyImeVisible())return Result.WAIT;
+        String wanted=AppNameMatcher.normalize(title);
+        if(wanted.isEmpty())return Result.BLOCKED;
+        Rect frame=new Rect();
+        root.getBoundsInScreen(frame);
+        ArrayList<AccessibilityNodeInfo> rows=new ArrayList<>();
+        ArrayList<Rect> bounds=new ArrayList<>();
+        for(AccessibilityNodeInfo n:spotifyNodes(root)) {
+            if(n.isEditable() || n.isPassword())continue;
+            String label=spotifyLabel(n);
+            String desc=spotifyDescription(n);
+            if(!SpotifyTrackSearchRules.resultSongLabel(label) &&
+               !SpotifyTrackSearchRules.resultSongLabel(desc) &&
+               !spotifyTitleMatches(label,wanted) &&
+               !spotifyTitleMatches(desc,wanted))
+                continue;
+            Rect b=new Rect();
+            n.getBoundsInScreen(b);
+            if(b.width()<12 || b.height()<10 ||
+               b.centerY()<frame.top+frame.height()*.12f ||
+               b.centerY()>frame.top+frame.height()*.86f)continue;
+            boolean duplicate=false;
+            for(Rect old:bounds) {
+                if(Math.abs(old.centerY()-b.centerY())<frame.height()*.045f) {
+                    duplicate=true;break;
+                }
+            }
+            if(!duplicate) {
+                int at=0;
+                while(at<bounds.size() && bounds.get(at).top<b.top)at++;
+                rows.add(at,n);bounds.add(at,b);
+            }
+        }
+        if(rows.size()<=ordinal)return Result.WAIT;
+        if(appRoot(SPOTIFY_PKG)==null)return Result.WAIT;
+        return spotifyTapNode(rows.get(ordinal),cb);
     }
 
     private Result spotifyTapPlay(AccessibilityNodeInfo root,Completion cb) {

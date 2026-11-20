@@ -121,6 +121,64 @@ public final class SpotifyTrackSearchRules {
             tileTop-headingBottom>height*.035f;
     }
 
+    /** Pixel user-provided screenshot: white Search field is centred at
+     * approx. 17.5% of full portrait height (screen 684x1536). This is a
+     * LAST fallback only after the Spotify Search-tab step completed. */
+    public static final float PIXEL_SEARCH_PROMPT_Y=0.175f;
+
+    public static int calibratedPromptY(int screenHeight) {
+        return Math.round(screenHeight*PIXEL_SEARCH_PROMPT_Y);
+    }
+
+    /** Do not click by geometry before trying Spotify's accessible Search.
+     * At most two user-calibrated taps, only in an explicit track command on
+     * a portrait phone after Search navigation, never on the Watch7. */
+    public static boolean allowCalibratedPromptTap(boolean searchStepCompleted,
+            boolean spotifyRootVisible,boolean editorReady,
+            int screenWidth,int screenHeight,int tapAttempts,long focusAgeMs) {
+        return searchStepCompleted && spotifyRootVisible && !editorReady &&
+            screenWidth>=450 && screenHeight>=screenWidth*1.60f &&
+            screenHeight>=700 && tapAttempts>=0 && tapAttempts<2 &&
+            focusAgeMs>=1800L;
+    }
+
+    /** Owner-calibrated search-result rows for the Pixel. Spotify Compose
+     * sometimes hides ALL result labels from Accessibility. The first result
+     * was reported near Y=510 on a 2400px screen; subsequent visible rows
+     * step by approx. 0.115 of display height. Never target bottom player. */
+    public static int calibratedResultY(int displayHeight,int ordinal) {
+        if(ordinal<0 || ordinal>4)return -1;
+        return Math.round(displayHeight*(0.2125f+ordinal*.115f));
+    }
+
+    public static boolean mayTapResultAfterSubmit(boolean queryWasSubmitted,
+            boolean spotifyVisible,boolean imeOpen,int width,int height,
+            int ordinal,long elapsedMs) {
+        if(!queryWasSubmitted || !spotifyVisible || imeOpen ||
+            ordinal<0 || ordinal>4 || width<450 ||
+            height<width*1.6f || elapsedMs<1200L)return false;
+        int y=calibratedResultY(height,ordinal);
+        return y>height*.16f && y<height*.78f;
+    }
+
+    /** A visible Spotify song/track result, not an artist, album or playlist.
+     * Accept combined Compose labels with song category delimiters. */
+    public static boolean resultSongLabel(String raw) {
+        String label=normal(raw);
+        if(label.isEmpty() || label.contains("playlist") ||
+           label.contains("плейлист") || label.contains("альбом") ||
+           label.contains("album") || label.contains("подкаст") ||
+           label.contains("podcast"))return false;
+        return label.equals("song") || label.equals("track") ||
+            label.equals("пісня") || label.equals("песня") ||
+            label.startsWith("song ") || label.startsWith("track ") ||
+            label.startsWith("пісня ") || label.startsWith("песня ") ||
+            label.endsWith(" song") || label.endsWith(" track") ||
+            label.endsWith(" пісня") || label.endsWith(" песня") ||
+            label.contains(" song ") || label.contains(" track ") ||
+            label.contains(" пісня ") || label.contains(" песня ");
+    }
+
     /** Exact title, or accessibility combined label beginning with that
      * title plus a song/track type. Never match arbitrary subtitles. */
     public static boolean exactSong(String requested,String text) {
