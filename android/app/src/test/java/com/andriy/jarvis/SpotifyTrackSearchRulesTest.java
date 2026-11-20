@@ -181,6 +181,47 @@ public final class SpotifyTrackSearchRulesTest {
             true,true,false,400,900,0,4000L),
             "reject narrow watch-style display");
 
+
+        // Regression: first result was visible, but Spotify withheld an
+        // accessible exact title. Allow a calibrated tap ONLY after submit.
+        ok(SpotifyTrackSearchRules.calibratedResultY(2400,0)==510,
+            "first Pixel song result matches user-confirmed y510");
+        ok(SpotifyTrackSearchRules.calibratedResultY(2400,1)==786,
+            "next result row is below the first");
+        ok(SpotifyTrackSearchRules.calibratedResultY(2400,2)==1062,
+            "third result continues down the same list");
+        ok(SpotifyTrackSearchRules.mayTapResultAfterSubmit(
+            true,true,false,1080,2400,0,1600L),
+            "first result can be tapped after Spotify search submission");
+        ok(SpotifyTrackSearchRules.mayTapResultAfterSubmit(
+            true,true,false,1080,2400,1,1600L),
+            "second result uses same verified query");
+        ok(!SpotifyTrackSearchRules.mayTapResultAfterSubmit(
+            false,true,false,1080,2400,0,1600L),
+            "never tap an unsubmitted query");
+        ok(!SpotifyTrackSearchRules.mayTapResultAfterSubmit(
+            true,false,false,1080,2400,0,1600L),
+            "never tap a different foreground app");
+        ok(!SpotifyTrackSearchRules.mayTapResultAfterSubmit(
+            true,true,true,1080,2400,0,1600L),
+            "never tap when Spotify keyboard still owns input");
+        ok(!SpotifyTrackSearchRules.mayTapResultAfterSubmit(
+            true,true,false,1080,2400,0,1199L),
+            "wait for result rendering");
+        ok(!SpotifyTrackSearchRules.mayTapResultAfterSubmit(
+            true,true,false,400,400,0,1600L),
+            "phone coordinates never apply to Watch7");
+        ok(!SpotifyTrackSearchRules.mayTapResultAfterSubmit(
+            true,true,false,1080,2400,5,1600L),
+            "no guessed taps beyond calibrated visible rows");
+        ok(SpotifyTrackSearchRules.resultSongLabel("Мама • Пісня • Виконавець"),
+            "support Spotify combined Ukrainian song label");
+        ok(SpotifyTrackSearchRules.resultSongLabel("Song, Mama, Artist"),
+            "support Spotify English song label");
+        ok(!SpotifyTrackSearchRules.resultSongLabel("Мама • Альбом"),
+            "do not select album instead of song");
+        ok(!SpotifyTrackSearchRules.resultSongLabel("Мама • Playlist"),
+            "do not select playlist instead of song");
         System.out.println("PASS SpotifyTrackSearchRulesTest");
     }
 }
