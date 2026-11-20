@@ -4,8 +4,6 @@ on:
     branches: [fix/watch7-three-user-qa-issues-no-apk, main]
     paths:
       - '.github/workflows/watch7-audit.yml'
-      - 'android/**'
-      - 'tools/test-watch-contracts.sh'
   pull_request:
     branches: [main]
     paths:
