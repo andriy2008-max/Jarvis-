@@ -11,6 +11,8 @@ public final class SpotifyResultCursor {
     private String title;
     private int selected=-1;
     private long updatedAt;
+    private boolean playlist;
+    private String resultTitle;
 
     public synchronized void begin(String newTitle,long now) {
         if(newTitle==null || newTitle.trim().isEmpty() || newTitle.length()>100) {
@@ -18,13 +20,29 @@ public final class SpotifyResultCursor {
         }
         title=newTitle.trim();
         selected=-1;
+        playlist=false;
+        resultTitle=null;
         updatedAt=now;
     }
 
     public synchronized void selected(int index,long now) {
+        selected(index,now,false,null);
+    }
+
+    /** Used by Next Result to return from a playlist before selecting the
+     * next visible mixed search result. */
+    public synchronized void selected(int index,long now,boolean isPlaylist,String name) {
         if(title==null || index<0 || index>=MAX_RESULTS)return;
         selected=index;
+        playlist=isPlaylist;
+        resultTitle=name;
         updatedAt=now;
+    }
+    public synchronized boolean selectedPlaylist(long now) {
+        return valid(now) && selected>=0 && playlist;
+    }
+    public synchronized String selectedTitle(long now) {
+        return valid(now) && selected>=0 ? resultTitle : null;
     }
 
     public synchronized int next(long now) {
@@ -38,6 +56,7 @@ public final class SpotifyResultCursor {
 
     public synchronized void clear() {
         title=null;selected=-1;updatedAt=0;
+        playlist=false;resultTitle=null;
     }
 
     private boolean valid(long now) {

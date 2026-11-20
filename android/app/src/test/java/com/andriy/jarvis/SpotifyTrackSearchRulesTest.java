@@ -222,6 +222,41 @@ public final class SpotifyTrackSearchRulesTest {
             "do not select album instead of song");
         ok(!SpotifyTrackSearchRules.resultSongLabel("Мама • Playlist"),
             "do not select playlist instead of song");
+        // Pixel screenshot "романтична": first results are playlists;
+        // the first standalone song ("Романтичная" — Syava) is lower down.
+        ok(SpotifyTrackSearchRules.mixedResultType("Плейліст")==
+            SpotifyTrackSearchRules.SearchResultType.PLAYLIST,
+            "playlist card in mixed results");
+        ok(SpotifyTrackSearchRules.mixedResultType("Пісня • Syava")==
+            SpotifyTrackSearchRules.SearchResultType.SONG,
+            "standalone song card in mixed results");
+        ok(SpotifyTrackSearchRules.mixedResultType("Song • Artist")==
+            SpotifyTrackSearchRules.SearchResultType.SONG,
+            "English metadata");
+        ok(SpotifyTrackSearchRules.mixedResultType("Playlist")==
+            SpotifyTrackSearchRules.SearchResultType.PLAYLIST,
+            "English playlist metadata");
+        ok(SpotifyTrackSearchRules.mixedResultType("Плейлісти")==
+            SpotifyTrackSearchRules.SearchResultType.UNKNOWN,
+            "do not tap the top playlist filter");
+        ok(SpotifyTrackSearchRules.mixedResultType("Пісні")==
+            SpotifyTrackSearchRules.SearchResultType.UNKNOWN,
+            "do not tap the top songs filter");
+        ok(SpotifyTrackSearchRules.mixedResultType("Сексуальный плейлист")==
+            SpotifyTrackSearchRules.SearchResultType.UNKNOWN,
+            "playlist title is not itself type metadata");
+        ok(SpotifyTrackSearchRules.mixedResultTitleCandidate(
+            "Сексуальный плейлист",315,360,1536),
+            "pair a playlist name with its category subtitle");
+        ok(SpotifyTrackSearchRules.mixedResultTitleCandidate(
+            "Романтичная",685,716,1536),
+            "pair a track name with its song and artist subtitle");
+        ok(!SpotifyTrackSearchRules.mixedResultTitleCandidate(
+            "Плейлісти",240,360,1536),
+            "never treat filter pill as a result");
+        ok(!SpotifyTrackSearchRules.mixedResultTitleCandidate(
+            "Without Me",1260,360,1536),
+            "do not target the mini-player");
         System.out.println("PASS SpotifyTrackSearchRulesTest");
     }
 }

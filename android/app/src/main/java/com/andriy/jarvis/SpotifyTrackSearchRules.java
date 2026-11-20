@@ -161,6 +161,46 @@ public final class SpotifyTrackSearchRules {
         return y>height*.16f && y<height*.78f;
     }
 
+    /** Strict metadata classification for the MIXED Spotify search list.
+     * Category pills use plural "Пісні"/"Плейлісти"; each result uses a
+     * singular "Пісня"/"Плейліст", often followed by an artist. */
+    public enum SearchResultType { SONG, PLAYLIST, UNKNOWN }
+
+    public static SearchResultType mixedResultType(String raw) {
+        String s=normal(raw);
+        if(s.isEmpty())return SearchResultType.UNKNOWN;
+        if(s.equals("плейліст") || s.equals("плейлист") ||
+           s.equals("playlist") || s.startsWith("плейліст ") ||
+           s.startsWith("плейлист ") || s.startsWith("playlist ") ||
+           s.contains(" плейліст ") || s.contains(" плейлист ") ||
+           s.contains(" playlist "))
+            return SearchResultType.PLAYLIST;
+        if(s.equals("пісня") || s.equals("песня") ||
+           s.equals("song") || s.equals("track") ||
+           s.startsWith("пісня ") || s.startsWith("песня ") ||
+           s.startsWith("song ") || s.startsWith("track ") ||
+           s.contains(" пісня ") || s.contains(" песня ") ||
+           s.contains(" song ") || s.contains(" track "))
+            return SearchResultType.SONG;
+        return SearchResultType.UNKNOWN;
+    }
+
+    /** A title is selected only from the same visual row as a typed
+     * metadata label, away from filter pills and the bottom mini-player. */
+    public static boolean mixedResultTitleCandidate(String title,
+            int titleCenterY,int metadataCenterY,int displayHeight) {
+        String s=normal(title);
+        return displayHeight>=700 && !s.isEmpty() &&
+            mixedResultType(title)==SearchResultType.UNKNOWN &&
+            !s.equals("пісні") && !s.equals("плейлісти") &&
+            !s.equals("songs") && !s.equals("playlists") &&
+            !s.equals("відео") && !s.equals("albums") &&
+            !s.equals("альбоми") && !s.equals("жанри") &&
+            !s.equals("пошук") && !s.equals("search") &&
+            metadataCenterY>titleCenterY &&
+            metadataCenterY-titleCenterY<=displayHeight*.065f;
+    }
+
     /** A visible Spotify song/track result, not an artist, album or playlist.
      * Accept combined Compose labels with song category delimiters. */
     public static boolean resultSongLabel(String raw) {

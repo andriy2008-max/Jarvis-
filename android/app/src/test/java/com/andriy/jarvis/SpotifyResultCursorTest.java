@@ -10,10 +10,15 @@ public final class SpotifyResultCursorTest {
         ok(phone.next(1000L)==-1,"no next song before a search");
         phone.begin("я вільний",1000L);
         ok(phone.next(1100L)==-1,"no next song until a first result was tapped");
-        phone.selected(0,1200L);
+        phone.selected(0,1200L,true,"Сексуальный плейлист");
+        ok(phone.selectedPlaylist(1250L),"remember selected result is a playlist");
+        ok("Сексуальный плейлист".equals(phone.selectedTitle(1250L)),
+            "remember playlist title for safe Back");
         ok(phone.next(1300L)==1,"second result after first click");
-        phone.selected(1,1400L);
+        phone.selected(1,1400L,true,"Романтичні пісні");
         ok(phone.next(1500L)==2,"third result after repeated command");
+        phone.selected(2,1550L,false,"Романтичная");
+        ok(!phone.selectedPlaylist(1590L),"song result must not force Back");
         ok(watch.next(1500L)==-1,"phone list does not leak onto Watch7");
         watch.begin("мама",2000L);
         watch.selected(0,2200L);

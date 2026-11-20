@@ -29,7 +29,9 @@ public final class SpotifyPlaybackController {
         WAIT_APP, OPEN_LIBRARY, OPEN_COLLECTION, WAIT_PLAYLIST_PAGE,
         CHOOSE_RAP, PLAY, VERIFY_PLAY,
         OPEN_SEARCH_TAB, FOCUS_SEARCH, VERIFY_SEARCH_EDITOR, TYPE_SEARCH, SUBMIT_SEARCH,
-        COORD_SELECT_FIRST, VERIFY_TRACK_PLAY
+        COORD_SELECT_FIRST, VERIFY_TRACK_PLAY,
+        RETURN_TO_SEARCH_RESULTS, WAIT_MIXED_PLAYLIST, PLAY_MIXED_PLAYLIST,
+        VERIFY_MIXED_PLAYLIST
     }
 
     private final Context context;
@@ -53,6 +55,13 @@ public final class SpotifyPlaybackController {
     private int searchPromptAttempts;
     private int calibratedPromptTaps;
     private boolean calibratedPromptPending;
+    private boolean resumeSearchResults;
+    private String priorPlaylistTitle;
+    private boolean playlistBackRequested;
+    private String searchPlaylistTitle;
+    private String searchSongTitle;
+    private boolean mixedPlaylistPlayPending;
+    private boolean mixedPlaylistUsedCoordinate;
 
     public SpotifyPlaybackController(Context context) {
         this.context = context;
@@ -173,6 +182,13 @@ public final class SpotifyPlaybackController {
         searchPromptAttempts = 0;
         calibratedPromptTaps = 0;
         calibratedPromptPending = false;
+        resumeSearchResults=false;
+        priorPlaylistTitle=null;
+        playlistBackRequested=false;
+        searchPlaylistTitle=null;
+        searchSongTitle=null;
+        mixedPlaylistPlayPending=false;
+        mixedPlaylistUsedCoordinate=false;
         listener = callback;
         active = true;
         move(Stage.WAIT_APP, "Режим «Телефон»: очікую відкриття Spotify...");
@@ -191,6 +207,8 @@ public final class SpotifyPlaybackController {
         long now=SystemClock.elapsedRealtime();
         String title=RESULT_CURSOR.query(now);
         int index=RESULT_CURSOR.next(now);
+        boolean fromPlaylist=RESULT_CURSOR.selectedPlaylist(now);
+        String openedPlaylist=fromPlaylist?RESULT_CURSOR.selectedTitle(now):null;
         if(title==null || index<0) {
             if(callback!=null)callback.onFinished(false,
                 "Немає попереднього списку пісень або він застарів. "+
@@ -199,8 +217,11 @@ public final class SpotifyPlaybackController {
         }
         start(SpotifyMusicCommands.Kind.TRACK,
             "увімкни пісню "+title,callback);
-        if(active && requested==SpotifyMusicCommands.Kind.TRACK)
+        if(active && requested==SpotifyMusicCommands.Kind.TRACK) {
             resultOrdinal=index;
+            resumeSearchResults=true;
+            priorPlaylistTitle=openedPlaylist;
+        }
     }
 
     public void cancel() {
@@ -281,6 +302,14 @@ public final class SpotifyPlaybackController {
                 case SUBMIT_SEARCH:
                     reason = "Не вдалося підтвердити пошук пісні клавішею Пошук/Enter.";
                     break;
+                case RETURN_TO_SEARCH_RESULTS:
+                    reason = "Spotify не повернувся до попередніх результатів пошуку.";
+                    break;
+                case WAIT_MIXED_PLAYLIST:
+                case PLAY_MIXED_PLAYLIST:
+                case VERIFY_MIXED_PLAYLIST:
+                    reason = "Відкрив плейлист зі списку, але Spotify не підтвердив Play.";
+                    break;
                 case COORD_SELECT_FIRST:
                     reason = "Spotify не показав доступний результат №"+
                         (resultOrdinal+1)+" або заблокував натискання. "+
@@ -332,7 +361,12 @@ public final class SpotifyPlaybackController {
             case WAIT_APP:
                 if(requested==SpotifyMusicCommands.Kind.TRACK) {
                     if(age>=1500L)
-                        move(Stage.OPEN_SEARCH_TAB,"Натискаю «Пошук» у Spotify...");
+                        move(resumeSearchResults
+                            ?Stage.RETURN_TO_SEARCH_RESULTS
+                            :Stage.OPEN_SEARCH_TAB,
+                            resumeSearchResults
+                            ?"Повертаюся до попереднього списку Spotify..."
+                            :"Натискаю «Пошук» у Spotify...");
                 } else if(requested==SpotifyMusicCommands.Kind.PLAYLIST) {
                     // Allow Spotify's foreground window identity even if it
                     // hides its accessible tree on the home screen.
@@ -342,6 +376,33 @@ public final class SpotifyPlaybackController {
                             "Відкриваю «Моя бібліотека» за координатами...");
                 } else
                     move(Stage.OPEN_LIBRARY,"Відкриваю «Моя бібліотека»...");
+                break;
+            case RETURN_TO_SEARCH_RESULTS:
+                if(ScreenControlAccessibilityService.spotifySearchQueryVisible(namedTrack) &&
+                   !ScreenControlAccessibilityService.spotifyOwnsInputMethod()) {
+                    move(Stage.COORD_SELECT_FIRST,
+                        "Список «"+namedTrack+"» відкритий. Вибираю наступний результат №"+
+                        (resultOrdinal+1)+"...");
+                } else if(priorPlaylistTitle!=null && !playlistBackRequested) {
+                    // Only a VERIFIED playlist detail page may issue Back.
+                    ScreenControlAccessibilityService.SpotifyStep back=
+                        ScreenControlAccessibilityService.spotifyBackFromSearchPlaylist(
+                            priorPlaylistTitle);
+                    if(back==ScreenControlAccessibilityService.SpotifyStep.CLICKED) {
+                        playlistBackRequested=true;
+                        if(listener!=null)listener.onProgress(
+                            "Назад із плейлиста «"+priorPlaylistTitle+
+                            "» до результатів Spotify...");
+                    } else if(age>=3400L)
+                        move(Stage.OPEN_SEARCH_TAB,
+                            "Не бачу сторінку попереднього плейлиста. Відновлюю пошук…");
+                } else if(age>=3400L) {
+                    // Some Spotify builds reset their activity on re-entry;
+                    // use the saved query rather than a blind second Back.
+                    move(Stage.OPEN_SEARCH_TAB,
+                        "Пошук зник після повернення. Відновлюю запит «"+
+                        namedTrack+"»...");
+                }
                 break;
             case OPEN_SEARCH_TAB:
                 if(successful(ScreenControlAccessibilityService.spotifySearchTab()))
@@ -407,11 +468,25 @@ public final class SpotifyPlaybackController {
                                 finish(false,"Spotify не зміг натиснути першу пісню: "+detail);
                                 return;
                             }
+                            ScreenControlAccessibilityService.SpotifySearchSelection item=
+                                ScreenControlAccessibilityService.spotifyLastSearchSelection();
+                            boolean isPlaylist=item!=null && item.playlist;
+                            String selectedTitle=item==null?null:item.title;
                             RESULT_CURSOR.selected(resultOrdinal,
-                                SystemClock.elapsedRealtime());
-                            move(Stage.VERIFY_TRACK_PLAY,
-                                "Натиснув результат №"+(resultOrdinal+1)+
-                                ". Перевіряю відтворення Spotify...");
+                                SystemClock.elapsedRealtime(),
+                                isPlaylist,selectedTitle);
+                            if(isPlaylist) {
+                                searchPlaylistTitle=selectedTitle;
+                                move(Stage.WAIT_MIXED_PLAYLIST,
+                                    "Результат №"+(resultOrdinal+1)+
+                                    " — плейлист «"+selectedTitle+
+                                    "». Відкриваю і запускаю Play…");
+                            } else {
+                                searchSongTitle=selectedTitle;
+                                move(Stage.VERIFY_TRACK_PLAY,
+                                    "Натиснув пісню №"+(resultOrdinal+1)+
+                                    ". Перевіряю мініпрогравач Spotify...");
+                            }
                             handler.postDelayed(poll,650L);
                         });
                 if(selected==ScreenControlAccessibilityService.SpotifyStep.WAIT)
@@ -423,22 +498,85 @@ public final class SpotifyPlaybackController {
                 // no repeated taps while it is pending.
                 return;
             }
-            case VERIFY_TRACK_PLAY:
-                if(resultOrdinal>0) {
-                    // Follow-up rows can be different recordings or artists.
-                    // We only know that Android accepted the row tap; the
-                    // mini-player will not necessarily show the original title.
-                    if(age>=1600L)finish(true,"Натиснув результат №"+
-                        (resultOrdinal+1)+" зі списку «"+namedTrack+
-                        "». Скажи «Інша пісня» для наступного.");
-                } else if(ScreenControlAccessibilityService.spotifyMiniPlayerHasTrack(namedTrack)) {
-                    finish(true,"Spotify показує пісню «"+namedTrack+
-                        "» у мініпрогравачі. Перевір, чи є звук. "+
-                        "Скажи «Інша пісня» для наступного результату.");
+            case VERIFY_TRACK_PLAY: {
+                String expected=searchSongTitle!=null?searchSongTitle:namedTrack;
+                if(ScreenControlAccessibilityService.spotifyMiniPlayerHasTrack(expected)) {
+                    finish(true,"Spotify показує «"+expected+
+                        "» у мініпрогравачі. Скажи «Інша пісня» для наступного.");
                 } else if(age>=6500L) {
-                    finish(false,"Перший результат натиснуто, але Spotify не "+
-                        "підтвердив його появу в мініпрогравачі. "+
-                        "Можна сказати «Інша пісня» для другого результату.");
+                    finish(false,"Натиснув результат №"+(resultOrdinal+1)+
+                        ", але Spotify не підтвердив нову пісню у мініпрогравачі. "+
+                        "Перевір відтворення; повторне натискання не виконував.");
+                }
+                break;
+            }
+            case WAIT_MIXED_PLAYLIST:
+                if(searchPlaylistTitle==null) {
+                    finish(false,"Spotify не повідомив назву відкритого плейлиста.");
+                } else if(ScreenControlAccessibilityService.spotifyNamedPlaylistDetailReady(
+                    searchPlaylistTitle)==ScreenControlAccessibilityService.SpotifyStep.ALREADY) {
+                    move(Stage.PLAY_MIXED_PLAYLIST,
+                        "Сторінку плейлиста «"+searchPlaylistTitle+
+                        "» відкрито. Натискаю Play...");
+                } else if(age>=8500L) {
+                    finish(false,"Spotify не підтвердив відкриття сторінки плейлиста «"+
+                        searchPlaylistTitle+"». Не натискав Play навмання.");
+                }
+                break;
+            case PLAY_MIXED_PLAYLIST: {
+                if(age<900L || mixedPlaylistPlayPending)break;
+                ScreenControlAccessibilityService.SpotifyStep playing=
+                    ScreenControlAccessibilityService.spotifyPlaylistPlaybackState(
+                        null,searchPlaylistTitle);
+                if(playing==ScreenControlAccessibilityService.SpotifyStep.ALREADY) {
+                    finish(true,"Плейлист «"+searchPlaylistTitle+"» уже відтворюється.");
+                    break;
+                }
+                if(ScreenControlAccessibilityService.spotifyNamedPlaylistDetailReady(
+                    searchPlaylistTitle)!=ScreenControlAccessibilityService.SpotifyStep.ALREADY) {
+                    if(age>=5000L)
+                        finish(false,"Сторінка плейлиста зникла. Play не натискав.");
+                    break;
+                }
+                ScreenControlAccessibilityService.SpotifyStep pressed=
+                    ScreenControlAccessibilityService.spotifyNamedPlaylistControl(
+                        SpotifyUiLabels.Target.PLAY,searchPlaylistTitle,false);
+                if(pressed==ScreenControlAccessibilityService.SpotifyStep.ALREADY)
+                    finish(true,"Плейлист уже відтворюється.");
+                else if(pressed==ScreenControlAccessibilityService.SpotifyStep.CLICKED)
+                    move(Stage.VERIFY_MIXED_PLAYLIST,
+                        "Натиснув Play у плейлисті «"+searchPlaylistTitle+
+                        "». Перевіряю відтворення...");
+                else if(age>=2300L && !mixedPlaylistUsedCoordinate) {
+                    // Same guarded coordinate fallback as a named playlist.
+                    // One press only: a second could pause playback.
+                    mixedPlaylistUsedCoordinate=true;
+                    mixedPlaylistPlayPending=true;
+                    ScreenControlAccessibilityService.spotifyTapNamedPlaylistPlay(
+                        searchPlaylistTitle,(ok,detail)->{
+                            if(!active || stage!=Stage.PLAY_MIXED_PLAYLIST)return;
+                            mixedPlaylistPlayPending=false;
+                            if(!ok) {
+                                finish(false,"Не вдалося натиснути Play плейлиста: "+detail);
+                            } else {
+                                move(Stage.VERIFY_MIXED_PLAYLIST,
+                                    "Play натиснуто на плейлисті «"+
+                                    searchPlaylistTitle+"». Перевіряю Pause...");
+                                handler.postDelayed(poll,POLL_MS);
+                            }
+                        });
+                }
+                break;
+            }
+            case VERIFY_MIXED_PLAYLIST:
+                if(ScreenControlAccessibilityService.spotifyPlaylistPlaybackState(
+                    null,searchPlaylistTitle)==ScreenControlAccessibilityService.SpotifyStep.ALREADY) {
+                    finish(true,"Spotify відтворює плейлист «"+searchPlaylistTitle+
+                        "». «Не та пісня» поверне до наступного результату.");
+                } else if(age>=5500L) {
+                    finish(false,"Play натиснуто, але Spotify не підтвердив "+
+                        "відтворення плейлиста «"+searchPlaylistTitle+
+                        "». Повторно Play не натискав.");
                 }
                 break;
             case WAIT_PLAYLIST_PAGE: {
