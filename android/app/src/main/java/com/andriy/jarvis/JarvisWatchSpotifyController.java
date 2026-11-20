@@ -15,11 +15,31 @@ public final class JarvisWatchSpotifyController {
     private static final String PACKAGE="com.spotify.music";
     private static final long TOTAL_TIMEOUT_MS=57000L;
     private static final Handler MAIN=new Handler(Looper.getMainLooper());
+    private static final SpotifyResultCursor RESULT_CURSOR=new SpotifyResultCursor();
 
     private JarvisWatchSpotifyController() {}
 
     public static void play(Context context,SpotifyMusicCommands.Kind kind,
                             String title,JarvisWatchLocalController.Callback completion) {
+        if(kind==SpotifyMusicCommands.Kind.NEXT_RESULT) {
+            long now=SystemClock.elapsedRealtime();
+            int next=RESULT_CURSOR.next(now);
+            String lastQuery=RESULT_CURSOR.query(now);
+            if(next<0 || lastQuery==null) {
+                completion.finished(false,"Немає останнього списку Spotify на Watch7. "+
+                    "Спочатку скажи «Увімкни пісню [назва]».");
+                return;
+            }
+            playIndexed(context,SpotifyMusicCommands.Kind.TRACK,
+                lastQuery,next,true,completion);
+            return;
+        }
+        playIndexed(context,kind,title,0,false,completion);
+    }
+
+    private static void playIndexed(Context context,SpotifyMusicCommands.Kind kind,
+            String title,int resultOrdinal,boolean followup,
+            JarvisWatchLocalController.Callback completion) {
         JarvisWatchSpotifyTrace.mark(context,"PLAY_ENTERED");
         if(kind!=SpotifyMusicCommands.Kind.TRACK &&
            kind!=SpotifyMusicCommands.Kind.PLAYLIST &&
@@ -59,7 +79,10 @@ public final class JarvisWatchSpotifyController {
             completion.finished(false,"Wear OS не вдалося відкрити Spotify.");
             return;
         }
-        Session session=new Session(context.getApplicationContext(),kind,title,completion);
+        if(kind==SpotifyMusicCommands.Kind.TRACK && !followup)
+            RESULT_CURSOR.begin(title,SystemClock.elapsedRealtime());
+        Session session=new Session(context.getApplicationContext(),
+            kind,title,resultOrdinal,completion);
         session.status("Відкриваю Spotify на годиннику…");
         // Do not begin tapping until Spotify actually owns the foreground.
         // This also distinguishes failed app launch from a UI automation failure.
@@ -71,6 +94,7 @@ public final class JarvisWatchSpotifyController {
         final Context context;
         final SpotifyMusicCommands.Kind kind;
         final String title;
+        final int resultOrdinal;
         final JarvisWatchLocalController.Callback callback;
         final long deadline=SystemClock.elapsedRealtime()+TOTAL_TIMEOUT_MS;
         long searchStart=SystemClock.elapsedRealtime();
@@ -87,8 +111,9 @@ public final class JarvisWatchSpotifyController {
         final JarvisCallbackGate steps=new JarvisCallbackGate();
 
         Session(Context context,SpotifyMusicCommands.Kind kind,String title,
-                JarvisWatchLocalController.Callback callback) {
+                int resultOrdinal,JarvisWatchLocalController.Callback callback) {
             this.context=context;this.kind=kind;this.title=title;
+            this.resultOrdinal=resultOrdinal;
             this.callback=callback;
             MAIN.postDelayed(()->done(false,"Час очікування Spotify минув."),TOTAL_TIMEOUT_MS);
         }
@@ -196,7 +221,8 @@ public final class JarvisWatchSpotifyController {
                 result=JarvisWatchScreenService.spotifyStep(step,title,
                     kind!=SpotifyMusicCommands.Kind.TRACK,
                     kind==SpotifyMusicCommands.Kind.RAP ||
-                    kind==SpotifyMusicCommands.Kind.UKRAINIAN,(ok,detail)->{
+                    kind==SpotifyMusicCommands.Kind.UKRAINIAN,
+                    resultOrdinal,(ok,detail)->{
                     if(finished || !callback.active() || !steps.finish(stepToken))return;
                     if(!ok) {
                         done(false,"Wear OS скасувала натискання у Spotify.");
@@ -295,10 +321,12 @@ public final class JarvisWatchSpotifyController {
             if(finished || !callback.active())return;
             if(step==JarvisWatchScreenService.SpotifyStep.SELECT_RESULT &&
                kind==SpotifyMusicCommands.Kind.TRACK) {
-                // Accessibility confirms the click, not audio output. Avoid a
-                // false claim that Spotify actually began playing.
-                done(true,"Вибрано пісню «"+title+"» у Spotify на Watch7. "+
-                    "Перевір відтворення.");
+                RESULT_CURSOR.selected(resultOrdinal,SystemClock.elapsedRealtime());
+                // Android confirmed the tap, not audio output. Both follow-up
+                // phrases advance to the next search result on THIS watch.
+                done(true,"Натиснув результат №"+(resultOrdinal+1)+
+                    " у Spotify Watch7 для «"+title+"». "+
+                    "Скажи «Інша пісня», щоб вибрати наступний.");
                 return;
             }
             if(step==JarvisWatchScreenService.SpotifyStep.VERIFY_PLAYLIST) {
