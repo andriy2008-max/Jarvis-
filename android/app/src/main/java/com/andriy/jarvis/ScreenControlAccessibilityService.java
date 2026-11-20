@@ -2452,7 +2452,11 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         if(service==null || !service.sessionActive)return SpotifyStep.BLOCKED;
         AccessibilityNodeInfo root=service.currentSpotifyRoot();
         if(root==null)return SpotifyStep.WAIT;
-        if(service.spotifySearchEditor(root)!=null)return SpotifyStep.ALREADY;
+        if(service.spotifySearchEditor(root)!=null ||
+           service.spotifySearchPromptNode(root)!=null)
+            // Search landing is ALREADY open. Do not tap the bottom tab
+            // again; its selected icon may be unreachable behind the player.
+            return SpotifyStep.ALREADY;
         SpotifyStep words=service.spotifyClickWords("Пошук","Search","Поиск");
         if(words==SpotifyStep.CLICKED)return words;
         Rect frame=new Rect();root.getBoundsInScreen(frame);
@@ -2568,6 +2572,56 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         return checked>MAX_SCAN?null:field;
     }
 
+    /** The Pixel Search landing has a large white prompt, frequently an
+     * unclickable Compose text node, while the bottom Search tab is already
+     * selected. The prompt is accepted only inside the Spotify window in
+     * the upper portion of the current display. */
+    private AccessibilityNodeInfo spotifySearchPromptNode(AccessibilityNodeInfo root) {
+        if(root==null)return null;
+        Rect frame=new Rect();
+        root.getBoundsInScreen(frame);
+        ArrayDeque<AccessibilityNodeInfo> queue=new ArrayDeque<>();
+        queue.add(root);
+        AccessibilityNodeInfo found=null;
+        Rect selected=null;
+        int scanned=0;
+        while(!queue.isEmpty() && ++scanned<=MAX_SCAN) {
+            AccessibilityNodeInfo node=queue.removeFirst();
+            if(node==null || !node.isVisibleToUser() || !node.isEnabled() ||
+                node.isPassword() || node.isEditable())continue;
+            boolean prompt=SpotifyTrackSearchRules.searchPrompt(
+                asString(node.getText())) ||
+                SpotifyTrackSearchRules.searchPrompt(
+                    asString(node.getContentDescription())) ||
+                SpotifyTrackSearchRules.searchPrompt(
+                    asString(node.getHintText()));
+            if(prompt) {
+                Rect rect=new Rect();
+                node.getBoundsInScreen(rect);
+                if(SpotifyTrackSearchRules.searchPromptRegion(
+                    rect.centerX(),rect.centerY(),rect.width(),rect.height(),
+                    frame.left,frame.top,frame.right,frame.bottom)) {
+                    // Multiple disjoint prompts are ambiguous: never guess.
+                    if(selected!=null && !selected.contains(rect) &&
+                       !rect.contains(selected) &&
+                       (Math.abs(selected.centerX()-rect.centerX())>frame.width()*.12f ||
+                        Math.abs(selected.centerY()-rect.centerY())>frame.height()*.05f))
+                        return null;
+                    if(selected==null || rect.width()*rect.height()<
+                       selected.width()*selected.height()) {
+                        found=node;
+                        selected=rect;
+                    }
+                }
+            }
+            for(int i=0;i<node.getChildCount();i++){
+                AccessibilityNodeInfo child=node.getChild(i);
+                if(child!=null)queue.addLast(child);
+            }
+        }
+        return scanned>MAX_SCAN?null:found;
+    }
+
     /** Focus a visible, unambiguous top-of-page Spotify Search field. */
     public static SpotifyStep spotifyFocusSearch() {
         ScreenControlAccessibilityService service=connected.get();
@@ -2577,8 +2631,43 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
         AccessibilityNodeInfo field=service.spotifySearchEditor(root);
         if(field!=null) {
             if(field.isFocused())return SpotifyStep.ALREADY;
+            AccessibilityNodeInfo target=clickable(field);
+            if(target!=null &&
+               target.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                return SpotifyStep.CLICKED;
+            if(field.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                return SpotifyStep.CLICKED;
             return field.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
                 ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
+        }
+        // Prefer the real top search prompt over tapping the bottom Search
+        // tab or a random "Пошук" heading. ACTION_CLICK may be missing from
+        // Spotify Compose, so fall back to a bounded gesture on the prompt.
+        AccessibilityNodeInfo prompt=service.spotifySearchPromptNode(root);
+        if(prompt!=null) {
+            AccessibilityNodeInfo clickablePrompt=clickable(prompt);
+            if(clickablePrompt!=null && clickablePrompt.isEnabled() &&
+               clickablePrompt.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                return SpotifyStep.CLICKED;
+            Rect bounds=new Rect();
+            prompt.getBoundsInScreen(bounds);
+            Rect frame=new Rect();
+            root.getBoundsInScreen(frame);
+            if(SpotifyTrackSearchRules.searchPromptRegion(bounds.centerX(),
+                bounds.centerY(),bounds.width(),bounds.height(),
+                frame.left,frame.top,frame.right,frame.bottom) &&
+                service.currentSpotifyRoot()!=null) {
+                FloatingJarvisService.avoidControl(bounds);
+                Path p=new Path();
+                p.moveTo(bounds.exactCenterX(),bounds.exactCenterY());
+                GestureDescription gesture=new GestureDescription.Builder()
+                    .addStroke(new GestureDescription.StrokeDescription(p,0,100))
+                    .build();
+                return service.dispatchTrackedGesture(gesture,(ok,detail)->{
+                    if(!ok && service.sessionActive)
+                        service.toast("Spotify: натискання рядка пошуку не спрацювало.");
+                }) ? SpotifyStep.CLICKED : SpotifyStep.WAIT;
+            }
         }
         SpotifyStep words=service.spotifyClickWords("Що ви хочете послухати?",
             "Що хочеш послухати?","Що ти хочеш послухати?",
