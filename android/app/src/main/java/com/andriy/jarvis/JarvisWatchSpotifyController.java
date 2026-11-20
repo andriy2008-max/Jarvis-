@@ -298,6 +298,11 @@ public final class JarvisWatchSpotifyController {
                               SystemClock.elapsedRealtime()-stageStart>9000L) {
                         done(false,"Натиснув відтворення плейлиста, але Spotify "+
                             "не підтвердив запуск музики.");
+                    } else if(step==JarvisWatchScreenService.SpotifyStep.SELECT_RESULT &&
+                              SystemClock.elapsedRealtime()-stageStart>11000L) {
+                        done(false,"Spotify Watch7 не показав результат №"+
+                            (resultOrdinal+1)+" у доступному списку. "+
+                            "Не натискав інші кнопки навмання.");
                     } else if(step==JarvisWatchScreenService.SpotifyStep.VERIFY_QUERY &&
                               SystemClock.elapsedRealtime()-stageStart>8500L) {
                         if(++queryRetries<=2) {
