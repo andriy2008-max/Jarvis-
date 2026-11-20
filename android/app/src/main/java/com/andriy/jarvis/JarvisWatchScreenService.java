@@ -141,7 +141,8 @@ public final class JarvisWatchScreenService extends AccessibilityService {
 
     // Google Maps UI automation on this watch, never on the phone.
     // The target application package is checked at every step and before
-    // gesture injection. No fixed screen positions are used.
+    // gesture injection. The sole relative-location exception is the
+    // user-confirmed bottom-center route-mode control after Directions.
     public enum MapsStep {
         OPEN_MAP,CENTER_LOCATION,OPEN_SEARCH,SET_DESTINATION,SUBMIT_SEARCH,
         FIRST_RESULT,DIRECTIONS,WALKING,TAP_MODE_BOTTOM
