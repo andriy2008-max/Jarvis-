@@ -4903,6 +4903,15 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 if(voiceEnabled)speakReply(diagnostic);
                 return;
             }
+            // "Інша пісня" is a command about the LAST Spotify result list,
+            // not a new song title for the two-turn Watch speech dialogue.
+            if(SpotifyMusicCommands.nextResult(raw)) {
+                pendingWatchMusicKind=null;
+                JarvisWatchLocalCommands.Request nextSong=
+                    JarvisWatchLocalCommands.spotifyOnWatch(raw);
+                if(nextSong!=null)runWatchMusicRequest(nextSong);
+                return;
+            }
             if(pendingWatchMusicKind!=null) {
                 SpotifyMusicCommands.Kind pending=pendingWatchMusicKind;
                 pendingWatchMusicKind=null;
