@@ -296,6 +296,40 @@ public final class JarvisWatchScreenService extends AccessibilityService {
     /** Only invoked after a verified Maps DIRECTIONS step. Unlike a phone
      * coordinate, this uses this Wear display's actual dimensions. Never
      * tap home, an open search editor or a full-screen keyboard. */
+    /** Recognize the stacked route cards visible in the user's Watch7 Maps
+     * screen: car (34 хв), transit (4 год 12 хв), walking (4 год 36 хв).
+     * The lower card can be partially clipped and may lack the word Пішки. */
+    public static boolean mapsRouteChoicesVisible() {
+        JarvisWatchScreenService s=connected.get();
+        if(s==null)return false;
+        AccessibilityNodeInfo root=s.appRoot(MAPS_PKG);
+        return root!=null && s.mapsRouteChoices(root);
+    }
+
+    private boolean mapsRouteChoices(AccessibilityNodeInfo root) {
+        if(root==null || mapsHome(root) || spotifyHasEditable(root))return false;
+        android.util.DisplayMetrics m=getResources().getDisplayMetrics();
+        int count=0,previousY=-10000,lowestY=-1;
+        java.util.ArrayList<Integer> rows=new java.util.ArrayList<>();
+        for(AccessibilityNodeInfo node:spotifyNodes(root)) {
+            if(node.isEditable() ||
+               !JarvisWatchUiRules.mapsRouteDurationLabel(spotifyLabel(node)))
+                continue;
+            Rect bounds=new Rect();
+            node.getBoundsInScreen(bounds);
+            int y=bounds.centerY();
+            if(bounds.width()<6 || bounds.height()<6 ||
+               y<m.heightPixels*.25f || y>m.heightPixels*.95f)continue;
+            boolean unique=true;
+            for(int old:rows)if(Math.abs(old-y)<m.heightPixels*.085f) {
+                unique=false;break;
+            }
+            if(unique){rows.add(y);count++;lowestY=Math.max(lowestY,y);}
+        }
+        return JarvisWatchUiRules.mapsRouteChoicesConfirmed(
+            count,lowestY>m.heightPixels*.63f);
+    }
+
     private Result mapsTapBottomRouteMode(AccessibilityNodeInfo root,Completion cb) {
         if(root==null || mapsHome(root) || spotifyHasEditable(root))
             return Result.WAIT;
@@ -307,9 +341,26 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         android.util.DisplayMetrics metrics=getResources().getDisplayMetrics();
         int width=metrics.widthPixels,height=metrics.heightPixels;
         if(width<160 || height<160)return Result.BLOCKED;
+        // Prefer the bottommost visible travel-duration card, using its
+        // actual vertical position. Click in the CENTER of the round screen.
+        // If Compose hides those labels, use the user-confirmed lower-center
+        // target only after the controller verified Directions.
+        int lowest=-1;
+        if(mapsRouteChoices(root)) {
+            for(AccessibilityNodeInfo node:spotifyNodes(root)) {
+                if(!JarvisWatchUiRules.mapsRouteDurationLabel(spotifyLabel(node)))
+                    continue;
+                Rect b=new Rect();node.getBoundsInScreen(b);
+                if(b.width()<6 || b.height()<6)continue;
+                int y=b.centerY();
+                if(y>height*.63f && y<height*.93f)lowest=Math.max(lowest,y);
+            }
+        }
+        float targetY=lowest>0?lowest:height*
+            JarvisWatchUiRules.MAPS_ROUTE_MODE_BOTTOM_Y;
         Path tap=new Path();
-        tap.moveTo(width*.50f,height*JarvisWatchUiRules.MAPS_ROUTE_MODE_BOTTOM_Y);
-        return gesture(MAPS_PKG,tap,95L,cb);
+        tap.moveTo(width*.50f,targetY);
+        return gesture(MAPS_PKG,tap,120L,cb);
     }
 
     private Result mapsSetDestination(AccessibilityNodeInfo root,String destination) {

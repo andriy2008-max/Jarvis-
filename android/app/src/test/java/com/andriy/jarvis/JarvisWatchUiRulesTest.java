@@ -81,9 +81,25 @@ public final class JarvisWatchUiRulesTest {
         yes(!JarvisWatchUiRules.allowBottomRouteModeTap(
             true,true,false,true,6000L),"no tap while search or keyboard is open");
         yes(!JarvisWatchUiRules.allowBottomRouteModeTap(
-            true,true,false,false,4199L),"first attempt labelled walking action");
+            true,true,false,false,1599L),"wait for the route cards to appear");
         yes(JarvisWatchUiRules.allowBottomRouteModeTap(
-            true,true,false,false,4200L),"after route screen only, tap bottom");
+            true,true,false,false,1600L),"after directions, click bottom walking card");
+        yes(JarvisWatchUiRules.mapsRouteDurationLabel("4 год 36 хв"),
+            "third Wear route is a duration label, not text Пішки");
+        yes(JarvisWatchUiRules.mapsRouteDurationLabel("4 год 12 хв"),
+            "transit duration label");
+        yes(JarvisWatchUiRules.mapsRouteDurationLabel("34 хв"),
+            "car duration label");
+        yes(!JarvisWatchUiRules.mapsRouteDurationLabel("11:04"),
+            "clock time is not a route");
+        yes(!JarvisWatchUiRules.mapsRouteDurationLabel("Стебник"),
+            "destination title is not a route");
+        yes(JarvisWatchUiRules.mapsRouteChoicesConfirmed(3,true),
+            "three visible mode cards identify route selection");
+        yes(!JarvisWatchUiRules.mapsRouteChoicesConfirmed(1,true),
+            "single unrelated duration is not route selection");
+        yes(!JarvisWatchUiRules.mapsRouteChoicesConfirmed(3,false),
+            "no visible bottom choice means do not bypass Directions");
         yes(JarvisWatchUiRules.allowBottomRouteModeTap(
             true,true,false,false,8000L),"fallback remains eligible until timeout");
         System.out.println("PASS JarvisWatchUiRulesTest");

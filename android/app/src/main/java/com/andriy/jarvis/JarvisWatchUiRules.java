@@ -6,15 +6,30 @@ public final class JarvisWatchUiRules {
 
     /** Near the bottom CENTER of a round Watch7 display, inside its usable
      * touch area. This is intentionally NOT a Pixel screen coordinate. */
-    public static final float MAPS_ROUTE_MODE_BOTTOM_Y=0.88f;
+    public static final float MAPS_ROUTE_MODE_BOTTOM_Y=0.84f;
 
-    /** Only after a Maps directions screen was reached, its walking-label
-     * search has been attempted, and a user-requested fallback is needed. */
+    /** The route cards on Wear Maps show durations, not necessarily the
+     * word "Пішки". Match the text of visible duration rows safely. */
+    public static boolean mapsRouteDurationLabel(String text) {
+        if(text==null)return false;
+        return java.util.regex.Pattern.compile(
+            "(?iu).*\\b[0-9]+\\s*(?:год|хв|хвилин|hour|hours|hr|mins?|minutes?|мин).*")
+            .matcher(text).matches();
+    }
+
+    /** We have actually reached the route choices, not a search-result list. */
+    public static boolean mapsRouteChoicesConfirmed(int uniqueDurations,
+                                                     boolean bottomDurationVisible) {
+        return uniqueDurations>=2 && bottomDurationVisible;
+    }
+
+    /** After Directions (or a verified route-choice screen), select the
+     * user's bottom walking card. Do not tap Search, the IME or Maps Home. */
     public static boolean allowBottomRouteModeTap(boolean directionsOpened,
             boolean mapsForeground,boolean mapsHome,boolean searchOrImeOpen,
             long walkingStageMs) {
         return directionsOpened && mapsForeground && !mapsHome &&
-            !searchOrImeOpen && walkingStageMs>=4200L;
+            !searchOrImeOpen && walkingStageMs>=1600L;
     }
 
     /** Never swipe if Search is already visible or the target app isn't foreground. */

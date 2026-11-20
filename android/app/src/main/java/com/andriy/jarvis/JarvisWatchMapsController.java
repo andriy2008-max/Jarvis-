@@ -47,7 +47,6 @@ public final class JarvisWatchMapsController {
         long stageSince=SystemClock.elapsedRealtime();
         boolean finished;
         boolean directionsOpened;
-        boolean bottomModeTapRequested;
         final JarvisCallbackGate steps=new JarvisCallbackGate();
 
         Session(Context app,JarvisWatchMapsCommands.Request req,
@@ -174,22 +173,29 @@ public final class JarvisWatchMapsController {
         void step(JarvisWatchScreenService.MapsStep current) {
             if(finished || !completion.active())return;
             long now=SystemClock.elapsedRealtime();
-            // Wear Maps sometimes renders the transport-mode control without
-            // Accessibility text. First try "Пішки" by label; if no label
-            // appeared after 4.2 seconds, tap the user-identified control at
-            // the bottom CENTER of this WATCH, once, and only after Directions.
-            if(current==JarvisWatchScreenService.MapsStep.WALKING &&
-               !bottomModeTapRequested &&
-               JarvisWatchUiRules.allowBottomRouteModeTap(
+            // The screenshot shows three route cards with times, with
+            // "Пішки" as the last card. Some Maps versions skip a separately
+            // labelled Directions button and show these cards immediately.
+            if(current==JarvisWatchScreenService.MapsStep.DIRECTIONS &&
+               JarvisWatchScreenService.mapsRouteChoicesVisible()) {
+                directionsOpened=true;
+                stageSince=now;
+                progress("Варіанти маршруту знайдені. Натискаю нижній — пішки…");
+                MAIN.postDelayed(()->step(
+                    JarvisWatchScreenService.MapsStep.TAP_MODE_BOTTOM),500L);
+                return;
+            }
+            if(current==JarvisWatchScreenService.MapsStep.TAP_MODE_BOTTOM &&
+               !JarvisWatchUiRules.allowBottomRouteModeTap(
                    directionsOpened,
                    JarvisWatchScreenService.foreground(MAPS_PACKAGE),
                    JarvisWatchScreenService.mapsHomeVisible(),
                    JarvisWatchScreenService.mapsInputOrKeyboardOpen(),
                    now-stageSince)) {
-                bottomModeTapRequested=true;
-                stageSince=now;
-                progress("Натискаю вибір способу пересування внизу Google Карт…");
-                step(JarvisWatchScreenService.MapsStep.TAP_MODE_BOTTOM);
+                if(now>=deadline || now-stageSince>=12500L){
+                    openWalkingIntent();return;
+                }
+                MAIN.postDelayed(()->step(current),650L);
                 return;
             }
             if(now>=deadline || now-stageSince>=12500L) {
@@ -232,7 +238,7 @@ public final class JarvisWatchMapsController {
                 case SET_DESTINATION:return JarvisWatchScreenService.MapsStep.SUBMIT_SEARCH;
                 case SUBMIT_SEARCH:return JarvisWatchScreenService.MapsStep.FIRST_RESULT;
                 case FIRST_RESULT:return JarvisWatchScreenService.MapsStep.DIRECTIONS;
-                case DIRECTIONS:return JarvisWatchScreenService.MapsStep.WALKING;
+                case DIRECTIONS:return JarvisWatchScreenService.MapsStep.TAP_MODE_BOTTOM;
                 default:return null;
             }
         }
@@ -251,8 +257,8 @@ public final class JarvisWatchMapsController {
                 return;
             }
             if(from==JarvisWatchScreenService.MapsStep.TAP_MODE_BOTTOM) {
-                done(true,"Натиснув нижню центральну кнопку вибору способу "+
-                    "пересування в Google Картах Watch7. Перевір маршрут на екрані.");
+                done(true,"Виконав натискання на нижню картку «Пішки» "+
+                    "в Google Картах Watch7. Перевір, чи відкрився піший маршрут.");
                 return;
             }
             if(next==null) {openWalkingIntent();return;}
