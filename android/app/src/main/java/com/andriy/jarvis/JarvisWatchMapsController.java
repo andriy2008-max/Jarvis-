@@ -174,10 +174,8 @@ public final class JarvisWatchMapsController {
         void step(JarvisWatchScreenService.MapsStep current) {
             if(finished || !completion.active())return;
             long now=SystemClock.elapsedRealtime();
-            // Wear Maps sometimes renders the transport-mode control without
-            // Accessibility text. First try "Пішки" by label; if no label
-            // appeared after 4.2 seconds, tap the user-identified control at
-            // the bottom CENTER of this WATCH, once, and only after Directions.
+            // Re-read the transport chooser after loading. Both attempts
+            // require a labelled walking control or the recognized card layout.
             if(current==JarvisWatchScreenService.MapsStep.WALKING &&
                !bottomModeTapRequested &&
                JarvisWatchUiRules.allowBottomRouteModeTap(
@@ -188,14 +186,12 @@ public final class JarvisWatchMapsController {
                    now-stageSince)) {
                 bottomModeTapRequested=true;
                 stageSince=now;
-                progress("Натискаю вибір способу пересування внизу Google Карт…");
+                progress("Повторно шукаю картку «Пішки» в Google Картах…");
                 step(JarvisWatchScreenService.MapsStep.TAP_MODE_BOTTOM);
                 return;
             }
             if(now>=deadline || now-stageSince>=12500L) {
-                if(current==JarvisWatchScreenService.MapsStep.TAP_MODE_BOTTOM)
-                    done(false,"Не вдалося натиснути вибір маршруту в Google Картах Watch7.");
-                else openWalkingIntent();
+                openWalkingIntent();
                 return;
             }
             final long token=steps.begin();
@@ -251,8 +247,7 @@ public final class JarvisWatchMapsController {
                 return;
             }
             if(from==JarvisWatchScreenService.MapsStep.TAP_MODE_BOTTOM) {
-                done(true,"Натиснув нижню центральну кнопку вибору способу "+
-                    "пересування в Google Картах Watch7. Перевір маршрут на екрані.");
+                done(true,"Натиснув картку «Пішки» у Google Картах Watch7. Перевір маршрут.");
                 return;
             }
             if(next==null) {openWalkingIntent();return;}

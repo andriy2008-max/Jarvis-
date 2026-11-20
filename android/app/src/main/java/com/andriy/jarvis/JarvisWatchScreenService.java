@@ -179,20 +179,17 @@ public final class JarvisWatchScreenService extends AccessibilityService {
             case FIRST_RESULT:
                 return service.mapsPickFirstResult(root,destination,completion);
             case DIRECTIONS:
+                // Place selection can open the transport cards directly.
+                if(service.mapsModeCards(root,destination).size()==3)return Result.DONE;
                 return service.mapsTapExact(root,completion,
                     "directions","get directions","маршрут",
                     "маршрути","прокласти маршрут","напрямки","route",
                     "маршрут до");
             case WALKING:
-                return service.mapsTapExact(root,completion,
-                    "walking","walk","walking directions",
-                    "пішки","пішохідний","пешком","пеший");
+                return service.mapsChooseWalking(root,destination,completion);
             case TAP_MODE_BOTTOM:
-                // User-confirmed fallback: Wear Google Maps sometimes draws
-                // route-mode choices without accessible labels. Use a
-                // WATCH-relative point only after Directions was opened and
-                // labelled Walking failed for several seconds.
-                return service.mapsTapBottomRouteMode(root,completion);
+                // Retry against the current tree, never an assumed screen point.
+                return service.mapsChooseWalking(root,destination,completion);
             default:return Result.BLOCKED;
         }
 
@@ -279,6 +276,57 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         return best==null?Result.WAIT:mapsTapNode(best,cb);
     }
 
+    /** Recognize the user-confirmed three-card Wear chooser, not arbitrary
+     * times on a map. Destination and exactly three separate ETA rows required. */
+    private java.util.ArrayList<Rect> mapsModeCards(AccessibilityNodeInfo root,String destination) {
+        java.util.ArrayList<Rect> rows=new java.util.ArrayList<>();
+        if(root==null || mapsHome(root) || spotifyHasEditable(root) ||
+            destination==null || destination.trim().isEmpty())return rows;
+        Rect frame=new Rect();root.getBoundsInScreen(frame);
+        boolean destinationVisible=false;
+        String wanted=AppNameMatcher.normalize(destination);
+        for(AccessibilityNodeInfo n:spotifyNodes(root)) {
+            if(n.isEditable())continue;
+            String text=spotifyLabel(n),desc=spotifyDescription(n);
+            if(text.equals(wanted) || desc.equals(wanted))destinationVisible=true;
+            if(!JarvisWatchUiRules.mapsDurationLabel(text) &&
+                !JarvisWatchUiRules.mapsDurationLabel(desc))continue;
+            Rect box=new Rect();n.getBoundsInScreen(box);
+            if(box.height()>frame.height()*.3f || !box.intersect(frame) ||
+                box.centerY()<frame.top+frame.height()*.26f ||
+                box.centerY()>frame.top+frame.height()*.94f)continue;
+            boolean duplicate=false;
+            for(Rect row:rows)if(Math.abs(row.centerY()-box.centerY())<frame.height()*.09f)
+                duplicate=true;
+            if(!duplicate)rows.add(box);
+        }
+        rows.sort((a,c)->Integer.compare(a.top,c.top));
+        int[] centers=new int[rows.size()];
+        for(int i=0;i<rows.size();i++)centers[i]=rows.get(i).centerY();
+        if(!JarvisWatchUiRules.mapsThreeModeCards(destinationVisible,false,rows.size()) ||
+            !JarvisWatchUiRules.mapsModeCardLayout(frame.top,frame.height(),centers))rows.clear();
+        return rows;
+    }
+
+    private Result mapsChooseWalking(AccessibilityNodeInfo root,String destination,Completion cb) {
+        if(root==null || mapsHome(root) || mapsInputOrKeyboardOpen())return Result.WAIT;
+        for(AccessibilityNodeInfo n:spotifyNodes(root)) {
+            if(!n.isEditable() && !spotifyLabel(n).equals(AppNameMatcher.normalize(destination)) &&
+                (JarvisWatchUiRules.mapsWalkingLabel(spotifyLabel(n)) ||
+                JarvisWatchUiRules.mapsWalkingLabel(spotifyDescription(n))))
+                return mapsTapNode(n,cb);
+        }
+        java.util.ArrayList<Rect> rows=mapsModeCards(root,destination);
+        if(rows.size()!=3)return Result.WAIT;
+        // Photo supplied by owner: driving, transit, walking. Use the visible
+        // third ETA row, not an off-screen centre of a clipped parent card.
+        Rect box=rows.get(2);
+        Rect frame=new Rect();root.getBoundsInScreen(frame);
+        if(appRoot(MAPS_PKG)==null)return Result.WAIT;
+        Path p=new Path();p.moveTo(frame.exactCenterX(),box.exactCenterY());
+        return gesture(MAPS_PKG,p,120L,cb);
+    }
+
     private Result mapsTapNode(AccessibilityNodeInfo node,Completion cb) {
         if(appRoot(MAPS_PKG)==null)return Result.WAIT;
         AccessibilityNodeInfo parent=node;
@@ -288,29 +336,13 @@ public final class JarvisWatchScreenService extends AccessibilityService {
                 return Result.DONE;
         }
         Rect box=new Rect();node.getBoundsInScreen(box);
-        if(box.width()<6 || box.height()<6)return Result.WAIT;
+        AccessibilityNodeInfo visibleRoot=appRoot(MAPS_PKG);
+        if(visibleRoot==null)return Result.WAIT;
+        Rect frame=new Rect();visibleRoot.getBoundsInScreen(frame);
+        if(!box.intersect(frame) || box.width()<6 || box.height()<6)return Result.WAIT;
         Path point=new Path();
         point.moveTo(box.exactCenterX(),box.exactCenterY());
         return gesture(MAPS_PKG,point,90L,cb);
-    }
-
-    /** Only invoked after a verified Maps DIRECTIONS step. Unlike a phone
-     * coordinate, this uses this Wear display's actual dimensions. Never
-     * tap home, an open search editor or a full-screen keyboard. */
-    private Result mapsTapBottomRouteMode(AccessibilityNodeInfo root,Completion cb) {
-        if(root==null || mapsHome(root) || spotifyHasEditable(root))
-            return Result.WAIT;
-        for(AccessibilityWindowInfo window:getWindows()) {
-            if(window.getType()==AccessibilityWindowInfo.TYPE_INPUT_METHOD &&
-               (window.isActive() || window.isFocused()))
-                return Result.WAIT;
-        }
-        android.util.DisplayMetrics metrics=getResources().getDisplayMetrics();
-        int width=metrics.widthPixels,height=metrics.heightPixels;
-        if(width<160 || height<160)return Result.BLOCKED;
-        Path tap=new Path();
-        tap.moveTo(width*.50f,height*JarvisWatchUiRules.MAPS_ROUTE_MODE_BOTTOM_Y);
-        return gesture(MAPS_PKG,tap,95L,cb);
     }
 
     private Result mapsSetDestination(AccessibilityNodeInfo root,String destination) {

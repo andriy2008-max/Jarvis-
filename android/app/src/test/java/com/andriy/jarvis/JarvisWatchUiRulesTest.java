@@ -104,6 +104,29 @@ public final class JarvisWatchUiRulesTest {
         yes(JarvisWatchUiRules.SPOTIFY_DOWN_END-JarvisWatchUiRules.SPOTIFY_DOWN_START>=.75f &&
             JarvisWatchUiRules.SPOTIFY_DOWN_DURATION_MS>=650L,
             "long downward drag across at least three quarters of screen");
+        for(String label:new String[]{"4 год 36 хв, Пішки", "Walking, 21 km", "Пешком 30 мин", "пішохіднии маршрут", "пешии маршрут"})
+            yes(JarvisWatchUiRules.mapsWalkingLabel(label),"walking in combined ETA: "+label);
+        yes(!JarvisWatchUiRules.mapsWalkingLabel("Walkington"),"place name is not walking mode");
+        for(String label:new String[]{"34 хв", "4 год 12 хв", "4 год 36 хв", "30 min", "1 h 20 min"})
+            yes(JarvisWatchUiRules.mapsDurationLabel(label),"route duration: "+label);
+        yes(!JarvisWatchUiRules.mapsDurationLabel("11:35 · 23 км"),"arrival/distance are not durations");
+        yes(JarvisWatchUiRules.mapsThreeModeCards(true,false,3),"three modes for requested destination");
+        yes(!JarvisWatchUiRules.mapsThreeModeCards(false,false,3),"no destination match");
+        yes(!JarvisWatchUiRules.mapsThreeModeCards(true,true,3),"not a search list");
+        yes(!JarvisWatchUiRules.mapsThreeModeCards(true,false,2),"do not choose transit when walking absent");
+        yes(!JarvisWatchUiRules.mapsThreeModeCards(true,false,4),"unknown layout must not guess third row");
+        yes(JarvisWatchUiRules.mapsModeCardLayout(0,454,new int[]{210,310,405}),
+            "three large cards with clipped walking card at bottom");
+        yes(JarvisWatchUiRules.mapsModeCardLayout(20,400,new int[]{200,290,370}),
+            "layout uses current window origin and size");
+        yes(!JarvisWatchUiRules.mapsModeCardLayout(0,454,new int[]{210,230,250}),
+            "three duration nodes in one card are not three modes");
+        yes(!JarvisWatchUiRules.mapsModeCardLayout(0,454,new int[]{210,310,470}),
+            "walking row outside screen is never tapped");
+        yes(!JarvisWatchUiRules.mapsModeCardLayout(0,454,new int[]{310,210,405}),
+            "reversed or overlapping rows rejected");
+        yes(!JarvisWatchUiRules.mapsModeCardLayout(0,454,new int[]{210,310}),
+            "two visible cards cannot identify third mode");
         System.out.println("PASS JarvisWatchUiRulesTest");
     }
 }

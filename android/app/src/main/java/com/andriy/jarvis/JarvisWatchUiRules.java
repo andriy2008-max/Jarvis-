@@ -17,6 +17,37 @@ public final class JarvisWatchUiRules {
             !searchOrImeOpen && walkingStageMs>=4200L;
     }
 
+    /** Combined mode descriptions can begin with an ETA rather than Walking. */
+    public static boolean mapsWalkingLabel(String raw) {
+        if(raw==null)return false;
+        String s=raw.toLowerCase(java.util.Locale.ROOT);
+        return java.util.regex.Pattern.compile("(?<![\\p{L}])(?:пішки|пішохідни[йи]|пешком|пеши[йи]|walking|walk)(?![\\p{L}])")
+            .matcher(s).find();
+    }
+
+    /** Duration, not arrival clock (11:35) or distance (23 км). */
+    public static boolean mapsDurationLabel(String raw) {
+        if(raw==null)return false;
+        return java.util.regex.Pattern.compile("(?iu)\\d+\\s*(?:год(?:ини|ин)?|хв(?:илин)?|час(?:а|ов)?|мин(?:ут)?|hours?|hrs?|h|minutes?|mins?|min)\\b")
+            .matcher(raw).find();
+    }
+
+    public static boolean mapsThreeModeCards(boolean destinationVisible,
+            boolean searchOpen,int count) {
+        return destinationVisible && !searchOpen && count==3;
+    }
+
+    /** Three substantial, vertically separated cards with walking near the
+     * bottom, matching the chooser supplied by the owner. Reject compact
+     * ETA text clusters and incomplete/scrolled layouts. */
+    public static boolean mapsModeCardLayout(int top,int height,int[] centers) {
+        if(height<160 || centers==null || centers.length!=3)return false;
+        return centers[0]>=top+height*.30f && centers[0]<=top+height*.62f &&
+            centers[2]>=top+height*.72f && centers[2]<=top+height*.94f &&
+            centers[1]-centers[0]>=height*.14f &&
+            centers[2]-centers[1]>=height*.14f;
+    }
+
     /** Never swipe if Search is already visible or the target app isn't foreground. */
     public static boolean revealSpotifyNavigation(int attempts,long searchAgeMs,
             long sinceLastRevealMs,boolean spotifyVisible,boolean searchAvailable) {
