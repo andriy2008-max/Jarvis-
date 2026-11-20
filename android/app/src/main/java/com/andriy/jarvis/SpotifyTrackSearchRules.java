@@ -87,6 +87,40 @@ public final class SpotifyTrackSearchRules {
             y>top+ph*.07f && y<top+ph*.38f;
     }
 
+    /** Screenshot-matched fallback when Spotify Compose does not expose the
+     * white search prompt as an Accessibility node. Both the top Search
+     * heading and the Music/Podcasts browse cards must be visible. */
+    public static boolean spotifyBrowseHeading(String label) {
+        String s=normal(label);
+        return s.equals("пошук") || s.equals("search") || s.equals("поиск");
+    }
+
+    public static boolean spotifyBrowseMusic(String label) {
+        String s=normal(label);
+        return s.equals("музика") || s.equals("music") || s.equals("музыка");
+    }
+
+    public static boolean spotifyBrowsePodcasts(String label) {
+        String s=normal(label);
+        return s.equals("подкасти") || s.equals("podcasts") ||
+            s.equals("подкасты");
+    }
+
+    /** The tappable gap between the heading and browse-card row is exactly
+     * where the user highlighted Spotify's Search prompt. This is a WATCH/
+     * PHONE-independent relative layout test, never an unguarded fixed tap. */
+    public static boolean searchLandingFallbackGeometry(
+            int headingTop,int headingBottom,int tileTop,
+            int frameTop,int frameBottom) {
+        int height=frameBottom-frameTop;
+        return height>=400 &&
+            headingTop>frameTop+height*.01f &&
+            headingBottom<frameTop+height*.25f &&
+            tileTop>frameTop+height*.18f &&
+            tileTop<frameTop+height*.53f &&
+            tileTop-headingBottom>height*.035f;
+    }
+
     /** Exact title, or accessibility combined label beginning with that
      * title plus a song/track type. Never match arbitrary subtitles. */
     public static boolean exactSong(String requested,String text) {
