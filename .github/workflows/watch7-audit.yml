@@ -1,4 +1,4 @@
-name: Dimon 0.1.41 Watch7 + Pixel signed QA release
+name: Dimon 0.1.42 Watch7 + Pixel signed QA release
 on:
   push:
     branches: [fix/watch7-three-user-qa-issues-no-apk, main]
@@ -17,7 +17,7 @@ permissions:
   contents: write
 jobs:
   verify:
-    if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main' || contains(github.event.head_commit.message, '[release-watch7-0.1.41]')
+    if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main' || contains(github.event.head_commit.message, '[release-watch7-0.1.42]')
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -100,17 +100,17 @@ jobs:
           actual="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' /tmp/signature.txt | head -n1)"
           test "$actual" = "$expected"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" > /tmp/badging.txt
-          grep -F "package: name='com.andriy.jarvis.stable' versionCode='51' versionName='0.1.41'" /tmp/badging.txt
+          grep -F "package: name='com.andriy.jarvis.stable' versionCode='52' versionName='0.1.42'" /tmp/badging.txt
           mkdir -p android/dist
-          cp "$apk" android/dist/Dimon-0.1.41-watch7-pixel-qa.apk
+          cp "$apk" android/dist/Dimon-0.1.42-watch7-pixel-qa.apk
           cp /tmp/signature.txt android/dist/SIGNATURE.txt
-          cp android/QA-DIMON-0.1.41-*.md android/dist/
-          cp android/WATCH7-AUDIT-0.1.41.md android/dist/
-          (cd android/dist && sha256sum Dimon-0.1.41-watch7-pixel-qa.apk > SHA256SUMS.txt)
+          cp android/QA-DIMON-0.1.42-*.md android/dist/
+          cp android/WATCH7-AUDIT-0.1.42.md android/dist/
+          (cd android/dist && sha256sum Dimon-0.1.42-watch7-pixel-qa.apk > SHA256SUMS.txt)
           printf '%s\n' "$GITHUB_SHA" > android/dist/SOURCE-COMMIT.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Dimon-0.1.41-signed-qa
+          name: Dimon-0.1.42-signed-qa
           path: android/dist/
       - name: Publish candidate only from verified main
         if: github.ref == 'refs/heads/main'
@@ -118,11 +118,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if gh release view v0.1.41 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          if gh release view v0.1.42 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo 'Release already exists; never overwrite it.'
             exit 1
           fi
-          gh release create v0.1.41 android/dist/* --target "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY" --prerelease --title 'Дімон 0.1.41 — Watch7 + Pixel QA (same signing key, not stable)' --notes-file android/WATCH7-AUDIT-0.1.41.md
+          gh release create v0.1.42 android/dist/* --target "$GITHUB_SHA" --repo "$GITHUB_REPOSITORY" --prerelease --title 'Дімон 0.1.42 — Watch7 + Pixel QA (same signing key, not stable)' --notes-file android/WATCH7-AUDIT-0.1.42.md
       - name: Remove signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/jarvis-stable.jks"
