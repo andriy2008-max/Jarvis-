@@ -264,6 +264,8 @@ jobs:
             android/app/src/test/java/com/andriy/jarvis/SpotifyMusicCommandsTest.java \
             android/app/src/test/java/com/andriy/jarvis/SpotifyUiLabelsTest.java \
             android/app/src/test/java/com/andriy/jarvis/SpotifyTrackSearchRulesTest.java \
+            android/app/src/main/java/com/andriy/jarvis/SpotifyResultCursor.java \
+            android/app/src/test/java/com/andriy/jarvis/SpotifyResultCursorTest.java \
             android/app/src/test/java/com/andriy/jarvis/SpotifyUriRulesTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisSearchRoutingTest.java \
             android/app/src/test/java/com/andriy/jarvis/JarvisVoicePauseTest.java \
@@ -312,6 +314,7 @@ jobs:
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyMusicCommandsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyUiLabelsTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyTrackSearchRulesTest
+          java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyResultCursorTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.SpotifyUriRulesTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisSearchRoutingTest
           java -cp /tmp/jarvis-voice-tests com.andriy.jarvis.JarvisVoicePauseTest
