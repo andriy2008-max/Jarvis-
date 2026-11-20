@@ -4,6 +4,19 @@ package com.andriy.jarvis;
 public final class JarvisWatchUiRules {
     private JarvisWatchUiRules() {}
 
+    /** Near the bottom CENTER of a round Watch7 display, inside its usable
+     * touch area. This is intentionally NOT a Pixel screen coordinate. */
+    public static final float MAPS_ROUTE_MODE_BOTTOM_Y=0.88f;
+
+    /** Only after a Maps directions screen was reached, its walking-label
+     * search has been attempted, and a user-requested fallback is needed. */
+    public static boolean allowBottomRouteModeTap(boolean directionsOpened,
+            boolean mapsForeground,boolean mapsHome,boolean searchOrImeOpen,
+            long walkingStageMs) {
+        return directionsOpened && mapsForeground && !mapsHome &&
+            !searchOrImeOpen && walkingStageMs>=4200L;
+    }
+
     /** Never swipe if Search is already visible or the target app isn't foreground. */
     public static boolean revealSpotifyNavigation(int attempts,long searchAgeMs,
             long sinceLastRevealMs,boolean spotifyVisible,boolean searchAvailable) {
