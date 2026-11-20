@@ -148,6 +148,39 @@ public final class SpotifyTrackSearchRulesTest {
             0,0,684,1536),"song result is not mini player");
         ok(!SpotifyTrackSearchRules.miniPlayerRegion(210,1480,240,36,
             0,0,684,1536),"navigation bar is not mini player");
+        // Regression: Pixel screenshot 684x1536 highlighted a white search
+        // box near x=342, y=269. The fallback is strictly bounded and uses
+        // this phone's measured screen, not the Watch7 or a different app.
+        ok(SpotifyTrackSearchRules.calibratedPromptY(1536)==269,
+            "Pixel search prompt y follows 17.5% screenshot");
+        ok(SpotifyTrackSearchRules.allowCalibratedPromptTap(
+            true,true,false,684,1536,0,1800L),
+            "tap Pixel prompt only after Search tab was opened");
+        ok(SpotifyTrackSearchRules.allowCalibratedPromptTap(
+            true,true,false,684,1536,1,2400L),
+            "second and last calibrated attempt allowed");
+        ok(!SpotifyTrackSearchRules.allowCalibratedPromptTap(
+            false,true,false,684,1536,0,5000L),
+            "never guess Search field before opening Search tab");
+        ok(!SpotifyTrackSearchRules.allowCalibratedPromptTap(
+            true,false,false,684,1536,0,5000L),
+            "never tap if Spotify app root is not visible");
+        ok(!SpotifyTrackSearchRules.allowCalibratedPromptTap(
+            true,true,true,684,1536,0,5000L),
+            "do not tap again if Spotify editor is ready");
+        ok(!SpotifyTrackSearchRules.allowCalibratedPromptTap(
+            true,true,false,684,1536,2,5000L),
+            "no third calibrated tap");
+        ok(!SpotifyTrackSearchRules.allowCalibratedPromptTap(
+            true,true,false,684,1536,0,1799L),
+            "allow normal accessibility matching to work first");
+        ok(!SpotifyTrackSearchRules.allowCalibratedPromptTap(
+            true,true,false,684,600,0,4000L),
+            "never use phone coordinate on landscape/watch display");
+        ok(!SpotifyTrackSearchRules.allowCalibratedPromptTap(
+            true,true,false,400,900,0,4000L),
+            "reject narrow watch-style display");
+
         System.out.println("PASS SpotifyTrackSearchRulesTest");
     }
 }
