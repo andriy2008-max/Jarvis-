@@ -47,6 +47,7 @@ public final class JarvisWatchMapsController {
         long stageSince=SystemClock.elapsedRealtime();
         boolean finished;
         boolean directionsOpened;
+        boolean shortSwipeCompleted;
         final JarvisCallbackGate steps=new JarvisCallbackGate();
 
         Session(Context app,JarvisWatchMapsCommands.Request req,
@@ -173,34 +174,44 @@ public final class JarvisWatchMapsController {
         void step(JarvisWatchScreenService.MapsStep current) {
             if(finished || !completion.active())return;
             long now=SystemClock.elapsedRealtime();
-            // The screenshot shows three route cards with times, with
-            // "Пішки" as the last card. Some Maps versions skip a separately
-            // labelled Directions button and show these cards immediately.
+            // On the Watch7 screenshot the pedestrian row is BETWEEN
+            // public transport and the bicycle row. A former 84% bottom
+            // click would tap bicycle. Reveal walking with one gentle UP.
             if(current==JarvisWatchScreenService.MapsStep.DIRECTIONS &&
                JarvisWatchScreenService.mapsRouteChoicesVisible()) {
                 directionsOpened=true;
                 stageSince=now;
-                progress("Варіанти маршруту знайдені. Натискаю нижній — пішки…");
+                progress("Маршрути знайдено. Легенько свайпаю вгору…");
                 MAIN.postDelayed(()->step(
-                    JarvisWatchScreenService.MapsStep.TAP_MODE_BOTTOM),500L);
+                    JarvisWatchScreenService.MapsStep.SHORT_SWIPE_UP),600L);
+                return;
+            }
+            if(current==JarvisWatchScreenService.MapsStep.SHORT_SWIPE_UP &&
+               (!directionsOpened ||
+                !JarvisWatchScreenService.mapsRouteChoicesVisible())) {
+                if(now>=deadline || now-stageSince>=12500L) {
+                    openWalkingIntent();return;
+                }
+                MAIN.postDelayed(()->step(current),750L);
                 return;
             }
             if(current==JarvisWatchScreenService.MapsStep.TAP_MODE_BOTTOM &&
-               !JarvisWatchUiRules.allowBottomRouteModeTap(
-                   directionsOpened,
+               !JarvisWatchUiRules.allowWalkingCardTap(
+                   directionsOpened,shortSwipeCompleted,
                    JarvisWatchScreenService.foreground(MAPS_PACKAGE),
                    JarvisWatchScreenService.mapsHomeVisible(),
                    JarvisWatchScreenService.mapsInputOrKeyboardOpen(),
-                   now-stageSince)) {
+                   JarvisWatchScreenService.mapsRouteChoicesVisible())) {
                 if(now>=deadline || now-stageSince>=12500L){
                     openWalkingIntent();return;
                 }
-                MAIN.postDelayed(()->step(current),650L);
+                MAIN.postDelayed(()->step(current),700L);
                 return;
             }
             if(now>=deadline || now-stageSince>=12500L) {
-                if(current==JarvisWatchScreenService.MapsStep.TAP_MODE_BOTTOM)
-                    done(false,"Не вдалося натиснути вибір маршруту в Google Картах Watch7.");
+                if(current==JarvisWatchScreenService.MapsStep.TAP_MODE_BOTTOM ||
+                   current==JarvisWatchScreenService.MapsStep.SHORT_SWIPE_UP)
+                    openWalkingIntent();
                 else openWalkingIntent();
                 return;
             }
@@ -238,7 +249,8 @@ public final class JarvisWatchMapsController {
                 case SET_DESTINATION:return JarvisWatchScreenService.MapsStep.SUBMIT_SEARCH;
                 case SUBMIT_SEARCH:return JarvisWatchScreenService.MapsStep.FIRST_RESULT;
                 case FIRST_RESULT:return JarvisWatchScreenService.MapsStep.DIRECTIONS;
-                case DIRECTIONS:return JarvisWatchScreenService.MapsStep.TAP_MODE_BOTTOM;
+                case DIRECTIONS:return JarvisWatchScreenService.MapsStep.SHORT_SWIPE_UP;
+                case SHORT_SWIPE_UP:return JarvisWatchScreenService.MapsStep.TAP_MODE_BOTTOM;
                 default:return null;
             }
         }
@@ -250,6 +262,10 @@ public final class JarvisWatchMapsController {
                 progress("Перший відповідний результат обрано. Відкриваю маршрут…");
             if(from==JarvisWatchScreenService.MapsStep.DIRECTIONS)
                 directionsOpened=true;
+            if(from==JarvisWatchScreenService.MapsStep.SHORT_SWIPE_UP) {
+                shortSwipeCompleted=true;
+                progress("Підтягнув маршрути вгору. Натискаю картку з пішоходом…");
+            }
             if(from==JarvisWatchScreenService.MapsStep.SET_DESTINATION)
                 progress("Адресу введено. Перевіряю варіанти…");
             if(from==JarvisWatchScreenService.MapsStep.WALKING) {
@@ -257,8 +273,8 @@ public final class JarvisWatchMapsController {
                 return;
             }
             if(from==JarvisWatchScreenService.MapsStep.TAP_MODE_BOTTOM) {
-                done(true,"Виконав натискання на нижню картку «Пішки» "+
-                    "в Google Картах Watch7. Перевір, чи відкрився піший маршрут.");
+                done(true,"Після короткого свайпу вгору натиснув картку "+
+                    "з пішоходом у Google Картах Watch7. Перевір, чи маршрут відкрився.");
                 return;
             }
             if(next==null) {openWalkingIntent();return;}

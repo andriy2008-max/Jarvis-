@@ -4,9 +4,41 @@ package com.andriy.jarvis;
 public final class JarvisWatchUiRules {
     private JarvisWatchUiRules() {}
 
-    /** Near the bottom CENTER of a round Watch7 display, inside its usable
-     * touch area. This is intentionally NOT a Pixel screen coordinate. */
-    public static final float MAPS_ROUTE_MODE_BOTTOM_Y=0.84f;
+    /** Last-resort Watch7 walking-card tap, only AFTER the destination
+     * was selected, route cards were verified, and a short UP reveal swipe.
+     * The walking card is BETWEEN public-transit and bicycle cards on the
+     * user's screenshot. Never use the former 84% bottom-row (bicycle) tap. */
+    public static final float MAPS_WALKING_FALLBACK_Y=0.56f;
+
+    /** A gentle UP gesture that moves one route card slightly into view,
+     * instead of scrolling the route list to an unrelated screen. */
+    public static final float MAPS_ROUTE_SHORT_SWIPE_START_Y=0.73f;
+    public static final float MAPS_ROUTE_SHORT_SWIPE_END_Y=0.56f;
+
+    public static boolean mapsWalkingLabel(String text) {
+        if(text==null)return false;
+        String normalized=text.toLowerCase(java.util.Locale.ROOT);
+        return normalized.matches("(?su).*\\b(?:walking|walk|pedestrian)\\b.*") ||
+            normalized.contains("пішки") || normalized.contains("пішох") ||
+            normalized.contains("пешеход") || normalized.contains("пешком") ||
+            normalized.contains("ходьба") || normalized.contains("пішого");
+    }
+
+    public static boolean mapsDistanceLabel(String text) {
+        if(text==null)return false;
+        return java.util.regex.Pattern.compile(
+            "(?iu).*\\b[0-9]+(?:[.,][0-9]+)?\\s*(?:км|km)\\b.*")
+            .matcher(text).matches();
+    }
+
+    public static boolean allowWalkingCardTap(boolean directionsOpened,
+            boolean shortSwipeCompleted, boolean mapsForeground,
+            boolean mapsHome, boolean keyboardOrSearchOpen,
+            boolean routeCardsStillVisible) {
+        return directionsOpened && shortSwipeCompleted &&
+            mapsForeground && !mapsHome && !keyboardOrSearchOpen &&
+            routeCardsStillVisible;
+    }
 
     /** The route cards on Wear Maps show durations, not necessarily the
      * word "Пішки". Match the text of visible duration rows safely. */

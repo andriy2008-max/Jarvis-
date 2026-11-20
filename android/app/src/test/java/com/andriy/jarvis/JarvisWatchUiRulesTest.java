@@ -69,9 +69,48 @@ public final class JarvisWatchUiRulesTest {
             "stop when no viewport change");
         yes(!JarvisWatchUiRules.mayScrollForPlaylist(0,0,false),
             "never scroll another app");
-        yes(JarvisWatchUiRules.MAPS_ROUTE_MODE_BOTTOM_Y>.80f &&
-            JarvisWatchUiRules.MAPS_ROUTE_MODE_BOTTOM_Y<.94f,
-            "mode tap stays at bottom center of round Watch screen");
+        yes(JarvisWatchUiRules.MAPS_WALKING_FALLBACK_Y>.48f &&
+            JarvisWatchUiRules.MAPS_WALKING_FALLBACK_Y<.67f,
+            "walking card between bus and bicycle, not bottom bike row");
+        yes(JarvisWatchUiRules.MAPS_ROUTE_SHORT_SWIPE_START_Y>
+            JarvisWatchUiRules.MAPS_ROUTE_SHORT_SWIPE_END_Y &&
+            JarvisWatchUiRules.MAPS_ROUTE_SHORT_SWIPE_START_Y-
+            JarvisWatchUiRules.MAPS_ROUTE_SHORT_SWIPE_END_Y<.22f,
+            "small upward swipe, not a full screen swipe");
+        yes(JarvisWatchUiRules.mapsWalkingLabel("Walking"),
+            "English walking accessibility icon");
+        yes(JarvisWatchUiRules.mapsWalkingLabel("Пішки"),
+            "Ukrainian pedestrian label");
+        yes(JarvisWatchUiRules.mapsWalkingLabel("Пешеходный маршрут"),
+            "Russian pedestrian label");
+        yes(!JarvisWatchUiRules.mapsWalkingLabel("Велосипедом"),
+            "never select bicycle route");
+        yes(!JarvisWatchUiRules.mapsWalkingLabel("Автобусом"),
+            "never select transit route");
+        yes(JarvisWatchUiRules.mapsDistanceLabel("01:56 · 21 км"),
+            "visible walking-route distance in user's screenshot");
+        yes(JarvisWatchUiRules.mapsDistanceLabel("21 km"),
+            "English distance marker");
+        yes(!JarvisWatchUiRules.mapsDistanceLabel("2 год 10 хв"),
+            "transit duration is not a walking distance");
+        yes(!JarvisWatchUiRules.allowWalkingCardTap(
+            true,false,true,false,false,true),
+            "do not click before one short upward swipe");
+        yes(!JarvisWatchUiRules.allowWalkingCardTap(
+            true,true,true,false,false,false),
+            "do not tap if route cards vanished");
+        yes(!JarvisWatchUiRules.allowWalkingCardTap(
+            true,true,false,false,false,true),
+            "do not click behind other foreground apps");
+        yes(!JarvisWatchUiRules.allowWalkingCardTap(
+            true,true,true,true,false,true),
+            "never click Maps home");
+        yes(!JarvisWatchUiRules.allowWalkingCardTap(
+            true,true,true,false,true,true),
+            "never tap keyboard/search");
+        yes(JarvisWatchUiRules.allowWalkingCardTap(
+            true,true,true,false,false,true),
+            "after short UP and verified route cards, tap walking row");
         yes(!JarvisWatchUiRules.allowBottomRouteModeTap(
             false,true,false,false,6000L),"no tap before Directions");
         yes(!JarvisWatchUiRules.allowBottomRouteModeTap(
