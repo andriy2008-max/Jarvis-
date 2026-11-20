@@ -1,0 +1,142 @@
+name: JARVIS 0.1.45 signed Pixel and Watch7 APK (explicit user request)
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/build-qa-0145-once.yml']
+permissions:
+  contents: write
+jobs:
+  apk:
+    if: github.event.head_commit.message == 'User-requested signed JARVIS 0.1.45 build (one-shot)'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK 36
+        shell: bash
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Verify JARVIS Finance and Watch7 contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s android/app/src/main/java/com/andriy/jarvis/FinanceActivity.java
+          test -s android/app/src/main/java/com/andriy/jarvis/FinanceLedger.java
+          grep -Fq '💰 JARVIS Finance' android/app/src/main/java/com/andriy/jarvis/MainActivity.java
+          grep -Fq 'mapsRouteChoicesVisible()' android/app/src/main/java/com/andriy/jarvis/JarvisWatchMapsController.java
+          grep -Fq 'SHORT_SWIPE_UP' android/app/src/main/java/com/andriy/jarvis/JarvisWatchMapsController.java
+          grep -Fq 'MAPS_WALKING_FALLBACK_Y' android/app/src/main/java/com/andriy/jarvis/JarvisWatchUiRules.java
+          grep -Fq 'SEARCH_RECOVER_RIGHT_2B' android/app/src/main/java/com/andriy/jarvis/JarvisWatchSpotifyController.java
+          grep -Fq 'FinanceDeliveryPolicy.finalRejection' android/app/src/main/java/com/andriy/jarvis/JarvisWearPhoneLink.java
+          grep -Fq 'NEXT_RESULT' android/app/src/main/java/com/andriy/jarvis/SpotifyMusicCommands.java
+          grep -Fq "versionCode 55" android/app/build.gradle
+          grep -Fq "versionName '0.1.45'" android/app/build.gradle
+          python3 tools/finance/test_schema.py
+          mkdir -p /tmp/finance-queue-policy-test
+          javac -encoding UTF-8 -d /tmp/finance-queue-policy-test \
+            android/app/src/main/java/com/andriy/jarvis/FinanceDeliveryPolicy.java \
+            android/app/src/test/java/com/andriy/jarvis/FinanceDeliveryPolicyTest.java
+          java -cp /tmp/finance-queue-policy-test com.andriy.jarvis.FinanceDeliveryPolicyTest
+          bash tools/test-watch-contracts.sh
+      - name: Restore ORIGINAL stable signing key
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.JARVIS_SIGNING_KEYSTORE_BASE64 }}
+          JARVIS_RELEASE_STORE_PASSWORD: ${{ secrets.JARVIS_RELEASE_STORE_PASSWORD }}
+          JARVIS_RELEASE_KEY_ALIAS: ${{ secrets.JARVIS_RELEASE_KEY_ALIAS }}
+          JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${KEYSTORE_BASE64:?Missing original signing key}"
+          : "${JARVIS_RELEASE_STORE_PASSWORD:?Missing store password}"
+          : "${JARVIS_RELEASE_KEY_ALIAS:?Missing signing alias}"
+          : "${JARVIS_RELEASE_KEY_PASSWORD:?Missing signing password}"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/jarvis-stable.jks"
+          chmod 600 "$RUNNER_TEMP/jarvis-stable.jks"
+          echo "JARVIS_RELEASE_STORE_FILE=$RUNNER_TEMP/jarvis-stable.jks" >> "$GITHUB_ENV"
+      - name: Run Android tests and build SAME-SIGNATURE APK
+        env:
+          JARVIS_RELEASE_STORE_PASSWORD: ${{ secrets.JARVIS_RELEASE_STORE_PASSWORD }}
+          JARVIS_RELEASE_KEY_ALIAS: ${{ secrets.JARVIS_RELEASE_KEY_ALIAS }}
+          JARVIS_RELEASE_KEY_PASSWORD: ${{ secrets.JARVIS_RELEASE_KEY_PASSWORD }}
+        run: gradle -p android --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleRelease
+      - name: Verify package version original certificate and contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          test -s "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$apk" > "$RUNNER_TEMP/signature-0.1.45.txt"
+          actual="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/signature-0.1.45.txt" | head -n 1)"
+          expected="$(tr -d '[:space:]' < android/RELEASE-CERT-SHA256.txt | tr '[:upper:]' '[:lower:]')"
+          test -n "$actual"
+          test "$actual" = "$expected"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$apk" > "$RUNNER_TEMP/badging.txt"
+          grep -Fq "package: name='com.andriy.jarvis.stable'" "$RUNNER_TEMP/badging.txt"
+          grep -Fq "versionCode='55'" "$RUNNER_TEMP/badging.txt"
+          grep -Fq "versionName='0.1.45'" "$RUNNER_TEMP/badging.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump xmltree "$apk" AndroidManifest.xml > "$RUNNER_TEMP/manifest.txt"
+          grep -Fq 'FinanceActivity' "$RUNNER_TEMP/manifest.txt"
+          grep -Fq 'JarvisWatchScreenService' "$RUNNER_TEMP/manifest.txt"
+          mkdir -p android/dist
+          cp "$apk" android/dist/Dimon-0.1.45-JARVIS-Finance-Watch7-signed.apk
+          (cd android/dist && sha256sum Dimon-0.1.45-JARVIS-Finance-Watch7-signed.apk > SHA256SUMS.txt)
+          cp "$RUNNER_TEMP/signature-0.1.45.txt" android/dist/SIGNATURE.txt
+          printf '%s\n' "$GITHUB_SHA" > android/dist/SOURCE-COMMIT.txt
+          cp android/QA-DIMON-0.1.45-PIXEL.md android/dist/
+          cp android/QA-DIMON-0.1.45-WATCH7.md android/dist/
+          cp android/QA-JARVIS-FINANCE-0.1.45.md android/dist/
+          (cd android/dist && zip -q Dimon-0.1.45-JARVIS-Finance-Watch7.zip Dimon-0.1.45-JARVIS-Finance-Watch7-signed.apk SHA256SUMS.txt QA-DIMON-0.1.45-PIXEL.md QA-DIMON-0.1.45-WATCH7.md QA-JARVIS-FINANCE-0.1.45.md SIGNATURE.txt SOURCE-COMMIT.txt)
+      - name: Upload verified APK and ZIP as QA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dimon-0.1.45-JARVIS-Finance-Watch7-signed
+          retention-days: 7
+          if-no-files-found: error
+          path: android/dist/*
+      - name: Publish direct APK and ZIP download as pre-release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view v0.1.45 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::v0.1.45 already exists; refusing replacement."
+            exit 1
+          fi
+          cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
+          ### Дімон 0.1.45 — підписаний тестовий APK
+          Включає відновлений **JARVIS Finance** (локальна зашифрована база, рахунки, витрати/доходи, бюджети, звіти, команди Pixel/Watch7) замість стороннього Money Manager API.
+
+          Включає всі виправлення Spotify для Pixel та Watch7 (пошук, змішані результати «Пісня/Плейлист», Play, «Інша пісня»), Bolt, короткий свайп угору й натискання **середньої картки «Пішки»** в Google Maps на Watch7, а також захист фінансової черги Watch7 від втрат після тимчасової помилки Pixel.
+
+          Стабільний package com.andriy.jarvis.stable, versionCode 55, оригінальний сертифікат, перевірені апаратно-незалежні тести. **Реальні сценарії на Pixel і Watch7 ще потрібно перевірити.** Не видаляйте попередню збірку: оновлюйте поверх, попередньо зберігши важливі фінансові дані.
+
+          APK — пряме встановлення. ZIP — той самий APK, SHA-256 і три чеклісти тестування.
+          NOTES
+          gh release create v0.1.45 \
+            android/dist/Dimon-0.1.45-JARVIS-Finance-Watch7-signed.apk \
+            android/dist/Dimon-0.1.45-JARVIS-Finance-Watch7.zip \
+            android/dist/SHA256SUMS.txt \
+            android/dist/SIGNATURE.txt \
+            android/dist/SOURCE-COMMIT.txt \
+            android/dist/QA-DIMON-0.1.45-PIXEL.md \
+            android/dist/QA-DIMON-0.1.45-WATCH7.md \
+            android/dist/QA-JARVIS-FINANCE-0.1.45.md \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Дімон 0.1.45 — JARVIS Finance + Spotify + Watch7 Maps" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
+            --prerelease
+      - name: Erase signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/jarvis-stable.jks"
