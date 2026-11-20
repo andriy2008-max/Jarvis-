@@ -121,6 +121,27 @@ public final class SpotifyTrackSearchRules {
             tileTop-headingBottom>height*.035f;
     }
 
+    /** Pixel user-provided screenshot: white Search field is centred at
+     * approx. 17.5% of full portrait height (screen 684x1536). This is a
+     * LAST fallback only after the Spotify Search-tab step completed. */
+    public static final float PIXEL_SEARCH_PROMPT_Y=0.175f;
+
+    public static int calibratedPromptY(int screenHeight) {
+        return Math.round(screenHeight*PIXEL_SEARCH_PROMPT_Y);
+    }
+
+    /** Do not click by geometry before trying Spotify's accessible Search.
+     * At most two user-calibrated taps, only in an explicit track command on
+     * a portrait phone after Search navigation, never on the Watch7. */
+    public static boolean allowCalibratedPromptTap(boolean searchStepCompleted,
+            boolean spotifyRootVisible,boolean editorReady,
+            int screenWidth,int screenHeight,int tapAttempts,long focusAgeMs) {
+        return searchStepCompleted && spotifyRootVisible && !editorReady &&
+            screenWidth>=450 && screenHeight>=screenWidth*1.60f &&
+            screenHeight>=700 && tapAttempts>=0 && tapAttempts<2 &&
+            focusAgeMs>=1800L;
+    }
+
     /** Exact title, or accessibility combined label beginning with that
      * title plus a song/track type. Never match arbitrary subtitles. */
     public static boolean exactSong(String requested,String text) {
