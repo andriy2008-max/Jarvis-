@@ -63,44 +63,50 @@ public final class JarvisWearPhoneAssistant {
                     completion::finished)) return;
         }
 
-        // Read-only financial questions and locally persisted budgets have
-        // their own deterministic handler, before any AI fallback.
-        String financeInsight=FinanceInsightsController.handle(phone,raw);
-        if(financeInsight!=null) {
-            completion.finished(true,financeInsight);
+        // Native JARVIS Finance. Never route data through a third-party app.
+        if(FinanceVoiceQueries.open(raw)) {
+            completion.finished(true,"JARVIS Finance відкривається на Pixel. "+
+                "На Watch7 можна голосом додавати витрати й питати баланс.");
             return;
         }
-
-        // Money Tracker supports a user-issued token. API writes are deliberately
-        // disabled until its provider's transaction schema is verified;
-        // existing Accessibility workflow remains available.
-        // Never re-submit a financial record without explicit user speech.
-        if (FinanceManagerController.isRunning()) {
-            if (FinanceVoiceCommands.cancel(raw)) {
-                FinanceManagerController.cancel();
-                completion.finished(true,"Скасував фінансову операцію на телефоні.");
-            } else {
-                completion.finished(false,
-                    "Фінансова операція ще виконується. Повтори після завершення.");
+        String budget=FinanceBudgetVoiceController.handle(phone,raw);
+        if(budget!=null) {
+            completion.finished(!budget.startsWith("Не вдалося") &&
+                !budget.startsWith("Розблокуй"),budget);
+            return;
+        }
+        if(FinanceVoiceQueries.matches(raw)) {
+            try(FinanceLedger ledger=new FinanceLedger(phone)) {
+                android.app.KeyguardManager guard=(android.app.KeyguardManager)
+                    phone.getSystemService(Context.KEYGUARD_SERVICE);
+                if(guard!=null && guard.isDeviceLocked() &&
+                   !"true".equals(ledger.setting("finance_voice_locked","false")))
+                    completion.finished(false,"Розблокуй Pixel для фінансового звіту.");
+                else completion.finished(true,FinanceVoiceQueries.answer(ledger,raw));
+            }catch(RuntimeException | UnsatisfiedLinkError error){
+                completion.finished(false,"Не вдалося відкрити фінансовий журнал Pixel.");
             }
             return;
         }
-        if (FinanceVoiceCommands.parse(raw) != null) {
-            FinanceManagerController.start(phone,raw,new FinanceManagerController.Listener() {
-                @Override public void onProgress(String message) { }
-                @Override public void onFinished(boolean ok,String message) {
+        if(FinanceVoiceCommands.parse(raw)!=null ||
+           FinanceVoiceFollowups.parse(raw)!=null ||
+           FinanceBatchCommands.looksLikeBatch(raw) ||
+           FinanceVoiceClarification.maybeStart(raw) ||
+           (FinanceVoiceClarification.pending(phone,"phone") &&
+            FinanceVoiceClarification.maybeReply(raw))) {
+            FinanceManagerController.start(phone,raw,new FinanceManagerController.Listener(){
+                @Override public void onProgress(String message){}
+                @Override public void onFinished(boolean ok,String message){
                     completion.finished(ok,message);
                 }
             });
             return;
         }
-        if (looksLikeFinanceCommand(normalized)) {
+        if(looksLikeFinanceCommand(normalized)) {
             completion.finished(false,
                 FinanceVoiceCommands.shortIncomeIntent(raw)
-                    ? "Не розпізнав короткий дохід. Скажи: «Заробив 350 готівка чайові столик 5»."
-                    : FinanceVoiceCommands.shortExpenseIntent(raw)
-                    ? "Не розпізнав коротку витрату. Скажи: «Витратив 150 готівка транспорт таксі»."
-                    : "Не розпізнав суму або категорію. Скажи: «Запиши витрату 350 гривень на харчування».");
+                    ?"Не розпізнав дохід. Скажи «Заробив 350 готівка чайові столик 5»."
+                    :"Не розпізнав витрату. Скажи «Витратив 150 готівка транспорт таксі».");
             return;
         }
 
@@ -431,8 +437,11 @@ public final class JarvisWearPhoneAssistant {
             TelegramTdClient.get(phone).isAuthorized();
         boolean spotifyConfigured = !SpotifyDirectSettings.clientId(phone).isEmpty();
         boolean spotifyInstalled = installed(phone,"com.spotify.music");
-        boolean financeInstalled = installed(phone,"com.freeman.moneymanager");
-        boolean financeApiToken = FinanceApiSecrets.configured(phone);
+        boolean financeReady;
+        try(FinanceLedger ledger=new FinanceLedger(phone)) {
+            ledger.getReadableDatabase();
+            financeReady=true;
+        }catch(RuntimeException | UnsatisfiedLinkError error){financeReady=false;}
         boolean boltInstalled = installed(phone,"ee.mtakso.client");
         boolean shazamInstalled = installed(phone,"com.shazam.android");
         boolean screenAllowed = ScreenControlAccessibilityService.isConnected();
@@ -444,11 +453,8 @@ public final class JarvisWearPhoneAssistant {
             "Spotify: " + (spotifyInstalled ? "встановлено" : "не встановлено") +
                 (spotifyConfigured ? ", App Remote налаштовано" :
                     ", прямий API не налаштовано") + ".\n" +
-            "Менеджер фінансів: " + (financeInstalled ? "встановлено" :
-                "не встановлено") +
-                (financeApiToken ? ", API-токен збережено на Pixel" :
-                    ", API-токен не налаштований") +
-                "; запис поки через екран.\n" +
+            "JARVIS Finance: " + (financeReady ? "власна зашифрована база на Pixel" :
+                "база тимчасово недоступна") + ".\n" +
             JarvisWearAlarmScheduler.permissionStatus(phone) + "\n" +
             "Bolt: " + (boltInstalled ? "встановлено" : "не встановлено") +
                 "; Shazam: " + (shazamInstalled ? "встановлено" : "не встановлено") +

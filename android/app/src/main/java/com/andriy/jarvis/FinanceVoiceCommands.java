@@ -209,6 +209,33 @@ public final class FinanceVoiceCommands {
         }
     }
 
+    /** Compatibility checks for older UI callers. They never create a record. */
+    public static boolean shortExpenseIntent(String speech) {
+        if(speech==null)return false;
+        String s=CommandPatterns.normalize(speech)
+            .replaceFirst("^(?:дімон|димон|джарвіс|джарвис|jarvis|dimon)\\s+","");
+        return s.matches("^(?:витратив|потратив|витрата|витратила)(?:\\s+.*)?$");
+    }
+
+    public static boolean shortIncomeIntent(String speech) {
+        if(speech==null)return false;
+        String s=CommandPatterns.normalize(speech)
+            .replaceFirst("^(?:дімон|димон|джарвіс|джарвис|jarvis|dimon)\\s+","");
+        return s.matches("^(?:заробив|дохід|отримав|чайові)(?:\\s+.*)?$");
+    }
+
+    public static boolean shortFinanceIntent(String speech) {
+        return shortExpenseIntent(speech)||shortIncomeIntent(speech);
+    }
+
+    /** Old external-UI helper: retain a conservative non-empty note validator
+     * while the internal Finance ledger becomes the sole write backend. */
+    public static boolean validNote(String note) {
+        return note!=null && !note.trim().isEmpty() &&
+            note.trim().length()<=100 &&
+            !note.matches("(?s).*[\\p{Cntrl}].*");
+    }
+
     public static boolean cancel(String speech){
         String s=CommandPatterns.normalize(speech);
         return s.equals("скасуй витрату")||
