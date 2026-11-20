@@ -28,7 +28,7 @@ public final class JarvisWatchUiRules {
     /** Duration, not arrival clock (11:35) or distance (23 км). */
     public static boolean mapsDurationLabel(String raw) {
         if(raw==null)return false;
-        return java.util.regex.Pattern.compile("(?iu)\\d+\\s*(?:год(?:ини|ин)?|хв(?:илин)?|час(?:а|ов)?|мин(?:ут)?|hours?|hrs?|h|minutes?|mins?|min)\\b")
+        return java.util.regex.Pattern.compile("(?iu)\\d+\\s*(?:год(?:ини|ин)?|хв(?:илин)?|час(?:а|ов)?|мин(?:ут)?|hours?|hrs?|h|minutes?|mins?|min)(?![\\p{L}])")
             .matcher(raw).find();
     }
 
