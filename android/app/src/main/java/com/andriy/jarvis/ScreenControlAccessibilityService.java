@@ -904,12 +904,25 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     /** Fallback at the centre of the user-highlighted Pixel Search box.
      * Called only after SpotifyPlaybackController opened the Search tab and
      * normal Accessibility clicks failed. Gesture completion is asynchronous. */
-    public static void spotifyTapPhoneSearchPrompt(Completion cb) {
+    public static void spotifyTapPhoneSearchPrompt(
+            int previousTaps,long focusAgeMs,Completion cb) {
         ScreenControlAccessibilityService s=connected.get();
         if(cb==null)return;
-        if(s==null || !s.sessionActive || !JarvisPhoneScreenGuard.available(s) ||
-           s.currentSpotifyRoot()==null || spotifySearchEditorReady()) {
-            cb.finished(false,"Spotify не підтверджено або поле пошуку вже відкрите.");
+        if(s==null || !s.sessionActive || !JarvisPhoneScreenGuard.available(s)) {
+            cb.finished(false,"Служба керування Spotify недоступна.");
+            return;
+        }
+        android.view.Display display=s.safeActionDisplay();
+        android.graphics.Point size=new android.graphics.Point();
+        if(display==null) {
+            cb.finished(false,"Не вдалося визначити екран Pixel.");return;
+        }
+        display.getRealSize(size);
+        if(!SpotifyTrackSearchRules.allowCalibratedPromptTap(
+               true,s.currentSpotifyRoot()!=null,spotifySearchEditorReady(),
+               size.x,size.y,previousTaps,focusAgeMs)) {
+            cb.finished(false,"Натискання пошуку заблоковане: вікно Spotify "+
+                "не підтверджено або невідповідна орієнтація.");
             return;
         }
         s.tapCalibratedForApp("com.spotify.music",-2,-2,null,cb);
