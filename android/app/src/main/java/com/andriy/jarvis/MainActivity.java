@@ -83,6 +83,10 @@ public final class MainActivity extends Activity implements RecognitionListener 
     private static final String PREF_WATCH_SESSION_PERMISSION_ASKED =
         "watch_session_notification_permission_asked";
     public static final String EXTRA_AI_IMAGE_PROMPT = "com.andriy.jarvis.AI_IMAGE_PROMPT";
+    /** One-shot return to foreground voice capture after an explicitly
+     * spoken Watch7 Spotify song command. Never start a background mic. */
+    public static final String EXTRA_WATCH_SPOTIFY_LISTEN =
+        "com.andriy.jarvis.WATCH_SPOTIFY_RESUME_MIC";
     private static final int BG = Color.rgb(8, 14, 29);
     private static final int PANEL = Color.rgb(17, 27, 48);
     private static final int BORDER = Color.rgb(38, 57, 87);
@@ -123,6 +127,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
     // also applies when the user opens Jarvis from the home-screen app icon.
     private static final String PREF_LISTEN_ON_OPEN = "listen_on_launcher_open";
     private boolean pendingLauncherMicrophone;
+    private boolean pendingWatchSpotifyMicrophone;
+    private boolean watchSpotifyMicrophoneScheduled;
     private Runnable launcherMicrophoneStart;
     private int visibleDialogs;
     private boolean manualCapture;
@@ -522,6 +528,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
             wakeToggle.setChecked(autoWakeEnabled && supportsOnDeviceRecognizer);
         }
         acceptImageIntent(getIntent());
+        acceptWatchSpotifyReturn(getIntent());
     }
 
     @Override
@@ -530,6 +537,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         JarvisDiagnostics.event(JarvisDiagnostics.Event.NEW_INTENT);
         setIntent(intent);
         acceptImageIntent(intent);
+        acceptWatchSpotifyReturn(intent);
         if (isWatchLauncherIntent(intent)) {
             watchLauncherVoicePending = true;
             if (foreground) scheduleWatchLauncherVoice();
@@ -538,6 +546,49 @@ public final class MainActivity extends Activity implements RecognitionListener 
             pendingLauncherMicrophone = true;
             if (foreground) scheduleLauncherMicrophone();
         }
+    }
+
+    /** Spotify is an external Wear app: only after MainActivity is visible
+     * do we attempt to open the microphone for "Не та пісня". */
+    private void acceptWatchSpotifyReturn(Intent intent) {
+        if(!isWatchDevice || intent==null ||
+           !intent.getBooleanExtra(EXTRA_WATCH_SPOTIFY_LISTEN,false))return;
+        intent.removeExtra(EXTRA_WATCH_SPOTIFY_LISTEN);
+        pendingWatchSpotifyMicrophone=true;
+        if(foreground)scheduleWatchSpotifyMicrophone();
+    }
+
+    private void scheduleWatchSpotifyMicrophone() {
+        if(!isWatchDevice || !foreground || !pendingWatchSpotifyMicrophone ||
+           watchSpotifyMicrophoneScheduled)return;
+        watchSpotifyMicrophoneScheduled=true;
+        wakeHandler.postDelayed(new Runnable(){
+            private int attempts;
+            @Override public void run(){
+                if(!foreground || isFinishing() || isDestroyed() ||
+                   !pendingWatchSpotifyMicrophone) {
+                    watchSpotifyMicrophoneScheduled=false;
+                    return;
+                }
+                if(processing || aiBusy || speaking || visibleDialogs>0 ||
+                   JarvisWatchLocalController.busy() ||
+                   (watchPhoneLink!=null && watchPhoneLink.busy())) {
+                    if(++attempts<=20)wakeHandler.postDelayed(this,450L);
+                    else {
+                        watchSpotifyMicrophoneScheduled=false;
+                        pendingWatchSpotifyMicrophone=false;
+                        setStatus("Можна сказати «Не та пісня» після натискання мікрофона.");
+                    }
+                    return;
+                }
+                watchSpotifyMicrophoneScheduled=false;
+                pendingWatchSpotifyMicrophone=false;
+                if(!manualCapture && !listening) {
+                    if(JarvisPhoneMode.isActive())ensureWatchPhoneListening();
+                    else startManualListening();
+                }
+            }
+        },650L);
     }
 
     private boolean isWatchLauncherIntent(Intent intent) {
@@ -704,6 +755,7 @@ public final class MainActivity extends Activity implements RecognitionListener 
         if (isWatchDevice && JarvisPhoneMode.isActive())
             ensureWatchPhoneListening();
         if (isWatchDevice) scheduleWatchLauncherVoice();
+        if (isWatchDevice) scheduleWatchSpotifyMicrophone();
         // Phone companion survives closing this Activity; the microphone
         // stays off and Watch7 commands arrive through WearableListenerService.
         if (!isWatchDevice) JarvisCompanionService.startIfEnabled(this);

@@ -102,6 +102,39 @@ public final class JarvisWatchUiRulesTest {
             "no visible bottom choice means do not bypass Directions");
         yes(JarvisWatchUiRules.allowBottomRouteModeTap(
             true,true,false,false,8000L),"fallback remains eligible until timeout");
+        yes(JarvisWatchUiRules.watchSearchRecovery(0,false,true,false)==
+            JarvisWatchUiRules.WatchSearchRecovery.RIGHT_THEN_DOWN,
+            "missing Search after initial UP: one RIGHT then DOWN");
+        yes(JarvisWatchUiRules.watchSearchRecovery(1,false,true,false)==
+            JarvisWatchUiRules.WatchSearchRecovery.TWO_RIGHT_THEN_UP,
+            "still missing Search: two RIGHT then UP");
+        yes(JarvisWatchUiRules.watchSearchRecovery(2,false,true,false)==
+            JarvisWatchUiRules.WatchSearchRecovery.EXHAUSTED,
+            "never swipe forever");
+        yes(JarvisWatchUiRules.watchSearchRecovery(0,true,true,false)==
+            JarvisWatchUiRules.WatchSearchRecovery.NONE,
+            "search found: do not swipe right");
+        yes(JarvisWatchUiRules.watchSearchRecovery(0,false,false,false)==
+            JarvisWatchUiRules.WatchSearchRecovery.NONE,
+            "do not swipe in another app");
+        yes(JarvisWatchUiRules.watchSearchRecovery(0,false,true,true)==
+            JarvisWatchUiRules.WatchSearchRecovery.NONE,
+            "never swipe behind an open keyboard");
+        yes(JarvisWatchUiRules.watchResultTitleAboveType(
+            170,195,180,182,440,440),
+            "Watch7 title and song/playlist type share same card");
+        yes(!JarvisWatchUiRules.watchResultTitleAboveType(
+            170,300,180,182,440,440),
+            "distant subtitle belongs to another result");
+        yes(JarvisWatchUiRules.watchResultRegion(
+            215,200,240,35,440,440),
+            "song or playlist inside visible Watch result list");
+        yes(!JarvisWatchUiRules.watchResultRegion(
+            215,45,240,35,440,440),
+            "top query is not a result");
+        yes(!JarvisWatchUiRules.watchResultRegion(
+            215,403,240,35,440,440),
+            "bottom player is not a search result");
         System.out.println("PASS JarvisWatchUiRulesTest");
     }
 }

@@ -61,6 +61,44 @@ public final class JarvisWatchUiRules {
         return spotifyForeground && completedSwipes>=0 && completedSwipes<3;
     }
 
+    /** Watch7 song search retry plan: up -> (right, down) -> (right, right, up).
+     * Phase is increased only after the target search icon was NOT visible.
+     * A found search icon immediately ends navigation, without further swipes. */
+    public enum WatchSearchRecovery {
+        NONE, RIGHT_THEN_DOWN, TWO_RIGHT_THEN_UP, EXHAUSTED
+    }
+
+    public static WatchSearchRecovery watchSearchRecovery(int missingSearchRounds,
+            boolean searchVisible,boolean spotifyForeground,boolean imeVisible) {
+        if(searchVisible || !spotifyForeground || imeVisible)
+            return WatchSearchRecovery.NONE;
+        switch(missingSearchRounds) {
+            case 0: return WatchSearchRecovery.RIGHT_THEN_DOWN;
+            case 1: return WatchSearchRecovery.TWO_RIGHT_THEN_UP;
+            default:return WatchSearchRecovery.EXHAUSTED;
+        }
+    }
+
+    /** A result title belongs to its category subtitle only when both are
+     * inside the same visible Watch7 search-card row. No Pixel coordinates. */
+    public static boolean watchResultTitleAboveType(int titleY,int typeY,
+            int titleX,int typeX,int width,int height) {
+        return width>=160 && height>=160 &&
+            typeY>titleY && typeY-titleY<=height*.13f &&
+            Math.abs(typeX-titleX)<=width*.28f &&
+            titleY>height*.16f && titleY<height*.87f;
+    }
+
+    /** Do not confuse search chips, nav icons, keyboard or the mini-player
+     * with a searchable result on the round Wear display. */
+    public static boolean watchResultRegion(int x,int y,int w,int h,
+            int screenW,int screenH) {
+        return screenW>=160 && screenH>=160 && w>=16 && h>=8 &&
+            w<screenW*.95f && h<screenH*.19f &&
+            x>screenW*.06f && x<screenW*.94f &&
+            y>screenH*.17f && y<screenH*.85f;
+    }
+
     /** A named playlist must be discovered directly in the library,
      * never by submitting its name into the Spotify Search tab. */
     public static boolean spotifyPlaylistNameMatches(String wanted,String visible) {

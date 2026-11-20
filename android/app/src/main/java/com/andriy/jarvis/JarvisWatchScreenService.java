@@ -461,16 +461,70 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         CHECK_HOME, DISMISS_IME, SWIPE_HOME, REVEAL_NAV,
         FIND_LIBRARY_PLAYLIST, SCROLL_LIBRARY_PLAYLISTS,
         OPEN_SEARCH, FOCUS_SEARCH, SET_QUERY, VERIFY_QUERY,
-        SUBMIT_QUERY, SELECT_RESULT, PLAY_PLAYLIST, VERIFY_PLAYLIST
+        SUBMIT_QUERY, SELECT_RESULT, PLAY_PLAYLIST, VERIFY_PLAYLIST,
+        SEARCH_RECOVER_RIGHT_1, SEARCH_RECOVER_DOWN,
+        SEARCH_RECOVER_RIGHT_2A, SEARCH_RECOVER_RIGHT_2B, SEARCH_RECOVER_UP,
+        RETURN_FROM_SEARCH_PLAYLIST
     }
     private static final String SPOTIFY_PKG="com.spotify.music";
+
+    public static final class SpotifySearchSelection {
+        public final String title;
+        public final boolean playlist;
+        public final Rect bounds;
+        SpotifySearchSelection(String title,boolean playlist,Rect bounds){
+            this.title=title;this.playlist=playlist;this.bounds=new Rect(bounds);
+        }
+    }
+    private static SpotifySearchSelection lastSearchSelection;
+    public static SpotifySearchSelection spotifyLastSelectedSearchResult() {
+        return lastSearchSelection;
+    }
+
+    /** Reuse the still-visible original results for "Не та пісня",
+     * instead of moving the search page by a blind initial swipe. */
+    public static boolean spotifySearchResultsVisible(String query) {
+        JarvisWatchScreenService service=connected.get();
+        AccessibilityNodeInfo root=service==null?null:service.appRoot(SPOTIFY_PKG);
+        if(root==null || service.spotifyImeVisible() || query==null)return false;
+        String wanted=AppNameMatcher.normalize(query);
+        if(wanted.isEmpty())return false;
+        Rect frame=new Rect();root.getBoundsInScreen(frame);
+        boolean upperQuery=false,typedResults=false;
+        for(AccessibilityNodeInfo node:service.spotifyNodes(root)){
+            String label=spotifyLabel(node);
+            Rect b=new Rect();node.getBoundsInScreen(b);
+            if(label.equals(wanted) &&
+               (node.isEditable() || b.centerY()<frame.height()*.34f))
+                upperQuery=true;
+            if(SpotifyTrackSearchRules.mixedResultType(label)!=
+               SpotifyTrackSearchRules.SearchResultType.UNKNOWN &&
+               b.centerY()>frame.height()*.17f)
+                typedResults=true;
+        }
+        return upperQuery && typedResults;
+    }
 
     public static boolean spotifySearchAvailable() {
         JarvisWatchScreenService s=connected.get();
         AccessibilityNodeInfo root=s==null?null:s.appRoot(SPOTIFY_PKG);
-        return root!=null &&
+        return root!=null && !s.spotifyImeVisible() &&
             (s.spotifyHasEditable(root) ||
-             s.spotifyHasLabel(root,"search","пошук","поиск"));
+             s.spotifySearchIcon(root)!=null);
+    }
+
+    private AccessibilityNodeInfo spotifySearchIcon(AccessibilityNodeInfo root) {
+        AccessibilityNodeInfo selected=null;
+        Rect best=null;
+        for(AccessibilityNodeInfo n:spotifyNodes(root)){
+            if(n.isEditable() ||
+               !spotifyNodeMatches(n,"search","пошук","поиск","search button",
+                  "шукати"))continue;
+            Rect b=new Rect();n.getBoundsInScreen(b);
+            if(b.width()<8 || b.height()<8)continue;
+            if(best==null || b.top<best.top){selected=n;best=b;}
+        }
+        return selected;
     }
 
     /** A resumed Spotify Search page may still have the full-screen Wear
@@ -549,14 +603,28 @@ public final class JarvisWatchScreenService extends AccessibilityService {
                     :Result.DONE;
             case SWIPE_HOME:
                 return service.spotifySwipeHome(completion);
+            case SEARCH_RECOVER_RIGHT_1:
+            case SEARCH_RECOVER_RIGHT_2A:
+            case SEARCH_RECOVER_RIGHT_2B:
+            case RETURN_FROM_SEARCH_PLAYLIST:
+                if(step==SpotifyStep.RETURN_FROM_SEARCH_PLAYLIST &&
+                   (title==null || !service.spotifyHasTitle(root,title) ||
+                    service.spotifyImeVisible()))
+                    return Result.WAIT;
+                return service.spotifySwipeHome(completion);
+            case SEARCH_RECOVER_DOWN:
+                return service.spotifySwipeDown(completion);
+            case SEARCH_RECOVER_UP:
+                return service.spotifyRevealNavigation(completion);
             case FIND_LIBRARY_PLAYLIST:
                 return service.spotifyFindLibraryPlaylist(root,title,completion);
             case SCROLL_LIBRARY_PLAYLISTS:
                 return service.spotifyScrollLibraryDown(completion);
             case OPEN_SEARCH:
                 if(service.spotifyHasEditable(root))return Result.DONE;
-                return service.spotifyTapExact(root,completion,
-                    "search","пошук","поиск");
+                AccessibilityNodeInfo search=service.spotifySearchIcon(root);
+                return search==null?Result.WAIT:
+                    service.spotifyTapNode(search,completion);
             case REVEAL_NAV:
                 return service.spotifyRevealNavigation(completion);
             case FOCUS_SEARCH:
@@ -568,10 +636,11 @@ public final class JarvisWatchScreenService extends AccessibilityService {
             case SUBMIT_QUERY:
                 return service.spotifySubmitQuery(root);
             case SELECT_RESULT:
-                return resultOrdinal==0 ||
-                    playlist || genreDiscovery
-                    ? service.spotifySelectResult(root,title,playlist,genreDiscovery,completion)
-                    : service.spotifySelectNextSongResult(root,title,resultOrdinal,completion);
+                if(!playlist && !genreDiscovery)
+                    return service.spotifySelectMixedResult(root,title,resultOrdinal,completion);
+                return resultOrdinal==0 || playlist || genreDiscovery
+                    ?service.spotifySelectResult(root,title,playlist,genreDiscovery,completion)
+                    :service.spotifySelectNextSongResult(root,title,resultOrdinal,completion);
             case PLAY_PLAYLIST:
                 // The mini-player can say Pause for an unrelated song.
                 // Prefer the playlist's actual Play action if it is visible.
@@ -697,6 +766,17 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         p.moveTo(m.widthPixels*.5f,m.heightPixels*.18f);
         p.lineTo(m.widthPixels*.5f,m.heightPixels*.85f);
         return gesture(SPOTIFY_PKG,p,500L,cb);
+    }
+
+    private Result spotifySwipeDown(Completion cb) {
+        if(appRoot(SPOTIFY_PKG)==null || spotifyImeVisible())
+            return Result.WAIT;
+        android.util.DisplayMetrics m=getResources().getDisplayMetrics();
+        if(m.widthPixels<160 || m.heightPixels<160)return Result.BLOCKED;
+        Path p=new Path();
+        p.moveTo(m.widthPixels*.50f,m.heightPixels*.16f);
+        p.lineTo(m.widthPixels*.50f,m.heightPixels*.86f);
+        return gesture(SPOTIFY_PKG,p,510L,cb);
     }
 
     private Result spotifySwipeHome(Completion cb) {
@@ -903,6 +983,88 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         // its title is identical. Wait for a matching category to load.
         return selected==null || bestRank==2?
             Result.WAIT:spotifyTapNode(selected,cb);
+    }
+
+    /** Tap a visible mixed Spotify search result by its title and category
+     * subtitle, in real top-to-bottom order. Both songs and playlists count.
+     * Never use an unseen Pixel coordinate or select a category filter. */
+    private Result spotifySelectMixedResult(AccessibilityNodeInfo root,
+            String query,int ordinal,Completion cb) {
+        if(root==null || ordinal<0 || ordinal>=SpotifyResultCursor.MAX_RESULTS ||
+           spotifyImeVisible())return Result.WAIT;
+        lastSearchSelection=null;
+        Rect frame=new Rect();root.getBoundsInScreen(frame);
+        ArrayList<AccessibilityNodeInfo> nodes=new ArrayList<>(spotifyNodes(root));
+        ArrayList<SpotifySearchSelection> results=new ArrayList<>();
+        ArrayList<AccessibilityNodeInfo> taps=new ArrayList<>();
+        for(AccessibilityNodeInfo metadata:nodes){
+            if(metadata.isEditable())continue;
+            String text=metadata.getText()==null?"":metadata.getText().toString();
+            String desc=metadata.getContentDescription()==null?""
+                :metadata.getContentDescription().toString();
+            SpotifyTrackSearchRules.SearchResultType type=
+                SpotifyTrackSearchRules.mixedResultType(text);
+            if(type==SpotifyTrackSearchRules.SearchResultType.UNKNOWN)
+                type=SpotifyTrackSearchRules.mixedResultType(desc);
+            if(type==SpotifyTrackSearchRules.SearchResultType.UNKNOWN)continue;
+            Rect categoryBox=new Rect();metadata.getBoundsInScreen(categoryBox);
+            if(!JarvisWatchUiRules.watchResultRegion(categoryBox.centerX(),
+                categoryBox.centerY(),categoryBox.width(),categoryBox.height(),
+                frame.width(),frame.height()))continue;
+            AccessibilityNodeInfo chosen=null;
+            Rect chosenBounds=null;
+            String chosenTitle=null;
+            int gap=Integer.MAX_VALUE;
+            for(AccessibilityNodeInfo candidate:nodes){
+                if(candidate==metadata || candidate.isEditable())continue;
+                String candidateTitle=candidate.getText()==null?""
+                    :candidate.getText().toString().trim();
+                if(candidateTitle.isEmpty() ||
+                   SpotifyTrackSearchRules.mixedResultType(candidateTitle)!=
+                      SpotifyTrackSearchRules.SearchResultType.UNKNOWN)
+                    continue;
+                Rect bounds=new Rect();candidate.getBoundsInScreen(bounds);
+                if(!JarvisWatchUiRules.watchResultRegion(bounds.centerX(),
+                    bounds.centerY(),bounds.width(),bounds.height(),
+                    frame.width(),frame.height()) ||
+                   !JarvisWatchUiRules.watchResultTitleAboveType(
+                       bounds.centerY(),categoryBox.centerY(),
+                       bounds.centerX(),categoryBox.centerX(),
+                       frame.width(),frame.height()))continue;
+                int distance=categoryBox.centerY()-bounds.centerY();
+                if(distance<gap){
+                    chosen=candidate;chosenBounds=bounds;
+                    chosenTitle=candidateTitle;gap=distance;
+                }
+            }
+            if(chosen==null || chosenBounds==null)continue;
+            boolean duplicate=false;
+            for(SpotifySearchSelection old:results)
+                if(Math.abs(old.bounds.centerY()-chosenBounds.centerY())<
+                    frame.height()*.045f){duplicate=true;break;}
+            if(duplicate)continue;
+            int at=0;
+            while(at<results.size() && results.get(at).bounds.top<chosenBounds.top)at++;
+            results.add(at,new SpotifySearchSelection(
+                chosenTitle,type==SpotifyTrackSearchRules.SearchResultType.PLAYLIST,
+                chosenBounds));
+            taps.add(at,chosen);
+        }
+        if(results.size()>ordinal) {
+            lastSearchSelection=results.get(ordinal);
+            Result tap=spotifyTapNode(taps.get(ordinal),cb);
+            if(tap==Result.WAIT || tap==Result.BLOCKED)
+                lastSearchSelection=null;
+            return tap;
+        }
+        if(!results.isEmpty())return Result.WAIT;
+        // Compatibility for older Spotify builds with an exact title but
+        // no accessible category. A playlist is never inferred from geometry.
+        if(ordinal==0) {
+            lastSearchSelection=null;
+            return spotifySelectResult(root,query,false,false,cb);
+        }
+        return spotifySelectNextSongResult(root,query,ordinal,cb);
     }
 
     /** Skip to the Nth song row of the ORIGINAL search on Watch7. This
