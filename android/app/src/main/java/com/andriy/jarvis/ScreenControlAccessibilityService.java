@@ -2989,6 +2989,96 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             ? SpotifyStep.CLICKED : SpotifyStep.BLOCKED;
     }
 
+    /** Spotify may display the search results while hiding the song
+     * titles from Accessibility (Pixel, Compose). The controller has already
+     * submitted the specific song query; after that, select an ordered song
+     * result. Try semantic song row labels FIRST, then the owner-confirmed
+     * first-row geometry. Never tap the keyboard or a different app. */
+    public static SpotifyStep spotifyTapTrackResultAtIndex(String title,
+            int ordinal,long resultAgeMs,Completion callback) {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null || !s.sessionActive || callback==null ||
+           title==null || title.trim().isEmpty() ||
+           ordinal<0 || ordinal>=SpotifyResultCursor.MAX_RESULTS)
+            return SpotifyStep.BLOCKED;
+        AccessibilityNodeInfo root=s.currentSpotifyRoot();
+        if(root==null || s.spotifyOwnsInputMethod())return SpotifyStep.WAIT;
+        // For the first result preserve exact-title selection when the
+        // Spotify search header remains accessible; avoid duplicate taps.
+        if(ordinal==0 && s.spotifyQueryPresent(root,title)) {
+            SpotifyStep exact=spotifyTapFirstTrackResult(title,callback);
+            if(exact!=SpotifyStep.WAIT)return exact;
+        }
+        Rect frame=new Rect();
+        root.getBoundsInScreen(frame);
+        java.util.ArrayList<Rect> songRows=new java.util.ArrayList<>();
+        ArrayDeque<AccessibilityNodeInfo> queue=new ArrayDeque<>();
+        queue.add(root);
+        int visited=0;
+        while(!queue.isEmpty() && ++visited<=MAX_SCAN) {
+            AccessibilityNodeInfo n=queue.removeFirst();
+            if(n==null || !n.isEnabled() || !n.isVisibleToUser() ||
+               n.isPassword() || n.isEditable())continue;
+            String label=asString(n.getText());
+            String desc=asString(n.getContentDescription());
+            if(SpotifyTrackSearchRules.resultSongLabel(label) ||
+               SpotifyTrackSearchRules.resultSongLabel(desc)) {
+                Rect box=new Rect();
+                n.getBoundsInScreen(box);
+                if(SpotifyTrackSearchRules.resultRegion(box.centerX(),box.centerY(),
+                    box.width(),box.height(),frame.left,frame.top,
+                    frame.right,frame.bottom)) {
+                    boolean duplicate=false;
+                    for(Rect old:songRows) {
+                        if(Math.abs(old.centerY()-box.centerY())<
+                           frame.height()*.025f) {duplicate=true;break;}
+                    }
+                    if(!duplicate)songRows.add(box);
+                }
+            }
+            for(int i=0;i<n.getChildCount();i++) {
+                AccessibilityNodeInfo child=n.getChild(i);
+                if(child!=null)queue.addLast(child);
+            }
+        }
+        if(visited>MAX_SCAN)return SpotifyStep.WAIT;
+        songRows.sort((a,b)->Integer.compare(a.top,b.top));
+        // Use semantic row N only when earlier rows were actually found.
+        if(songRows.size()>ordinal) {
+            Rect box=songRows.get(ordinal);
+            if(s.currentSpotifyRoot()==null)return SpotifyStep.WAIT;
+            Path p=new Path();
+            p.moveTo(box.exactCenterX(),box.exactCenterY());
+            FloatingJarvisService.avoidControl(box);
+            GestureDescription g=new GestureDescription.Builder()
+                .addStroke(new GestureDescription.StrokeDescription(p,0,95))
+                .build();
+            return s.dispatchTrackedGesture(g,callback)
+                ?SpotifyStep.CLICKED:SpotifyStep.BLOCKED;
+        }
+        // Accessibility may expose NO row labels. This calibrated fallback
+        // is user-approved for the Pixel screenshot and only runs after the
+        // controller's SUBMIT_SEARCH stage successfully completed.
+        android.view.Display display=s.safeActionDisplay();
+        if(display==null)return SpotifyStep.WAIT;
+        android.graphics.Point size=new android.graphics.Point();
+        display.getRealSize(size);
+        if(!SpotifyTrackSearchRules.mayTapResultAfterSubmit(true,
+            s.currentSpotifyRoot()!=null,false,size.x,size.y,
+            ordinal,resultAgeMs))return SpotifyStep.WAIT;
+        int tapX=size.x/2,tapY=SpotifyTrackSearchRules.calibratedResultY(size.y,ordinal);
+        Rect current=new Rect();s.currentSpotifyRoot().getBoundsInScreen(current);
+        if(!current.contains(tapX,tapY))return SpotifyStep.WAIT;
+        FloatingJarvisService.avoidControl(new Rect(
+            tapX-32,tapY-32,tapX+32,tapY+32));
+        Path p=new Path();p.moveTo(tapX,tapY);
+        GestureDescription g=new GestureDescription.Builder()
+            .addStroke(new GestureDescription.StrokeDescription(p,0,95))
+            .build();
+        return s.dispatchTrackedGesture(g,callback)
+            ?SpotifyStep.CLICKED:SpotifyStep.BLOCKED;
+    }
+
     /** Verify the chosen track in Spotify's BOTTOM mini-player, rather than
      * trusting the Android gesture's completion as proof that audio started. */
     public static boolean spotifyMiniPlayerHasTrack(String title) {
