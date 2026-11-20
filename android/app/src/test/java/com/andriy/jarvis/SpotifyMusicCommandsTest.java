@@ -60,7 +60,18 @@ public final class SpotifyMusicCommandsTest {
             !"весна прийде".equals(SpotifyMusicCommands.namedTrack(
              "Увімкни пісню Весна прийде")))
             throw new AssertionError("Preserve Ukrainian and Russian dictated titles");
+        is("інша пісня",SpotifyMusicCommands.Kind.NEXT_RESULT);
+        is("не та пісня",SpotifyMusicCommands.Kind.NEXT_RESULT);
+        is("Іншу пісню",SpotifyMusicCommands.Kind.NEXT_RESULT);
+        is("Дімон, не ту пісню!",SpotifyMusicCommands.Kind.NEXT_RESULT);
+        is("Інша пісня на годиннику",SpotifyMusicCommands.Kind.NEXT_RESULT);
+        is("Не та пісня на телефоні",SpotifyMusicCommands.Kind.NEXT_RESULT);
+        is("Наступна пісня",SpotifyMusicCommands.Kind.NEXT_RESULT);
+        is("Друга пісня",SpotifyMusicCommands.Kind.NEXT_RESULT);
+        is("Следующая песня",SpotifyMusicCommands.Kind.NEXT_RESULT);
         is("увімкни пісню",null);
+        is("не та книжка",null);
+        is("інша програма",null);
         is("виключи пісню Океан",null);
         is("вимкни пісню Морозы",null);
         is("виключи музику",null);
