@@ -99,6 +99,38 @@ public final class JarvisWatchUiRules {
             y>screenH*.17f && y<screenH*.85f;
     }
 
+    /** Watch Spotify may merge a title and its "Плейліст"/"Пісня"
+     * subtitle into ONE Accessibility description, separated by a bullet. */
+    public static SpotifyTrackSearchRules.SearchResultType watchCombinedType(
+            String text) {
+        if(text==null)return SpotifyTrackSearchRules.SearchResultType.UNKNOWN;
+        SpotifyTrackSearchRules.SearchResultType type=
+            SpotifyTrackSearchRules.mixedResultType(text);
+        if(type!=SpotifyTrackSearchRules.SearchResultType.UNKNOWN)return type;
+        String[] parts=text.split("[,•·\\n]",4);
+        if(parts.length<2)return type;
+        for(int i=1;i<parts.length;i++) {
+            type=SpotifyTrackSearchRules.mixedResultType(parts[i].trim());
+            if(type!=SpotifyTrackSearchRules.SearchResultType.UNKNOWN)return type;
+        }
+        return SpotifyTrackSearchRules.SearchResultType.UNKNOWN;
+    }
+
+    public static String watchCombinedTitle(String text) {
+        if(text==null)return null;
+        String[] parts=text.split("[,•·\\n]",4);
+        if(parts.length<2 ||
+           SpotifyTrackSearchRules.mixedResultType(parts[0])!=
+               SpotifyTrackSearchRules.SearchResultType.UNKNOWN)return null;
+        boolean typed=false;
+        for(int i=1;i<parts.length;i++)
+            if(SpotifyTrackSearchRules.mixedResultType(parts[i])!=
+               SpotifyTrackSearchRules.SearchResultType.UNKNOWN)
+                typed=true;
+        String title=parts[0].trim();
+        return typed && !title.isEmpty() && title.length()<=120?title:null;
+    }
+
     /** A named playlist must be discovered directly in the library,
      * never by submitting its name into the Spotify Search tab. */
     public static boolean spotifyPlaylistNameMatches(String wanted,String visible) {

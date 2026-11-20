@@ -497,7 +497,7 @@ public final class JarvisWatchScreenService extends AccessibilityService {
             if(label.equals(wanted) &&
                (node.isEditable() || b.centerY()<frame.height()*.34f))
                 upperQuery=true;
-            if(SpotifyTrackSearchRules.mixedResultType(label)!=
+            if(JarvisWatchUiRules.watchCombinedType(label)!=
                SpotifyTrackSearchRules.SearchResultType.UNKNOWN &&
                b.centerY()>frame.height()*.17f)
                 typedResults=true;
@@ -1003,9 +1003,9 @@ public final class JarvisWatchScreenService extends AccessibilityService {
             String desc=metadata.getContentDescription()==null?""
                 :metadata.getContentDescription().toString();
             SpotifyTrackSearchRules.SearchResultType type=
-                SpotifyTrackSearchRules.mixedResultType(text);
+                JarvisWatchUiRules.watchCombinedType(text);
             if(type==SpotifyTrackSearchRules.SearchResultType.UNKNOWN)
-                type=SpotifyTrackSearchRules.mixedResultType(desc);
+                type=JarvisWatchUiRules.watchCombinedType(desc);
             if(type==SpotifyTrackSearchRules.SearchResultType.UNKNOWN)continue;
             Rect categoryBox=new Rect();metadata.getBoundsInScreen(categoryBox);
             if(!JarvisWatchUiRules.watchResultRegion(categoryBox.centerX(),
@@ -1035,6 +1035,16 @@ public final class JarvisWatchScreenService extends AccessibilityService {
                 if(distance<gap){
                     chosen=candidate;chosenBounds=bounds;
                     chosenTitle=candidateTitle;gap=distance;
+                }
+            }
+            // Some Wear Spotify versions expose a single merged text node
+            // instead of a separate title and category subtitle.
+            if(chosen==null || chosenBounds==null) {
+                String inline=JarvisWatchUiRules.watchCombinedTitle(text);
+                if(inline==null)inline=JarvisWatchUiRules.watchCombinedTitle(desc);
+                if(inline!=null) {
+                    chosen=metadata;chosenBounds=categoryBox;
+                    chosenTitle=inline;
                 }
             }
             if(chosen==null || chosenBounds==null)continue;

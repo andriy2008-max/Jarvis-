@@ -135,6 +135,24 @@ public final class JarvisWatchUiRulesTest {
         yes(!JarvisWatchUiRules.watchResultRegion(
             215,403,240,35,440,440),
             "bottom player is not a search result");
+        yes(JarvisWatchUiRules.watchCombinedType(
+            "Сексуальный плейлист • Плейліст")==
+            SpotifyTrackSearchRules.SearchResultType.PLAYLIST,
+            "one accessibility label can contain playlist title and type");
+        yes("Сексуальный плейлист".equals(
+            JarvisWatchUiRules.watchCombinedTitle(
+                "Сексуальный плейлист • Плейліст")),
+            "first search result title must be preserved");
+        yes(JarvisWatchUiRules.watchCombinedType(
+            "Романтичная • Пісня • Syava")==
+            SpotifyTrackSearchRules.SearchResultType.SONG,
+            "combined song label with artist");
+        yes("Романтичная".equals(
+            JarvisWatchUiRules.watchCombinedTitle(
+                "Романтичная • Пісня • Syava")),
+            "song title must not include metadata");
+        yes(JarvisWatchUiRules.watchCombinedTitle("Плейлісти")==null,
+            "filter title cannot be selected as song");
         System.out.println("PASS JarvisWatchUiRulesTest");
     }
 }
