@@ -1153,7 +1153,8 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
     /** Submit once in Spotify's own editor, before selecting the first row. */
     public static SpotifyStep spotifySubmitTrackSearch(String title) {
         ScreenControlAccessibilityService s=connected.get();
-        if(s==null || !s.sessionActive || !s.trustedExternalApp("com.spotify.music"))
+        if(s==null || !s.sessionActive ||
+            !(s.trustedExternalApp("com.spotify.music") || spotifyOwnsInputMethod()))
             return SpotifyStep.BLOCKED;
         // Android 11+ exposes the editor's Search/Enter through Accessibility.
         AccessibilityNodeInfo root=s.currentSpotifyRoot();
@@ -2620,6 +2621,40 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             }
         }
         return scanned>MAX_SCAN?null:found;
+    }
+
+    /** Verifiable Spotify-owned IME: only the active system input connection
+     * may continue text entry while the keyboard covers the app window.
+     * No unrelated app, password field or stale search text is accepted. */
+    public static boolean spotifyOwnsInputMethod() {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null || !s.sessionActive || android.os.Build.VERSION.SDK_INT<33)
+            return false;
+        try {
+            android.accessibilityservice.InputMethod input=s.getInputMethod();
+            if(input==null || !input.getCurrentInputStarted())return false;
+            android.view.inputmethod.EditorInfo editor=input.getCurrentInputEditorInfo();
+            if(editor==null || !"com.spotify.music".equals(editor.packageName))
+                return false;
+            int type=editor.inputType;
+            int variation=type & InputType.TYPE_MASK_VARIATION;
+            return (type & InputType.TYPE_MASK_CLASS)==InputType.TYPE_CLASS_TEXT &&
+                variation!=InputType.TYPE_TEXT_VARIATION_PASSWORD &&
+                variation!=InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD &&
+                variation!=InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD;
+        } catch(RuntimeException error) {
+            return false;
+        }
+    }
+
+    /** Confirm the editor actually opened before treating the search-field
+     * tap as successful. Gesture dispatch alone is not evidence of focus. */
+    public static boolean spotifySearchEditorReady() {
+        ScreenControlAccessibilityService s=connected.get();
+        if(s==null || !s.sessionActive)return false;
+        AccessibilityNodeInfo root=s.currentSpotifyRoot();
+        AccessibilityNodeInfo field=root==null?null:s.spotifySearchEditor(root);
+        return (field!=null && field.isFocused()) || spotifyOwnsInputMethod();
     }
 
     /** Focus a visible, unambiguous top-of-page Spotify Search field. */
