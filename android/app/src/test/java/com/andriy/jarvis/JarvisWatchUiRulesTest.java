@@ -86,6 +86,24 @@ public final class JarvisWatchUiRulesTest {
             true,true,false,false,4200L),"after route screen only, tap bottom");
         yes(JarvisWatchUiRules.allowBottomRouteModeTap(
             true,true,false,false,8000L),"fallback remains eligible until timeout");
+        yes(JarvisWatchUiRules.spotifyHomeConfirmed(false,false,true,false),
+            "player list icon is enough without title or playing song");
+        yes(!JarvisWatchUiRules.spotifyHomeConfirmed(false,false,true,true),
+            "search editor is not the player even with a list icon");
+        for(String label:new String[]{"Queue","Черга","Очередь","Browse"})
+            yes(JarvisWatchUiRules.spotifyPlayerListButton(label,null,
+                227,380,50,50,0,0,454,454),"bottom list icon: "+label);
+        yes(JarvisWatchUiRules.spotifyPlayerListButton("","com.spotify.music:id/queue_button",
+            227,380,50,50,0,0,454,454),"icon can be identified by view ID");
+        yes(!JarvisWatchUiRules.spotifyPlayerListButton("Queue",null,
+            227,90,50,50,0,0,454,454),"queue heading is not bottom button");
+        yes(!JarvisWatchUiRules.spotifyPlayerListButton("Play",null,
+            227,380,50,50,0,0,454,454),"play is not the list button");
+        yes(!JarvisWatchUiRules.spotifyPlayerListButton("",null,
+            227,380,50,50,0,0,454,454),"unknown icon does not prove home");
+        yes(JarvisWatchUiRules.SPOTIFY_DOWN_END-JarvisWatchUiRules.SPOTIFY_DOWN_START>=.75f &&
+            JarvisWatchUiRules.SPOTIFY_DOWN_DURATION_MS>=650L,
+            "long downward drag across at least three quarters of screen");
         System.out.println("PASS JarvisWatchUiRulesTest");
     }
 }

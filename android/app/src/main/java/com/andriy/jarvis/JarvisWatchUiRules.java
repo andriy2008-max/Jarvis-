@@ -37,8 +37,40 @@ public final class JarvisWatchUiRules {
      * passive label. Recently-played sections can also identify home. */
     public static boolean spotifyHomeConfirmed(boolean homeTabSelected,
             boolean homeSectionVisible,boolean hasEditableSearch) {
-        return !hasEditableSearch && (homeTabSelected || homeSectionVisible);
+        return spotifyHomeConfirmed(homeTabSelected,homeSectionVisible,false,hasEditableSearch);
     }
+
+    public static boolean spotifyHomeConfirmed(boolean homeTabSelected,
+            boolean homeSectionVisible,boolean bottomListButton,boolean hasEditableSearch) {
+        return !hasEditableSearch && (homeTabSelected || homeSectionVisible || bottomListButton);
+    }
+
+    /** User's Watch player/list entry: lower centre icon, independent of song
+     * title, artwork and whether playback has ever started. Not a whole row. */
+    public static boolean spotifyPlayerListButton(String label,String viewId,
+            int x,int y,int width,int height,int left,int top,int right,int bottom) {
+        int w=right-left,h=bottom-top;
+        if(w<160 || h<160 || width<6 || height<6 || width>w*.35f || height>h*.3f ||
+            x<left+w*.32f || x>left+w*.68f || y<top+h*.65f || y>top+h*.95f)return false;
+        String text=label==null?"":label.trim().toLowerCase(java.util.Locale.ROOT);
+        String id=viewId==null?"":viewId.substring(viewId.lastIndexOf('/')+1)
+            .toLowerCase(java.util.Locale.ROOT);
+        return text.equals("queue") || text.equals("play queue") || text.equals("open queue") ||
+            text.equals("show queue") || text.equals("open browse") ||
+            text.equals("показати чергу") || text.equals("відкрити чергу") ||
+            text.equals("показать очередь") || text.equals("открыть очередь") ||
+            text.equals("черга") || text.equals("черга відтворення") || text.equals("очередь") ||
+            text.equals("очередь воспроизведения") || text.equals("browse") ||
+            text.equals("перегляд") || text.equals("огляд") || text.equals("обзор") ||
+            text.equals("browse music") || text.equals("відкрити список") ||
+            text.equals("список відтворення") || text.equals("список воспроизведения") ||
+            id.equals("queue") || id.equals("queue_button") || id.equals("button_queue") ||
+            id.equals("browse_button") || id.equals("button_browse") || id.equals("play_queue");
+    }
+
+    public static final float SPOTIFY_DOWN_START=.12f;
+    public static final float SPOTIFY_DOWN_END=.90f;
+    public static final long SPOTIFY_DOWN_DURATION_MS=700L;
 
     /** Never loop indefinitely through an unknown Spotify page. */
     public static boolean mayReturnToSpotifyHome(int completedSwipes,

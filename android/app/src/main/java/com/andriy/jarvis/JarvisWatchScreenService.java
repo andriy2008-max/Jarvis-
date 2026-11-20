@@ -587,9 +587,18 @@ public final class JarvisWatchScreenService extends AccessibilityService {
     /** Verify home using Spotify-owned UI nodes. A visible Home button alone
      * is not evidence that it is the current, selected page. */
     private boolean spotifyHomeVisible(AccessibilityNodeInfo root) {
-        boolean selected=false,section=false;
+        boolean selected=false,section=false,listButton=false;
+        Rect frame=new Rect();root.getBoundsInScreen(frame);
         for(AccessibilityNodeInfo node:spotifyNodes(root)) {
             if(node.isEditable())continue;
+            Rect box=new Rect();node.getBoundsInScreen(box);
+            String id=node.getViewIdResourceName();
+            listButton |= JarvisWatchUiRules.spotifyPlayerListButton(spotifyLabel(node),id,
+                box.centerX(),box.centerY(),box.width(),box.height(),
+                frame.left,frame.top,frame.right,frame.bottom) ||
+                JarvisWatchUiRules.spotifyPlayerListButton(spotifyDescription(node),id,
+                box.centerX(),box.centerY(),box.width(),box.height(),
+                frame.left,frame.top,frame.right,frame.bottom);
             if((node.isSelected() || node.isChecked()) &&
                spotifyNodeMatches(node,"home","головна","домой"))
                 selected=true;
@@ -600,7 +609,7 @@ public final class JarvisWatchScreenService extends AccessibilityService {
                 section=true;
         }
         return JarvisWatchUiRules.spotifyHomeConfirmed(
-            selected,section,spotifyHasEditable(root));
+            selected,section,listButton,spotifyHasEditable(root));
     }
 
     private String spotifyViewport(AccessibilityNodeInfo root) {
@@ -643,13 +652,16 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         android.util.DisplayMetrics m=getResources().getDisplayMetrics();
         if(m.widthPixels<160 || m.heightPixels<160)return Result.BLOCKED;
         Path p=new Path();
-        p.moveTo(m.widthPixels*.5f,m.heightPixels*.18f);
-        p.lineTo(m.widthPixels*.5f,m.heightPixels*.85f);
-        return gesture(SPOTIFY_PKG,p,500L,cb);
+        p.moveTo(m.widthPixels*.5f,m.heightPixels*JarvisWatchUiRules.SPOTIFY_DOWN_START);
+        p.lineTo(m.widthPixels*.5f,m.heightPixels*JarvisWatchUiRules.SPOTIFY_DOWN_END);
+        return gesture(SPOTIFY_PKG,p,JarvisWatchUiRules.SPOTIFY_DOWN_DURATION_MS,cb);
     }
 
     private Result spotifySwipeHome(Completion cb) {
-        if(appRoot(SPOTIFY_PKG)==null)return Result.WAIT;
+        AccessibilityNodeInfo root=appRoot(SPOTIFY_PKG);
+        if(root==null)return Result.WAIT;
+        // A delayed recovery gesture must not swipe away a now-ready player.
+        if(spotifyHomeVisible(root))return Result.DONE;
         android.util.DisplayMetrics m=getResources().getDisplayMetrics();
         if(m.widthPixels<160 || m.heightPixels<160)return Result.BLOCKED;
         Path p=new Path();
@@ -799,9 +811,9 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         float w=metrics.widthPixels,h=metrics.heightPixels;
         if(w<160 || h<160)return Result.BLOCKED;
         Path path=new Path();
-        path.moveTo(w*.50f,h*.88f);
-        path.lineTo(w*.50f,h*.12f);
-        return gesture(SPOTIFY_PKG,path,550L,cb);
+        path.moveTo(w*.50f,h*JarvisWatchUiRules.SPOTIFY_DOWN_START);
+        path.lineTo(w*.50f,h*JarvisWatchUiRules.SPOTIFY_DOWN_END);
+        return gesture(SPOTIFY_PKG,path,JarvisWatchUiRules.SPOTIFY_DOWN_DURATION_MS,cb);
     }
 
     private static boolean spotifyTitleMatches(String label,String wanted) {

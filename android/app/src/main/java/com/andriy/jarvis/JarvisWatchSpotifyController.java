@@ -347,7 +347,7 @@ public final class JarvisWatchSpotifyController {
             if(step==JarvisWatchScreenService.SpotifyStep.SCROLL_LIBRARY_PLAYLISTS)
                 playlistScrolls++;
             if(step==JarvisWatchScreenService.SpotifyStep.REVEAL_NAV)
-                status("Відкриваю список Spotify свайпом угору…");
+                status("Відкриваю список Spotify довгим свайпом униз…");
             if(step==JarvisWatchScreenService.SpotifyStep.FIND_LIBRARY_PLAYLIST)
                 status("Знайшов плейлист «"+title+"». Відкриваю без пошуку.");
             if(step==JarvisWatchScreenService.SpotifyStep.OPEN_SEARCH)
