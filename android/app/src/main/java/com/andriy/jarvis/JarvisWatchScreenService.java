@@ -211,6 +211,25 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         AccessibilityNodeInfo root=s==null?null:s.appRoot(MAPS_PKG);
         return root!=null && s.mapsHome(root);
     }
+
+    /** Prevent fallback tapping into a search field or on-screen keyboard.
+     * Unknown app state is treated as unsafe, not as a blank route screen. */
+    public static boolean mapsInputOrKeyboardOpen() {
+        JarvisWatchScreenService s=connected.get();
+        if(s==null)return true;
+        try {
+            AccessibilityNodeInfo root=s.appRoot(MAPS_PKG);
+            if(root==null || s.spotifyHasEditable(root))return true;
+            for(AccessibilityWindowInfo window:s.getWindows()) {
+                if(window.getType()==AccessibilityWindowInfo.TYPE_INPUT_METHOD &&
+                   (window.isActive() || window.isFocused()))return true;
+            }
+            return false;
+        } catch(RuntimeException error) {
+            JarvisDiagnostics.error(JarvisDiagnostics.Event.ACCESSIBILITY_ERROR,error);
+            return true;
+        }
+    }
     private Result mapsOpenMapFromHome(AccessibilityNodeInfo root,Completion cb) {
         if(!mapsHome(root))return Result.DONE; // Already in the map screen.
         Result labelled=mapsTapExact(root,cb,
