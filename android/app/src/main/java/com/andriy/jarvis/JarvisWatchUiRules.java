@@ -79,36 +79,17 @@ public final class JarvisWatchUiRules {
                 .toLowerCase(java.util.Locale.ROOT).replaceAll("\\s+"," "));
     }
 
-    /** Spotify home has to be identified before attempting a watch-only
-     * navigation gesture. A selected Home tab is stronger evidence than a
-     * passive label. Recently-played sections can also identify home. */
-    public static boolean spotifyHomeConfirmed(boolean homeTabSelected,
-            boolean homeSectionVisible,boolean hasEditableSearch) {
-        return !hasEditableSearch && (homeTabSelected || homeSectionVisible);
-    }
-
-    /** Never loop indefinitely through an unknown Spotify page. */
-    public static boolean mayReturnToSpotifyHome(int completedSwipes,
-            boolean spotifyForeground) {
-        return spotifyForeground && completedSwipes>=0 && completedSwipes<3;
-    }
-
-    /** Watch7 song search retry plan: up -> (right, down) -> (right, right, up).
-     * Phase is increased only after the target search icon was NOT visible.
-     * A found search icon immediately ends navigation, without further swipes. */
-    public enum WatchSearchRecovery {
-        NONE, RIGHT_THEN_DOWN, TWO_RIGHT_THEN_UP, EXHAUSTED
-    }
+    /** Wear Spotify navigation is DOWN-ONLY. After one initial DOWN
+     * reveal, at most two additional DOWN gestures may run, only while
+     * the search icon is absent and Spotify has the foreground. */
+    public enum WatchSearchRecovery { NONE, DOWN_AGAIN, EXHAUSTED }
 
     public static WatchSearchRecovery watchSearchRecovery(int missingSearchRounds,
             boolean searchVisible,boolean spotifyForeground,boolean imeVisible) {
         if(searchVisible || !spotifyForeground || imeVisible)
             return WatchSearchRecovery.NONE;
-        switch(missingSearchRounds) {
-            case 0: return WatchSearchRecovery.RIGHT_THEN_DOWN;
-            case 1: return WatchSearchRecovery.TWO_RIGHT_THEN_UP;
-            default:return WatchSearchRecovery.EXHAUSTED;
-        }
+        return missingSearchRounds>=0 && missingSearchRounds<2
+            ?WatchSearchRecovery.DOWN_AGAIN:WatchSearchRecovery.EXHAUSTED;
     }
 
     /** A result title belongs to its category subtitle only when both are

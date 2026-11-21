@@ -33,22 +33,6 @@ public final class JarvisWatchUiRulesTest {
             true,true,true,true,false),"reject incomplete tile fingerprint");
         yes(JarvisWatchUiRules.verifiedMapsHomeGrid(
             true,true,true,true,true),"top-left map tile only after home fingerprint");
-        yes(JarvisWatchUiRules.spotifyHomeConfirmed(true,false,false),
-            "selected Home tab identifies home");
-        yes(JarvisWatchUiRules.spotifyHomeConfirmed(false,true,false),
-            "visible Spotify home section identifies home");
-        yes(!JarvisWatchUiRules.spotifyHomeConfirmed(false,false,false),
-            "unknown screen is not assumed home");
-        yes(!JarvisWatchUiRules.spotifyHomeConfirmed(true,true,true),
-            "do not swipe behind an open search editor");
-        yes(JarvisWatchUiRules.mayReturnToSpotifyHome(0,true),
-            "return to home from player");
-        yes(JarvisWatchUiRules.mayReturnToSpotifyHome(2,true),
-            "bounded third navigation");
-        yes(!JarvisWatchUiRules.mayReturnToSpotifyHome(3,true),
-            "stop after three home attempts");
-        yes(!JarvisWatchUiRules.mayReturnToSpotifyHome(0,false),
-            "never navigate another foreground app");
         yes(JarvisWatchUiRules.spotifyPlaylistNameMatches(
             "Вечірній реп","ВЕЧІРНІЙ РЕП"),"library title match Ukrainian");
         yes(JarvisWatchUiRules.spotifyPlaylistNameMatches(
@@ -142,23 +126,23 @@ public final class JarvisWatchUiRulesTest {
         yes(JarvisWatchUiRules.allowBottomRouteModeTap(
             true,true,false,false,8000L),"fallback remains eligible until timeout");
         yes(JarvisWatchUiRules.watchSearchRecovery(0,false,true,false)==
-            JarvisWatchUiRules.WatchSearchRecovery.RIGHT_THEN_DOWN,
-            "missing Search after initial UP: one RIGHT then DOWN");
+            JarvisWatchUiRules.WatchSearchRecovery.DOWN_AGAIN,
+            "after first DOWN reveal, second swipe is DOWN");
         yes(JarvisWatchUiRules.watchSearchRecovery(1,false,true,false)==
-            JarvisWatchUiRules.WatchSearchRecovery.TWO_RIGHT_THEN_UP,
-            "still missing Search: two RIGHT then UP");
+            JarvisWatchUiRules.WatchSearchRecovery.DOWN_AGAIN,
+            "third swipe is DOWN, never RIGHT or UP");
         yes(JarvisWatchUiRules.watchSearchRecovery(2,false,true,false)==
             JarvisWatchUiRules.WatchSearchRecovery.EXHAUSTED,
-            "never swipe forever");
+            "after three DOWNs the controller must stop");
         yes(JarvisWatchUiRules.watchSearchRecovery(0,true,true,false)==
             JarvisWatchUiRules.WatchSearchRecovery.NONE,
-            "search found: do not swipe right");
+            "visible Search means no swipe at all");
         yes(JarvisWatchUiRules.watchSearchRecovery(0,false,false,false)==
             JarvisWatchUiRules.WatchSearchRecovery.NONE,
-            "do not swipe in another app");
+            "no swipe when Spotify is not foreground");
         yes(JarvisWatchUiRules.watchSearchRecovery(0,false,true,true)==
             JarvisWatchUiRules.WatchSearchRecovery.NONE,
-            "never swipe behind an open keyboard");
+            "no swipe through keyboard");
         yes(JarvisWatchUiRules.watchResultTitleAboveType(
             170,195,180,182,440,440),
             "Watch7 title and song/playlist type share same card");

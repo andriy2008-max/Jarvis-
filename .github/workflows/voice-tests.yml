@@ -184,6 +184,17 @@ jobs:
         run: |
           grep -q 'android:name="com.android.alarm.permission.SET_ALARM"' android/app/src/main/AndroidManifest.xml
           ! grep -q 'android:name="android.permission.SET_ALARM"' android/app/src/main/AndroidManifest.xml
+      - name: Watch7 Spotify DOWN-only navigation contract (no APK)
+        run: |
+          controller=android/app/src/main/java/com/andriy/jarvis/JarvisWatchSpotifyController.java
+          screen=android/app/src/main/java/com/andriy/jarvis/JarvisWatchScreenService.java
+          rules=android/app/src/main/java/com/andriy/jarvis/JarvisWatchUiRules.java
+          grep -Fq 'case REVEAL_NAV:' "$screen"
+          grep -Fq 'return service.spotifySwipeDown(completion);' "$screen"
+          grep -Fq 'WatchSearchRecovery.DOWN_AGAIN' "$controller"
+          grep -Fq 'WatchSearchRecovery { NONE, DOWN_AGAIN, EXHAUSTED }' "$rules"
+          grep -Fq 'done(true,"Плейлист' "$controller"
+          ! grep -Eq 'SWIPE_HOME|SEARCH_RECOVER_RIGHT|SEARCH_RECOVER_UP|RETURN_FROM_SEARCH_PLAYLIST|spotifySwipeHome|spotifyRevealNavigation' "$controller" "$screen"
       - name: Java policy contracts (without APK)
         run: |
           mkdir -p /tmp/jarvis-voice-tests

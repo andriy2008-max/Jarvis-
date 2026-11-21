@@ -497,13 +497,10 @@ public final class JarvisWatchScreenService extends AccessibilityService {
     // restricted to Spotify's visible accessibility tree on THIS watch.
     // Screen locations are never copied from the paired phone.
     public enum SpotifyStep {
-        CHECK_HOME, DISMISS_IME, SWIPE_HOME, REVEAL_NAV,
-        FIND_LIBRARY_PLAYLIST, SCROLL_LIBRARY_PLAYLISTS,
+        REVEAL_NAV, FIND_LIBRARY_PLAYLIST, SCROLL_LIBRARY_PLAYLISTS,
         OPEN_SEARCH, FOCUS_SEARCH, SET_QUERY, VERIFY_QUERY,
         SUBMIT_QUERY, SELECT_RESULT, PLAY_PLAYLIST, VERIFY_PLAYLIST,
-        SEARCH_RECOVER_RIGHT_1, SEARCH_RECOVER_DOWN,
-        SEARCH_RECOVER_RIGHT_2A, SEARCH_RECOVER_RIGHT_2B, SEARCH_RECOVER_UP,
-        RETURN_FROM_SEARCH_PLAYLIST
+        SEARCH_RECOVER_DOWN
     }
     private static final String SPOTIFY_PKG="com.spotify.music";
 
@@ -662,28 +659,8 @@ public final class JarvisWatchScreenService extends AccessibilityService {
             root=service.spotifyRootUnderKeyboard();
         if(root==null)return Result.WAIT;
         switch(step) {
-            case CHECK_HOME:
-                return service.spotifyHomeVisible(root)?Result.DONE:Result.WAIT;
-            case DISMISS_IME:
-                return service.spotifyImeVisible()
-                    ?(service.performGlobalAction(GLOBAL_ACTION_BACK)
-                        ?Result.DONE:Result.BLOCKED)
-                    :Result.DONE;
-            case SWIPE_HOME:
-                return service.spotifySwipeHome(completion);
-            case SEARCH_RECOVER_RIGHT_1:
-            case SEARCH_RECOVER_RIGHT_2A:
-            case SEARCH_RECOVER_RIGHT_2B:
-            case RETURN_FROM_SEARCH_PLAYLIST:
-                if(step==SpotifyStep.RETURN_FROM_SEARCH_PLAYLIST &&
-                   (title==null || !service.spotifyHasTitle(root,title) ||
-                    service.spotifyImeVisible()))
-                    return Result.WAIT;
-                return service.spotifySwipeHome(completion);
             case SEARCH_RECOVER_DOWN:
                 return service.spotifySwipeDown(completion);
-            case SEARCH_RECOVER_UP:
-                return service.spotifyRevealNavigation(completion);
             case FIND_LIBRARY_PLAYLIST:
                 return service.spotifyFindLibraryPlaylist(root,title,completion);
             case SCROLL_LIBRARY_PLAYLISTS:
@@ -694,7 +671,7 @@ public final class JarvisWatchScreenService extends AccessibilityService {
                 return search==null?Result.WAIT:
                     service.spotifyTapNode(search,completion);
             case REVEAL_NAV:
-                return service.spotifyRevealNavigation(completion);
+                return service.spotifySwipeDown(completion);
             case FOCUS_SEARCH:
                 return service.spotifyFocusSearch(root,completion);
             case SET_QUERY:
@@ -847,16 +824,6 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         return gesture(SPOTIFY_PKG,p,510L,cb);
     }
 
-    private Result spotifySwipeHome(Completion cb) {
-        if(appRoot(SPOTIFY_PKG)==null)return Result.WAIT;
-        android.util.DisplayMetrics m=getResources().getDisplayMetrics();
-        if(m.widthPixels<160 || m.heightPixels<160)return Result.BLOCKED;
-        Path p=new Path();
-        p.moveTo(m.widthPixels*.15f,m.heightPixels*.52f);
-        p.lineTo(m.widthPixels*.86f,m.heightPixels*.52f);
-        return gesture(SPOTIFY_PKG,p,500L,cb);
-    }
-
     private boolean spotifyHasEditable(AccessibilityNodeInfo root) {
         for(AccessibilityNodeInfo n:spotifyNodes(root))
             if(n.isEditable() && !n.isPassword())return true;
@@ -988,19 +955,6 @@ public final class JarvisWatchScreenService extends AccessibilityService {
             return Result.DONE;
         }
         return Result.WAIT;
-    }
-
-    /** A longer, slower swipe on the WATCH (not Pixel) that actually reaches
-     * the Spotify navigation row on round screens. */
-    private Result spotifyRevealNavigation(Completion cb) {
-        if(appRoot(SPOTIFY_PKG)==null)return Result.WAIT;
-        android.util.DisplayMetrics metrics=getResources().getDisplayMetrics();
-        float w=metrics.widthPixels,h=metrics.heightPixels;
-        if(w<160 || h<160)return Result.BLOCKED;
-        Path path=new Path();
-        path.moveTo(w*.50f,h*.88f);
-        path.lineTo(w*.50f,h*.12f);
-        return gesture(SPOTIFY_PKG,path,550L,cb);
     }
 
     private static boolean spotifyTitleMatches(String label,String wanted) {
