@@ -257,6 +257,42 @@ public final class SpotifyTrackSearchRulesTest {
         ok(!SpotifyTrackSearchRules.mixedResultTitleCandidate(
             "Without Me",1260,360,1536),
             "do not target the mini-player");
+        // 0.1.45 regression: the first search result was a playlist,
+        // but a previous fallback searched the user's query and skipped
+        // to a later standalone song instead of tapping row #1.
+        ok("Сексуальный плейлист".equals(
+            SpotifyTrackSearchRules.mixedCombinedTitle(
+                "Сексуальный плейлист • Плейліст")),
+            "combined Spotify accessibility row preserves playlist title");
+        ok("Романтичная".equals(
+            SpotifyTrackSearchRules.mixedCombinedTitle(
+                "Романтичная • Пісня • Syava")),
+            "combined Spotify accessibility row preserves song title");
+        ok("Shape of You".equals(
+            SpotifyTrackSearchRules.mixedCombinedTitle(
+                "Song, Shape of You, Ed Sheeran")),
+            "metadata-first song row");
+        ok(SpotifyTrackSearchRules.mixedCombinedTitle(
+            "Сексуальный плейлист")==null,
+            "untyped name is not playlist proof");
+        ok(SpotifyTrackSearchRules.mixedCombinedTitle(
+            "Плейлісти")==null,
+            "category chip cannot become a result");
+        ok(SpotifyTrackSearchRules.untypedResultTitleCandidate(
+            "Сексуальный плейлист",310,319,357,47,0,0,684,1536),
+            "first visible search item is valid even with hidden subtype");
+        ok(SpotifyTrackSearchRules.untypedResultTitleCandidate(
+            "Романтичная",309,690,365,47,0,0,684,1536),
+            "later song item remains selectable by ordinal");
+        ok(!SpotifyTrackSearchRules.untypedResultTitleCandidate(
+            "Плейлісти",150,239,130,43,0,0,684,1536),
+            "filter chip must not be a result");
+        ok(!SpotifyTrackSearchRules.untypedResultTitleCandidate(
+            "Without Me",260,1303,300,46,0,0,684,1536),
+            "current mini-player must not be a search result");
+        ok(!SpotifyTrackSearchRules.untypedResultTitleCandidate(
+            "романтична",310,146,370,56,0,0,684,1536),
+            "search query is not a track row");
         System.out.println("PASS SpotifyTrackSearchRulesTest");
     }
 }

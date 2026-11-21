@@ -4929,7 +4929,8 @@ public final class MainActivity extends Activity implements RecognitionListener 
                 if (diagnosticCommand != id || isDestroyed()) return;
                 boolean busy=processing || aiBusy || speaking ||
                     (isWatchDevice && JarvisWatchLocalController.busy()) ||
-                    (watchPhoneLink!=null && watchPhoneLink.busy());
+                    (watchPhoneLink!=null && watchPhoneLink.busy()) ||
+                    (spotifyPlayback!=null && spotifyPlayback.isRunning());
                 if(!busy || SystemClock.elapsedRealtime()>=deadline) {
                     JarvisDiagnostics.event(busy?JarvisDiagnostics.Event.COMMAND_TIMEOUT:
                         JarvisDiagnostics.Event.COMMAND_END,id);

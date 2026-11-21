@@ -232,6 +232,10 @@ public final class SpotifyPlaybackController {
     private void move(Stage next, String message) {
         stage = next;
         stageStart = SystemClock.elapsedRealtime();
+        // Stage names/codes only: never log a dictated song or private
+        // Spotify result. COMMAND_END alone did not track async playback.
+        JarvisDiagnostics.event(JarvisDiagnostics.Event.SPOTIFY_STAGE,
+            next.ordinal()+1L);
         if (listener != null) listener.onProgress(message);
     }
 
@@ -500,7 +504,19 @@ public final class SpotifyPlaybackController {
             }
             case VERIFY_TRACK_PLAY: {
                 String expected=searchSongTitle!=null?searchSongTitle:namedTrack;
-                if(ScreenControlAccessibilityService.spotifyMiniPlayerHasTrack(expected)) {
+                // A merged/untagged Spotify search result may be a PLAYLIST.
+                // Gesture success alone does not play it; check the actual
+                // opened playlist detail before treating it as a song.
+                if(searchSongTitle!=null &&
+                   ScreenControlAccessibilityService.spotifyNamedPlaylistDetailReady(
+                       searchSongTitle)==ScreenControlAccessibilityService.SpotifyStep.ALREADY) {
+                    searchPlaylistTitle=searchSongTitle;
+                    RESULT_CURSOR.selected(resultOrdinal,
+                        SystemClock.elapsedRealtime(),true,searchPlaylistTitle);
+                    move(Stage.PLAY_MIXED_PLAYLIST,
+                        "Spotify відкрив плейлист «"+searchPlaylistTitle+
+                        "» із першого результату. Натискаю його Play...");
+                } else if(ScreenControlAccessibilityService.spotifyMiniPlayerHasTrack(expected)) {
                     finish(true,"Spotify показує «"+expected+
                         "» у мініпрогравачі. Скажи «Інша пісня» для наступного.");
                 } else if(age>=6500L) {
@@ -809,6 +825,9 @@ public final class SpotifyPlaybackController {
             directBridge=null;
         }
         active = false;
+        JarvisDiagnostics.event(success
+            ?JarvisDiagnostics.Event.LOCAL_DONE
+            :JarvisDiagnostics.Event.LOCAL_ERROR);
         Listener cb = listener;
         listener = null;
         stage = null;

@@ -3080,6 +3080,20 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
                     title=label;
                 }
             }
+            if(title==null || titleBounds==null) {
+                // Spotify Compose often exposes "Title • Плейліст" as ONE
+                // description. Previously no result was found, then the
+                // fallback skipped the first playlist to find an exact song.
+                String combined=SpotifyTrackSearchRules.mixedCombinedTitle(
+                    asString(metadata.getContentDescription()));
+                if(combined==null)combined=
+                    SpotifyTrackSearchRules.mixedCombinedTitle(
+                        asString(metadata.getText()));
+                if(combined!=null) {
+                    title=combined;
+                    titleBounds=meta;
+                }
+            }
             if(title==null || titleBounds==null)continue;
             boolean duplicate=false;
             for(SpotifySearchSelection existing:hits) {
@@ -3126,15 +3140,11 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             return dispatched?SpotifyStep.CLICKED:SpotifyStep.BLOCKED;
         }
         if(!mixed.isEmpty())return SpotifyStep.WAIT;
-        // Older Spotify builds hide all category labels; retain bounded
-        // compatibility for exact song title (without pretending it is a
-        // verified playlist).
-        if(ordinal==0) {
-            SpotifyStep exact=spotifyTapFirstTrackResult(title,callback);
-            if(exact!=SpotifyStep.WAIT)return exact;
-        }
+        // No category subtitles: respect VISUAL list order. Never jump to
+        // the first exact-title song, which may actually be result #4.
         Rect frame=new Rect();root.getBoundsInScreen(frame);
-        java.util.ArrayList<Rect> songs=new java.util.ArrayList<>();
+        java.util.ArrayList<SpotifySearchSelection> untyped=
+            new java.util.ArrayList<>();
         ArrayDeque<AccessibilityNodeInfo> queue=new ArrayDeque<>();queue.add(root);
         int scanned=0;
         while(!queue.isEmpty() && ++scanned<=MAX_SCAN) {
@@ -3142,19 +3152,17 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             if(n==null || !n.isEnabled() || !n.isVisibleToUser() ||
                n.isPassword() || n.isEditable())continue;
             String label=asString(n.getText());
-            String desc=asString(n.getContentDescription());
-            if(SpotifyTrackSearchRules.resultSongLabel(label) ||
-               SpotifyTrackSearchRules.resultSongLabel(desc)) {
-                Rect b=new Rect();n.getBoundsInScreen(b);
-                if(SpotifyTrackSearchRules.resultRegion(
-                        b.centerX(),b.centerY(),b.width(),b.height(),
-                        frame.left,frame.top,frame.right,frame.bottom)) {
-                    boolean duplicate=false;
-                    for(Rect other:songs)
-                        if(Math.abs(other.centerY()-b.centerY())<
-                            frame.height()*.025f){duplicate=true;break;}
-                    if(!duplicate)songs.add(b);
-                }
+            if(label.isEmpty())label=asString(n.getContentDescription());
+            Rect box=new Rect();n.getBoundsInScreen(box);
+            if(SpotifyTrackSearchRules.untypedResultTitleCandidate(
+                label,box.centerX(),box.centerY(),box.width(),box.height(),
+                frame.left,frame.top,frame.right,frame.bottom)) {
+                boolean duplicate=false;
+                for(SpotifySearchSelection other:untyped)
+                    if(Math.abs(other.bounds.centerY()-box.centerY())<
+                       frame.height()*.042f){duplicate=true;break;}
+                if(!duplicate)untyped.add(new SpotifySearchSelection(
+                    label,false,box)); // type UNKNOWN until the new page opens
             }
             for(int i=0;i<n.getChildCount();i++){
                 AccessibilityNodeInfo child=n.getChild(i);
@@ -3162,17 +3170,23 @@ public final class ScreenControlAccessibilityService extends AccessibilityServic
             }
         }
         if(scanned>MAX_SCAN)return SpotifyStep.WAIT;
-        songs.sort((a,b)->Integer.compare(a.top,b.top));
-        if(songs.size()>ordinal){
-            Rect b=songs.get(ordinal);
-            FloatingJarvisService.avoidControl(b);
-            Path p=new Path();p.moveTo(b.exactCenterX(),b.exactCenterY());
-            GestureDescription g=new GestureDescription.Builder()
-                .addStroke(new GestureDescription.StrokeDescription(p,0,95))
+        untyped.sort((a,b)->Integer.compare(a.bounds.top,b.bounds.top));
+        if(untyped.size()>ordinal) {
+            SpotifySearchSelection item=untyped.get(ordinal);
+            Rect hit=item.bounds;
+            if(s.currentSpotifyRoot()==null)return SpotifyStep.WAIT;
+            FloatingJarvisService.avoidControl(hit);
+            Path tap=new Path();
+            tap.moveTo(hit.exactCenterX(),hit.exactCenterY());
+            GestureDescription gesture=new GestureDescription.Builder()
+                .addStroke(new GestureDescription.StrokeDescription(tap,0,95))
                 .build();
-            return s.dispatchTrackedGesture(g,callback)
-                ?SpotifyStep.CLICKED:SpotifyStep.BLOCKED;
+            selectedSpotifySearchResult=item;
+            boolean accepted=s.dispatchTrackedGesture(gesture,callback);
+            if(!accepted)selectedSpotifySearchResult=null;
+            return accepted?SpotifyStep.CLICKED:SpotifyStep.BLOCKED;
         }
+        if(!untyped.isEmpty())return SpotifyStep.WAIT;
         // Geometry is a LAST resort if Spotify exposes no row metadata;
         // it is only allowed under a verified query, portrait and no IME.
         android.view.Display display=s.safeActionDisplay();

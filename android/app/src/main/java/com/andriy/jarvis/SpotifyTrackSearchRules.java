@@ -185,6 +185,62 @@ public final class SpotifyTrackSearchRules {
         return SearchResultType.UNKNOWN;
     }
 
+    /** Spotify Compose may publish a complete row in one accessibility
+     * description: "Сексуальный плейлист • Плейліст". A result name is
+     * NEVER inferred from the spoken query: the query can match result #4. */
+    public static String mixedCombinedTitle(String label) {
+        if(label==null || label.length()>260)return null;
+        String[] fields=label.split("[,•·\\n]",5);
+        if(fields.length<2)return null;
+        int typeAt=-1;
+        for(int i=0;i<fields.length;i++) {
+            String field=normal(fields[i]);
+            if(field.equals("плейліст") || field.equals("плейлист") ||
+               field.equals("playlist") || field.equals("пісня") ||
+               field.equals("песня") || field.equals("song") ||
+               field.equals("track")) {typeAt=i;break;}
+        }
+        if(typeAt<0)return null;
+        int nameAt=typeAt==0?1:0;
+        if(nameAt>=fields.length)return null;
+        String title=fields[nameAt].trim();
+        String normalized=normal(title);
+        if(normalized.isEmpty() || normalized.length()>120 ||
+           mixedResultType(title)!=SearchResultType.UNKNOWN ||
+           normalized.equals("плейлісти") || normalized.equals("пісні") ||
+           normalized.equals("playlists") || normalized.equals("songs") ||
+           normalized.equals("пошук") || normalized.equals("search"))
+            return null;
+        return title;
+    }
+
+    /** When Spotify withholds every Song/Playlist subtitle, prefer the
+     * first VISIBLE result-title node after the filter chips, not a
+     * same-name track lower down. Geometry is guarded by the actual
+     * Spotify query, phone viewport and content region. */
+    public static boolean untypedResultTitleCandidate(String text,
+            int x,int y,int w,int h,
+            int left,int top,int right,int bottom) {
+        int pw=right-left,ph=bottom-top;
+        String s=normal(text);
+        if(s.isEmpty() || s.length()>120 ||
+           mixedResultType(text)!=SearchResultType.UNKNOWN ||
+           searchTab(text) || searchPrompt(text) ||
+           s.equals("пісні") || s.equals("плейлісти") ||
+           s.equals("песни") || s.equals("плейлисты") ||
+           s.equals("songs") || s.equals("playlists") ||
+           s.equals("відео") || s.equals("альбоми") ||
+           s.equals("жанри") || s.equals("video") ||
+           s.equals("albums") || s.equals("genres") ||
+           s.equals("моя бібліотека") || s.equals("створити"))
+            return false;
+        return resultRegion(x,y,w,h,left,top,right,bottom) &&
+            pw>=450 && ph>=700 &&
+            x>left+pw*.18f && x<left+pw*.79f &&
+            y>top+ph*.185f && y<top+ph*.78f &&
+            h<ph*.095f;
+    }
+
     /** A title is selected only from the same visual row as a typed
      * metadata label, away from filter pills and the bottom mini-player. */
     public static boolean mixedResultTitleCandidate(String title,
