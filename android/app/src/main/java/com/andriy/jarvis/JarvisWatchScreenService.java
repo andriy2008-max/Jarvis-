@@ -214,14 +214,15 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         return root!=null && s.mapsHome(root);
     }
 
-    /** Prevent fallback tapping into a search field or on-screen keyboard.
-     * Unknown app state is treated as unsafe, not as a blank route screen. */
+    /** A search field may remain in the Maps accessibility tree AFTER its
+     * suggestions were selected. Only an actually active Wear keyboard
+     * blocks route gestures; the controller separately requires that the
+     * correct address result was tapped and Maps is foreground. */
     public static boolean mapsInputOrKeyboardOpen() {
         JarvisWatchScreenService s=connected.get();
         if(s==null)return true;
         try {
-            AccessibilityNodeInfo root=s.appRoot(MAPS_PKG);
-            if(root==null || s.spotifyHasEditable(root))return true;
+            if(s.appRoot(MAPS_PKG)==null)return true;
             for(AccessibilityWindowInfo window:s.getWindows()) {
                 if(window.getType()==AccessibilityWindowInfo.TYPE_INPUT_METHOD &&
                    (window.isActive() || window.isFocused()))return true;
@@ -294,54 +295,57 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         return gesture(MAPS_PKG,point,90L,cb);
     }
 
-    /** Maps route choices appear after choosing a destination. The user
-     * screenshot contains transit duration, walking duration AND bicycle
-     * with no route duration; never assume the bottom row means walking. */
+    /** Wear Maps Compose route cards sometimes expose only the walking
+     * distance or ONE duration, not two distinct time nodes. This detector
+     * is a positive signal, never a prerequisite to the selected-address
+     * recovery after the route screen has had time to load. */
     public static boolean mapsRouteChoicesVisible() {
-        JarvisWatchScreenService s=connected.get();
-        AccessibilityNodeInfo root=s==null?null:s.appRoot(MAPS_PKG);
-        return root!=null && s.mapsRouteChoices(root);
+        JarvisWatchScreenService service=connected.get();
+        AccessibilityNodeInfo root=service==null?null:service.appRoot(MAPS_PKG);
+        return root!=null && service.mapsRouteChoices(root);
     }
 
     private boolean mapsRouteChoices(AccessibilityNodeInfo root) {
-        if(root==null || mapsHome(root) || spotifyHasEditable(root) ||
-           mapsInputOrKeyboardOpen())return false;
-        android.util.DisplayMetrics metrics=getResources().getDisplayMetrics();
-        int height=metrics.heightPixels;
-        java.util.ArrayList<Integer> durations=new java.util.ArrayList<>();
-        boolean pedestrian=false,routeDistance=false;
+        if(root==null || mapsHome(root) || mapsInputOrKeyboardOpen())
+            return false;
+        android.util.DisplayMetrics m=getResources().getDisplayMetrics();
+        int h=m.heightPixels;
+        java.util.ArrayList<Integer> durationRows=new java.util.ArrayList<>();
+        boolean pedestrian=false,distance=false,otherMode=false;
         for(AccessibilityNodeInfo node:spotifyNodes(root)) {
-            if(node.isEditable())continue;
-            Rect b=new Rect();node.getBoundsInScreen(b);
-            int y=b.centerY();
-            if(b.width()<6 || b.height()<6 ||
-               y<height*.22f || y>height*.91f)continue;
+            if(node.isEditable() || !node.isVisibleToUser())continue;
+            Rect box=new Rect();node.getBoundsInScreen(box);
+            int y=box.centerY();
+            if(box.width()<6 || box.height()<6 ||
+               y<h*.20f || y>h*.93f)continue;
             String label=spotifyLabel(node);
             String desc=spotifyDescription(node);
-            if(JarvisWatchUiRules.mapsWalkingLabel(label) ||
-               JarvisWatchUiRules.mapsWalkingLabel(desc))pedestrian=true;
-            if(JarvisWatchUiRules.mapsDistanceLabel(label) ||
-               JarvisWatchUiRules.mapsDistanceLabel(desc))routeDistance=true;
+            pedestrian|=JarvisWatchUiRules.mapsWalkingLabel(label) ||
+                JarvisWatchUiRules.mapsWalkingLabel(desc);
+            distance|=JarvisWatchUiRules.mapsDistanceLabel(label) ||
+                JarvisWatchUiRules.mapsDistanceLabel(desc);
+            String hint=(label+" "+desc).toLowerCase(java.util.Locale.ROOT);
+            otherMode|=hint.contains("велосип") || hint.contains("cycling") ||
+                hint.contains("bike") || hint.contains("транспорт") ||
+                hint.contains("transit") || hint.contains("автобус") ||
+                hint.contains("bus") || hint.contains("driving");
             if(!JarvisWatchUiRules.mapsRouteDurationLabel(label) &&
                !JarvisWatchUiRules.mapsRouteDurationLabel(desc))continue;
             boolean unique=true;
-            for(int old:durations)
-                if(Math.abs(old-y)<height*.082f){unique=false;break;}
-            if(unique)durations.add(y);
+            for(int old:durationRows)
+                if(Math.abs(old-y)<h*.08f){unique=false;break;}
+            if(unique)durationRows.add(y);
         }
-        int lowest=0;
-        for(int y:durations)lowest=Math.max(lowest,y);
-        // Two durations usually mean transit + walking (bike has no
-        // route duration). A lone walking route can also be identified
-        // by its pedestrian icon AND kilometre distance.
-        return (durations.size()>=2 && lowest>height*.43f) ||
-               (pedestrian && routeDistance && !durations.isEmpty());
+        return JarvisWatchUiRules.mapsRouteCardsLikely(
+            durationRows.size(),pedestrian,distance,otherMode);
     }
 
-    /** A gentle, single UP swipe to bring the walking card fully into view.
-     * This is intentionally ~17% of screen height, not a screen-long swipe. */
+    /** One SHORT upward swipe, after the Maps controller has confirmed
+     * the destination selection and reached the route phase. Do not
+     * require visible text nodes: the Compose route cards can be unlabelled. */
     private Result mapsRevealWalkingCard(AccessibilityNodeInfo root,Completion cb) {
-        if(root==null || !mapsRouteChoices(root))return Result.WAIT;
+        if(root==null || mapsHome(root) || mapsInputOrKeyboardOpen())
+            return Result.WAIT;
         android.util.DisplayMetrics m=getResources().getDisplayMetrics();
         if(m.widthPixels<160 || m.heightPixels<160)return Result.BLOCKED;
         Path p=new Path();
@@ -349,58 +353,61 @@ public final class JarvisWatchScreenService extends AccessibilityService {
             m.heightPixels*JarvisWatchUiRules.MAPS_ROUTE_SHORT_SWIPE_START_Y);
         p.lineTo(m.widthPixels*.50f,
             m.heightPixels*JarvisWatchUiRules.MAPS_ROUTE_SHORT_SWIPE_END_Y);
-        return gesture(MAPS_PKG,p,340L,cb);
+        return gesture(MAPS_PKG,p,360L,cb);
     }
 
-    /** Tap walking, not cycling: first use an exposed walking icon, then the
-     * walking distance ("01:56 · 21 км"), finally the LAST duration row.
-     * No more blind 84%-height tap in the bicycle control area. */
+    /** After the short UP swipe, select the actual pedestrian row:
+     * 1) labelled icon via Accessibility ACTION_CLICK,
+     * 2) kilometre subtitle's clickable parent,
+     * 3) walking-duration row,
+     * 4) screenshot-calibrated middle-row point after the small scroll.
+     * The old 84%-height bottom/bicycle tap is intentionally removed. */
     private Result mapsTapWalkingCard(AccessibilityNodeInfo root,Completion cb) {
-        if(root==null || !mapsRouteChoices(root))return Result.WAIT;
+        if(root==null || mapsHome(root) || mapsInputOrKeyboardOpen())
+            return Result.WAIT;
         android.util.DisplayMetrics m=getResources().getDisplayMetrics();
         int w=m.widthPixels,h=m.heightPixels;
         if(w<160 || h<160)return Result.BLOCKED;
-        int pedestrianY=-1,distanceY=-1,lastDuration=-1,countDuration=0;
+        AccessibilityNodeInfo pedestrianNode=null,distanceNode=null;
+        int pedestrianY=-1,distanceY=-1;
         java.util.ArrayList<Integer> durationRows=new java.util.ArrayList<>();
         for(AccessibilityNodeInfo node:spotifyNodes(root)) {
-            if(node.isEditable())continue;
-            Rect b=new Rect();node.getBoundsInScreen(b);
-            int y=b.centerY();
-            if(b.width()<6 || b.height()<6 ||
-               y<h*.22f || y>h*.89f)continue;
+            if(node.isEditable() || !node.isVisibleToUser())continue;
+            Rect box=new Rect();node.getBoundsInScreen(box);
+            int y=box.centerY();
+            if(box.width()<6 || box.height()<6 ||
+               y<h*.20f || y>h*.87f)continue;
             String label=spotifyLabel(node);
             String desc=spotifyDescription(node);
-            if((JarvisWatchUiRules.mapsWalkingLabel(label) ||
-                JarvisWatchUiRules.mapsWalkingLabel(desc)) &&
-               y>h*.35f && y<h*.79f)
-                pedestrianY=Math.max(pedestrianY,y);
-            if((JarvisWatchUiRules.mapsDistanceLabel(label) ||
-                JarvisWatchUiRules.mapsDistanceLabel(desc)) &&
-               y>h*.32f && y<h*.84f)
-                distanceY=Math.max(distanceY,y);
+            boolean isWalking=JarvisWatchUiRules.mapsWalkingLabel(label) ||
+                JarvisWatchUiRules.mapsWalkingLabel(desc);
+            boolean isDistance=JarvisWatchUiRules.mapsDistanceLabel(label) ||
+                JarvisWatchUiRules.mapsDistanceLabel(desc);
+            if(isWalking && y>h*.29f && y<h*.77f && pedestrianY<0) {
+                pedestrianNode=node;pedestrianY=y;
+            }
+            if(isDistance && y>h*.27f && y<h*.83f && distanceY<0) {
+                distanceNode=node;distanceY=y;
+            }
             if(JarvisWatchUiRules.mapsRouteDurationLabel(label) ||
                JarvisWatchUiRules.mapsRouteDurationLabel(desc)) {
                 boolean unique=true;
                 for(int old:durationRows)
-                    if(Math.abs(old-y)<h*.082f){unique=false;break;}
+                    if(Math.abs(old-y)<h*.08f){unique=false;break;}
                 if(unique)durationRows.add(y);
             }
         }
-        for(int y:durationRows){countDuration++;lastDuration=Math.max(lastDuration,y);}
-        float targetY;
-        if(pedestrianY>0)targetY=pedestrianY;
-        else if(distanceY>0)
-            targetY=distanceY-h*.055f; // subtitle below the tappable card centre
-        else if(countDuration>=2 && lastDuration>h*.36f &&
-                lastDuration<h*.80f)
-            targetY=lastDuration;
-        else
-            // User-confirmed centre WALKING card when Compose hides its
-            // accessibility nodes. Only after route choices are recognized.
-            targetY=h*JarvisWatchUiRules.MAPS_WALKING_FALLBACK_Y;
-        if(targetY<h*.29f || targetY>h*.79f)return Result.WAIT;
+        if(pedestrianNode!=null)return mapsTapNode(pedestrianNode,cb);
+        if(distanceNode!=null)return mapsTapNode(distanceNode,cb);
+        int lastDuration=-1;
+        for(int y:durationRows)lastDuration=Math.max(lastDuration,y);
+        float targetY=durationRows.size()>=2 &&
+            lastDuration>h*.33f && lastDuration<h*.72f
+                ?lastDuration
+                :h*JarvisWatchUiRules.MAPS_WALKING_AFTER_SWIPE_Y;
+        if(targetY<h*.28f || targetY>h*.76f)return Result.WAIT;
         Path p=new Path();p.moveTo(w*.50f,targetY);
-        return gesture(MAPS_PKG,p,110L,cb);
+        return gesture(MAPS_PKG,p,120L,cb);
     }
 
     private Result mapsSetDestination(AccessibilityNodeInfo root,String destination) {

@@ -12,8 +12,11 @@ public final class JarvisWatchUiRules {
 
     /** A gentle UP gesture that moves one route card slightly into view,
      * instead of scrolling the route list to an unrelated screen. */
-    public static final float MAPS_ROUTE_SHORT_SWIPE_START_Y=0.73f;
-    public static final float MAPS_ROUTE_SHORT_SWIPE_END_Y=0.56f;
+    public static final float MAPS_ROUTE_SHORT_SWIPE_START_Y=0.75f;
+    public static final float MAPS_ROUTE_SHORT_SWIPE_END_Y=0.55f;
+    /** Short UP moves the middle walking card closer to upper-middle.
+     * Use only after Maps route-stage confirmation, not on search/home. */
+    public static final float MAPS_WALKING_AFTER_SWIPE_Y=0.45f;
 
     public static boolean mapsWalkingLabel(String text) {
         if(text==null)return false;
@@ -31,13 +34,38 @@ public final class JarvisWatchUiRules {
             .matcher(text).matches();
     }
 
+    /** Wear Maps sometimes hides every route label after a gesture.
+     * An already selected destination and a completed short UP are
+     * prerequisites; no tap on Home or behind the IME. */
     public static boolean allowWalkingCardTap(boolean directionsOpened,
             boolean shortSwipeCompleted, boolean mapsForeground,
             boolean mapsHome, boolean keyboardOrSearchOpen,
-            boolean routeCardsStillVisible) {
-        return directionsOpened && shortSwipeCompleted &&
-            mapsForeground && !mapsHome && !keyboardOrSearchOpen &&
-            routeCardsStillVisible;
+            boolean routeCardsStillVisible, boolean selectedDestination) {
+        return directionsOpened && selectedDestination &&
+            shortSwipeCompleted && mapsForeground &&
+            !mapsHome && !keyboardOrSearchOpen;
+    }
+
+    /** A selected destination on a route screen may expose no
+     * accessibility descriptions. After 2.4s of waiting, proceed with
+     * the user's explicit short-UP-then-walking-tap sequence. */
+    public static boolean allowShortRouteSwipe(boolean destinationSelected,
+            boolean mapsForeground,boolean mapsHome,boolean keyboardOpen,
+            boolean routesVisible,long elapsedMs) {
+        return destinationSelected && mapsForeground &&
+            !mapsHome && !keyboardOpen &&
+            (routesVisible || elapsedMs>=2400L);
+    }
+
+    /** Bike can have no duration; even one duration plus km or mode
+     * labels can reliably indicate the route-choices screen. */
+    public static boolean mapsRouteCardsLikely(int distinctDurations,
+            boolean walkingVisible,boolean distanceVisible,
+            boolean otherModeVisible) {
+        return distinctDurations>=2 ||
+            (walkingVisible && (distanceVisible || distinctDurations>=1)) ||
+            (distanceVisible && distinctDurations>=1) ||
+            (distinctDurations>=1 && otherModeVisible);
     }
 
     /** The route cards on Wear Maps show durations, not necessarily the

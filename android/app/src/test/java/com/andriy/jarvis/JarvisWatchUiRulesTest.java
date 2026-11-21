@@ -78,23 +78,49 @@ public final class JarvisWatchUiRulesTest {
         yes(!JarvisWatchUiRules.mapsDistanceLabel("2 год 10 хв"),
             "transit duration is not a walking distance");
         yes(!JarvisWatchUiRules.allowWalkingCardTap(
-            true,false,true,false,false,true),
-            "do not click before one short upward swipe");
-        yes(!JarvisWatchUiRules.allowWalkingCardTap(
-            true,true,true,false,false,false),
-            "do not tap if route cards vanished");
-        yes(!JarvisWatchUiRules.allowWalkingCardTap(
-            true,true,false,false,false,true),
-            "do not click behind other foreground apps");
-        yes(!JarvisWatchUiRules.allowWalkingCardTap(
-            true,true,true,true,false,true),
-            "never click Maps home");
-        yes(!JarvisWatchUiRules.allowWalkingCardTap(
-            true,true,true,false,true,true),
-            "never tap keyboard/search");
+            true,false,true,false,false,true,true),
+            "do not click before one short UP");
         yes(JarvisWatchUiRules.allowWalkingCardTap(
-            true,true,true,false,false,true),
-            "after short UP and verified route cards, tap walking row");
+            true,true,true,false,false,false,true),
+            "unlabelled Compose choices no longer suppress the required tap");
+        yes(!JarvisWatchUiRules.allowWalkingCardTap(
+            true,true,false,false,false,true,true),
+            "do not tap another foreground app");
+        yes(!JarvisWatchUiRules.allowWalkingCardTap(
+            true,true,true,true,false,true,true),
+            "do not tap on Maps home");
+        yes(!JarvisWatchUiRules.allowWalkingCardTap(
+            true,true,true,false,true,true,true),
+            "never tap into an active keyboard");
+        yes(!JarvisWatchUiRules.allowWalkingCardTap(
+            true,true,true,false,false,true,false),
+            "only tap after verified address selection");
+        yes(JarvisWatchUiRules.allowShortRouteSwipe(
+            true,true,false,false,false,2400L),
+            "selected address plus wait permits gentle UP even without route labels");
+        yes(!JarvisWatchUiRules.allowShortRouteSwipe(
+            false,true,false,false,false,3000L),
+            "no short UP before selected address");
+        yes(!JarvisWatchUiRules.allowShortRouteSwipe(
+            true,true,false,true,false,3000L),
+            "do not swipe through keyboard");
+        yes(!JarvisWatchUiRules.allowShortRouteSwipe(
+            true,true,true,false,false,3000L),
+            "do not swipe from Maps home");
+        yes(!JarvisWatchUiRules.allowShortRouteSwipe(
+            true,true,false,false,false,2399L),
+            "wait for destination screen to settle");
+        yes(JarvisWatchUiRules.mapsRouteCardsLikely(1,false,true,false),
+            "one route duration plus kilometre distance suffices");
+        yes(JarvisWatchUiRules.mapsRouteCardsLikely(1,true,false,false),
+            "walking marker plus one duration");
+        yes(JarvisWatchUiRules.mapsRouteCardsLikely(2,false,false,false),
+            "two route durations identify options");
+        yes(!JarvisWatchUiRules.mapsRouteCardsLikely(0,false,false,false),
+            "blank map is not a route-choices screen");
+        yes(JarvisWatchUiRules.MAPS_WALKING_AFTER_SWIPE_Y>.37f &&
+            JarvisWatchUiRules.MAPS_WALKING_AFTER_SWIPE_Y<.50f,
+            "post-scroll fallback must not target lower bicycle card");
         yes(!JarvisWatchUiRules.allowBottomRouteModeTap(
             false,true,false,false,6000L),"no tap before Directions");
         yes(!JarvisWatchUiRules.allowBottomRouteModeTap(

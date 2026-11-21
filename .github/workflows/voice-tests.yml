@@ -195,6 +195,19 @@ jobs:
           grep -Fq 'WatchSearchRecovery { NONE, DOWN_AGAIN, EXHAUSTED }' "$rules"
           grep -Fq 'done(true,"Плейлист' "$controller"
           ! grep -Eq 'SWIPE_HOME|SEARCH_RECOVER_RIGHT|SEARCH_RECOVER_UP|RETURN_FROM_SEARCH_PLAYLIST|spotifySwipeHome|spotifyRevealNavigation' "$controller" "$screen"
+      - name: Watch7 Maps gentle UP then pedestrian card regression (no APK)
+        run: |
+          controller=android/app/src/main/java/com/andriy/jarvis/JarvisWatchMapsController.java
+          screen=android/app/src/main/java/com/andriy/jarvis/JarvisWatchScreenService.java
+          rules=android/app/src/main/java/com/andriy/jarvis/JarvisWatchUiRules.java
+          grep -Fq 'destinationSelected=true;' "$controller"
+          grep -Fq 'allowShortRouteSwipe(' "$controller"
+          grep -Fq 'shortSwipeCompleted=true;' "$controller"
+          grep -Fq 'mapsRevealWalkingCard(root,completion)' "$screen"
+          grep -Fq 'mapsTapWalkingCard(root,completion)' "$screen"
+          grep -Fq 'MAPS_WALKING_AFTER_SWIPE_Y' "$screen"
+          grep -Fq 'mapsRouteCardsLikely(' "$screen"
+          ! grep -Fq 'if(root==null || !mapsRouteChoices(root))' "$screen"
       - name: Java policy contracts (without APK)
         run: |
           mkdir -p /tmp/jarvis-voice-tests
