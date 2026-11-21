@@ -749,25 +749,6 @@ public final class JarvisWatchScreenService extends AccessibilityService {
         return result;
     }
 
-    /** Verify home using Spotify-owned UI nodes. A visible Home button alone
-     * is not evidence that it is the current, selected page. */
-    private boolean spotifyHomeVisible(AccessibilityNodeInfo root) {
-        boolean selected=false,section=false;
-        for(AccessibilityNodeInfo node:spotifyNodes(root)) {
-            if(node.isEditable())continue;
-            if((node.isSelected() || node.isChecked()) &&
-               spotifyNodeMatches(node,"home","головна","домой"))
-                selected=true;
-            if(spotifyNodeMatches(node,"recently played","recently played music",
-                "недавно прослухане","нещодавно прослухані",
-                "нещодавно відтворені","your shows","made for you",
-                "для тебе"))
-                section=true;
-        }
-        return JarvisWatchUiRules.spotifyHomeConfirmed(
-            selected,section,spotifyHasEditable(root));
-    }
-
     private String spotifyViewport(AccessibilityNodeInfo root) {
         StringBuilder fingerprint=new StringBuilder();
         for(AccessibilityNodeInfo n:spotifyNodes(root)) {
